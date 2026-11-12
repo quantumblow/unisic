@@ -85,12 +85,12 @@
     <message>
         <location filename="../src/AppContext.cpp" line="+5171"/>
         <location filename="../src/diag/SmokeTests.cpp" line="+810"/>
-        <location line="+2445"/>
+        <location line="+2455"/>
         <source>Quit</source>
         <translation>退出</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="-2433"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-2443"/>
         <source>Dev: language: %1</source>
         <translation>Dev: 语言：%1</translation>
     </message>
@@ -105,12 +105,12 @@
         <translation>Dev: OCR 文本框：%1（%2 个字形）</translation>
     </message>
     <message>
-        <location line="+268"/>
+        <location line="+278"/>
         <source>Dev: played capture sound &apos;%1&apos;</source>
         <translation>Dev: 已播放截图音效 “%1”</translation>
     </message>
     <message>
-        <location line="-1125"/>
+        <location line="-1135"/>
         <source>Dev: capture on release: %1</source>
         <translation>Dev: 释放时截图：%1</translation>
     </message>
@@ -169,7 +169,7 @@
         <translation>录制单个窗口需要窗口选择器，而此桌面不提供该功能，请改为录制屏幕或区域。</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="+1274"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="+1284"/>
         <source>no screen</source>
         <translation>无屏幕</translation>
     </message>
@@ -204,7 +204,7 @@
         <translation>已找到，OCR 会自动识别每张截图的文字体系。</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="-2551"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-2561"/>
         <source>Dev: custom theme: %1</source>
         <translation>Dev: 自定义主题：%1</translation>
     </message>
@@ -214,7 +214,7 @@
         <translation>Dev: 诊断信息已复制（%1 个字符）</translation>
     </message>
     <message>
-        <location line="+1895"/>
+        <location line="+1905"/>
         <source>Dev: OCR auto language: %1 (installed: %2; %3; map: %4)</source>
         <translation>Dev: OCR 自动语言：%1（已安装：%2；%3；映射：%4）</translation>
     </message>
@@ -529,7 +529,7 @@
         <translation>将在 %1 秒后开始录制…</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="-4568"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-4578"/>
         <source>Dev: clipboard paste: %1</source>
         <translation>Dev: 剪贴板粘贴：%1</translation>
     </message>
@@ -750,7 +750,7 @@
         <translation>Dev: 已暂存的更新：失败（%1）</translation>
     </message>
     <message>
-        <location line="+150"/>
+        <location line="+160"/>
         <source>Dev: translation overlay: %1</source>
         <translation>开发者：翻译覆盖层：%1</translation>
     </message>
@@ -865,7 +865,7 @@
         <translation>主窗口可见</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="-4053"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-4063"/>
         <source>Dev: OCR highlight + redact: FAIL (%1)</source>
         <translation>Dev: OCR 高亮与涂黑：失败（%1）</translation>
     </message>
@@ -885,7 +885,7 @@
         <translation>Dev: 样式预设：%1</translation>
     </message>
     <message>
-        <location line="+165"/>
+        <location line="+175"/>
         <source>Dev: auto-redact pattern: FAIL (%1)</source>
         <translation>Dev: 自动涂黑规则：失败（%1）</translation>
     </message>
@@ -1065,7 +1065,7 @@
         <translation>无法保存到 %1</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="-3517"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-3527"/>
         <source>Dev: hide while capturing: %1</source>
         <translation>Dev: 截图时隐藏：%1</translation>
     </message>
@@ -1336,7 +1336,7 @@
         <translation>Dev: 安装器更新：失败（%1）</translation>
     </message>
     <message>
-        <location line="+956"/>
+        <location line="+966"/>
         <source>memory only</source>
         <translation>仅在内存中</translation>
     </message>
@@ -2931,7 +2931,7 @@
         <translation>在选项栏中打开这些工具：%1。此分组本身没有快捷键。</translation>
     </message>
     <message>
-        <location line="+351"/>
+        <location line="+366"/>
         <source>Rotate left</source>
         <translation>向左旋转</translation>
     </message>
@@ -2981,7 +2981,7 @@
         <translation>关闭</translation>
     </message>
     <message>
-        <location line="-435"/>
+        <location line="-450"/>
         <source>Annotation tools</source>
         <translation>标注工具</translation>
     </message>
@@ -3016,7 +3016,7 @@
         <translation>删除形状</translation>
     </message>
     <message>
-        <location line="+470"/>
+        <location line="+485"/>
         <source>Annotation canvas</source>
         <translation>标注画布</translation>
     </message>
@@ -3046,7 +3046,7 @@
         <translation>缩放</translation>
     </message>
     <message>
-        <location line="-580"/>
+        <location line="-595"/>
         <source>Editor actions</source>
         <translation>编辑器操作</translation>
     </message>
@@ -3087,7 +3087,17 @@
         <translation>调整大小</translation>
     </message>
     <message>
-        <location line="+480"/>
+        <location line="+484"/>
+        <source>OCR</source>
+        <translation>OCR</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Text recognition (OCR)</source>
+        <translation>文字识别（OCR）</translation>
+    </message>
+    <message>
+        <location line="+13"/>
         <source>Copy</source>
         <translation>复制</translation>
     </message>
@@ -3150,27 +3160,27 @@
         <translation>上传</translation>
     </message>
     <message>
-        <location line="+11"/>
+        <location line="+12"/>
         <source>More</source>
         <translation>更多</translation>
     </message>
     <message>
-        <location line="+2"/>
         <source>Copy all text</source>
-        <translation>复制全部文本</translation>
+        <translation type="vanished">复制全部文本</translation>
     </message>
     <message>
-        <location line="+2"/>
+        <location line="-71"/>
+        <location line="+3"/>
         <source>Select text…</source>
         <translation>选择文本…</translation>
     </message>
     <message>
-        <location line="-51"/>
+        <location line="+20"/>
         <source>Save as…</source>
         <translation>保存为…</translation>
     </message>
     <message>
-        <location line="+571"/>
+        <location line="+568"/>
         <source>Zoom out (Ctrl+-)</source>
         <translation>缩小（Ctrl+-）</translation>
     </message>
@@ -3197,7 +3207,7 @@
         <translation>放大（Ctrl++）</translation>
     </message>
     <message>
-        <location line="-596"/>
+        <location line="-593"/>
         <source>Save as GIF</source>
         <translation>保存为 GIF</translation>
     </message>
@@ -3207,7 +3217,7 @@
         <translation>需要 ffmpeg</translation>
     </message>
     <message>
-        <location line="-123"/>
+        <location line="-141"/>
         <source>Recognizing…</source>
         <translation>正在识别…</translation>
     </message>
@@ -4202,7 +4212,7 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>识别结果</translation>
     </message>
     <message>
-        <location line="+110"/>
+        <location line="+142"/>
         <source>Minimize</source>
         <translation>最小化</translation>
     </message>
@@ -4247,12 +4257,12 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>写入提示词中的语言名称。</translation>
     </message>
     <message>
-        <location line="+15"/>
+        <location line="+37"/>
         <source>Copy selection</source>
         <translation>复制所选</translation>
     </message>
     <message>
-        <location line="+10"/>
+        <location line="-19"/>
         <source>Translating…</source>
         <translation>正在翻译…</translation>
     </message>
@@ -4277,12 +4287,12 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>取消</translation>
     </message>
     <message>
-        <location line="+9"/>
+        <location line="+21"/>
         <source>Original</source>
         <translation>原文</translation>
     </message>
     <message>
-        <location line="+6"/>
+        <location line="+7"/>
         <source>Translation</source>
         <translation>译文</translation>
     </message>
@@ -9156,12 +9166,12 @@ Applies to the next capture.</source>
 <context>
     <name>Translator</name>
     <message>
-        <location filename="../src/ocr/Translator.cpp" line="+72"/>
+        <location filename="../src/ocr/Translator.cpp" line="+68"/>
         <source>The translation service did not keep the line numbering</source>
         <translation>翻译服务未保留行编号</translation>
     </message>
     <message>
-        <location line="+47"/>
+        <location line="+109"/>
         <location line="+16"/>
         <source>The translation service returned an unexpected response</source>
         <translation>翻译服务返回了意外的响应</translation>

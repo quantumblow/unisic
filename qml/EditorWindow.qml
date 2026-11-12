@@ -888,6 +888,24 @@ Window {
                     Accessible.role: Accessible.ToolBar
                     Accessible.name: qsTr("Editor actions")
 
+                    // OCR is its own labelled button with the OCR icon, not a
+                    // line inside the More menu: it is the way into the result
+                    // window (and the translation that follows it).
+                    USplitMenuButton {
+                        compact: true
+                        iconName: "ocr"
+                        text: qsTr("OCR")
+                        tooltip: qsTr("Text recognition (OCR)")
+                        dropdownTooltip: qsTr("Select text…")
+                        onClicked: { editorWindow.commitPendingText(); editorSession.ocrCopyText() }
+                        actions: [
+                            { label: qsTr("Select text…"), iconName: "select",
+                              trigger: function () {
+                                  editorWindow.commitPendingText()
+                                  editorSession.startOcrPick()
+                              } }
+                        ]
+                    }
                     UButton {
                         compact: true
                         iconName: "edit-copy"; text: qsTr("Copy"); variant: "tonal"
@@ -941,7 +959,8 @@ Window {
                         variant: "tonal"; enabled: !App.uploads.busy
                         onClicked: { editorWindow.commitPendingText(); editorSession.upload() }
                     }
-                    // "More": the occasional text and whole-picture actions. OCR is always built in.
+                    // "More": the occasional whole-picture actions. OCR itself
+                    // has its own button above.
                     UMenuButton {
                         id: moreMenu
                         width: 34; height: 34
@@ -950,11 +969,7 @@ Window {
                         iconName: "view-more"
                         tooltip: qsTr("More")
                         actions: [
-                            { label: qsTr("Copy all text"), iconName: "ocr",
-                              trigger: function () { editorSession.ocrCopyText() } },
-                            { label: qsTr("Select text…"), iconName: "select",
-                              trigger: function () { editorSession.startOcrPick() } },
-                            { label: qsTr("Rotate left"), iconName: "object-rotate-left", separatorBefore: true,
+                            { label: qsTr("Rotate left"), iconName: "object-rotate-left",
                               trigger: function () { editorWindow.commitPendingText(); canvas.rotateImage(false) } },
                             { label: qsTr("Rotate right"), iconName: "object-rotate-right",
                               trigger: function () { editorWindow.commitPendingText(); canvas.rotateImage(true) } },
