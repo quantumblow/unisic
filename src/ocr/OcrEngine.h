@@ -8,7 +8,11 @@
 #include <memory>
 #include "OcrWord.h"
 
-// Tesseract-backed OCR. tesseract + leptonica are hard build requirements (see
+class Settings;
+class PaddleOcr;
+
+// Tesseract-backed OCR, with PP-OCRv6 (PaddleOCR) as an optional second engine
+// when its downloadable models are installed. tesseract + leptonica are hard build requirements (see
 // CMakeLists), so this is always compiled in; whether any language data is
 // INSTALLED is a separate runtime question. Recognition runs on a worker
 // thread; the callback is delivered on the GUI thread.
@@ -19,8 +23,15 @@ public:
     using Result = std::function<void(const QString &text, const QString &error)>;
     // Word-boxes result for the editor's selectable-text overlay.
     using BoxResult = std::function<void(const QVector<OcrWord> &words, const QString &error)>;
-    explicit OcrEngine(QObject *parent = nullptr);
+    // "auto" uses PaddleOCR when its models are installed and the language is
+    // one of the scripts PP-OCRv6 reads, "paddle" forces it (Tesseract is still
+    // the fallback until the models are downloaded), and "tesseract" never
+    // leaves Tesseract. Kept as the persisted Settings string.
+    explicit OcrEngine(Settings *settings, QObject *parent = nullptr);
     ~OcrEngine() override;
+
+    PaddleOcr *paddle() const { return m_paddle; }
+    void setBackend(const QString &backend);
 
     // The "+"-joined spec of every installed Tesseract langpack (osd/equ
     // dropped, English weighted first), or "" if none are found. Used when the
@@ -52,6 +63,11 @@ public:
     void recognizeBoxes(const QImage &img, const QString &langs, bool autoScript, BoxResult cb);
 
 private:
+    bool usePaddle(const QString &langs, bool autoScript) const;
+
+    PaddleOcr *m_paddle = nullptr;
+    QString m_backend = QStringLiteral("auto");
+
     // Flipped by the destructor so an in-flight worker aborts at its next
     // checkpoint: QtConcurrent tasks can't be cancelled from outside, and the
     // global pool's destructor waits for them - without this, quitting mid-

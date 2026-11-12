@@ -73,6 +73,8 @@
 #include "FilenameTemplate.h"
 #include "ImageEncode.h"
 #include "ocr/OcrEngine.h"
+#include "ocr/PaddleOcr.h"
+#include "ocr/Translator.h"
 // Clipboard offers (the KDE force-image-copy hint), clipboard reads and drop
 // payloads all speak QMimeData; KSystemClipboard consumes the same objects.
 #include <QMimeData>
@@ -2905,6 +2907,181 @@ void AppContext::devTestStylePresets()
     if (!devBuild())
         return;
     showToast(tr("Dev: style presets: %1").arg(stylePresetsCheck(m_settings)));
+}
+
+// Pure translation plumbing, shared by the Developer button and the F8 step:
+// no endpoint is contacted.
+static QString translationCheck()
+{
+    QString error;
+    const QString text =
+        Translator::parseResponse(R"({"choices":[{"message":{"content":"ok"}}]})", &error);
+    const bool shapes = Translator::endpointUrl(QStringLiteral("https://api.openai.com/v1")).toString()
+                            == QStringLiteral("https://api.openai.com/v1/chat/completions")
+                        && Translator::endpointUrl(QStringLiteral("http://localhost:11434")).toString()
+                            == QStringLiteral("http://localhost:11434/v1/chat/completions")
+                        && Translator::endpointUrl(
+                               QStringLiteral("https://api.example.test/v1/chat/completions")).toString()
+                            == QStringLiteral("https://api.example.test/v1/chat/completions")
+                        && Translator::systemPrompt(QStringLiteral("Polish"))
+                               .contains(QStringLiteral("Polish"));
+    if (!shapes || text != QLatin1String("ok") || !error.isEmpty())
+        return QStringLiteral("FAIL (URL shapes, prompt or response)");
+    const QString failure =
+        Translator::parseResponse(R"({"error":{"message":"bad key"}})", &error);
+    if (!failure.isEmpty() || error != QLatin1String("bad key"))
+        return QStringLiteral("FAIL (service error)");
+    // Numbered lines: the prompt has to ask for the same count back and the
+    // parser has to reject anything that lost the layout.
+    error.clear();
+    const QStringList numbered =
+        Translator::parseNumberedLines(QStringLiteral("1. One\n2. Two"), 2, &error);
+    const bool numberedOk = numbered.size() == 2 && numbered.at(0) == QLatin1String("One")
+                            && numbered.at(1) == QLatin1String("Two") && error.isEmpty()
+                            && Translator::numberedPrompt(QStringLiteral("Polish"))
+                                   .contains(QStringLiteral("Polish"))
+                            && Translator::numberedRequest({QStringLiteral("a"), QStringLiteral("b")})
+                                   == QLatin1String("1. a\n2. b");
+    error.clear();
+    const bool rejects =
+        Translator::parseNumberedLines(QStringLiteral("One two"), 2, &error).isEmpty()
+        && !error.isEmpty();
+    // Real answers often carry a preamble, markdown fences or no numbering at
+    // all; the parser still maps one line per input line.
+    const bool tolerant =
+        Translator::parseNumberedLines(QStringLiteral("Here it is:\n1. One\n2. Two"), 2, &error)
+            == QStringList({QStringLiteral("One"), QStringLiteral("Two")})
+        && error.isEmpty()
+        && Translator::parseNumberedLines(QStringLiteral("One\nTwo"), 2, &error)
+               == QStringList({QStringLiteral("One"), QStringLiteral("Two")})
+        && error.isEmpty();
+    // A service that echoes the input must be caught, or the source would be
+    // shown as if it were the translation.
+    const bool unchangedOk =
+        OcrResultController::translationLooksUnchanged(QStringLiteral("你好世界"),
+                                                       QStringLiteral("你好世界"))
+        && !OcrResultController::translationLooksUnchanged(QStringLiteral("你好世界"),
+                                                           QStringLiteral("Hello world"));
+    if (!numberedOk || !rejects || !tolerant || !unchangedOk)
+        return QStringLiteral("FAIL (numbered lines)");
+    return QStringLiteral(
+        "PASS (URL shapes, prompt, numbered lines, tolerant mapping, unchanged answer, response, "
+        "service error)");
+}
+
+// Translation laid over the picture: every line box gets its own translation,
+// the [start, length) ranges index the joined text the pane shows, and the
+// sampled background/ink pair is readable. Synthetic image, no OCR, no network.
+static QString translationOverlayCheck()
+{
+    QImage image(240, 90, QImage::Format_RGB32);
+    image.fill(QColor(250, 250, 245));
+    QPainter painter(&image);
+    // A glyph stroke inside each line box, not a filled box: a REAL line box is
+    // mostly page with strokes in it, and the sampled background comes from
+    // that majority. A filled box would test a picture, not a line of text.
+    painter.fillRect(QRect(12, 17, 86, 6), QColor(20, 20, 20));
+    painter.fillRect(QRect(12, 53, 136, 6), QColor(20, 20, 20));
+    painter.end();
+
+    const QVariantList lines = {
+        QVariantMap{{QStringLiteral("text"), QStringLiteral("Hello")},
+                    {QStringLiteral("x"), 10},
+                    {QStringLiteral("y"), 12},
+                    {QStringLiteral("width"), 90},
+                    {QStringLiteral("height"), 16},
+                    {QStringLiteral("start"), 0},
+                    {QStringLiteral("length"), 5}},
+        QVariantMap{{QStringLiteral("text"), QStringLiteral("Second line")},
+                    {QStringLiteral("x"), 10},
+                    {QStringLiteral("y"), 48},
+                    {QStringLiteral("width"), 140},
+                    {QStringLiteral("height"), 16},
+                    {QStringLiteral("start"), 6},
+                    {QStringLiteral("length"), 11}},
+    };
+    const QStringList translated{QStringLiteral("Translated one"),
+                                 QStringLiteral("Translated two")};
+    QString joined;
+    const QVariantList overlay =
+        OcrResultController::translatedLineMap(lines, translated, image, &joined);
+    if (overlay.size() != lines.size())
+        return QStringLiteral("FAIL (line map size)");
+    if (joined != translated.join(QLatin1Char('\n')))
+        return QStringLiteral("FAIL (joined text)");
+    for (int i = 0; i < overlay.size(); ++i) {
+        const QVariantMap entry = overlay.at(i).toMap();
+        const int start = entry.value(QStringLiteral("start")).toInt();
+        const int length = entry.value(QStringLiteral("length")).toInt();
+        if (start < 0 || length <= 0 || start + length > joined.size()
+            || joined.mid(start, length) != entry.value(QStringLiteral("text")).toString())
+            return QStringLiteral("FAIL (line %1 range)").arg(i + 1);
+        const QColor background(entry.value(QStringLiteral("background")).toString());
+        const QColor foreground(entry.value(QStringLiteral("foreground")).toString());
+        if (!background.isValid() || !foreground.isValid())
+            return QStringLiteral("FAIL (line %1 colours)").arg(i + 1);
+        // Near-white paper, near-black ink: a cover with the page colour has to
+        // take the ink colour with it or the translation stays unreadable.
+        if (background.lightnessF() < 0.8f || foreground.lightnessF() > 0.35f)
+            return QStringLiteral("FAIL (line %1 contrast)").arg(i + 1);
+    }
+    return QStringLiteral("PASS (line map, ranges, colours)");
+}
+
+void AppContext::devTestTranslationOverlay()
+{
+    if (!devBuild())
+        return;
+    const QString result = translationOverlayCheck();
+    showToast(tr("Dev: translation overlay: %1").arg(result),
+              !result.startsWith(QLatin1String("PASS")));
+}
+
+void AppContext::devTestPaddleOcr()
+{
+    if (!devBuild())
+        return;
+    PaddleOcr *paddle = m_ocr->paddle();
+    if (!paddle || !paddle->ready()) {
+        showToast(tr("Dev: PaddleOCR: SKIP (models not downloaded)"));
+        return;
+    }
+    paddle->recognizeBoxes(ocrBoxTestImage(), [this](const QVector<OcrWord> &words, const QString &err) {
+        if (!err.isEmpty())
+            showToast(tr("Dev: PaddleOCR: FAIL (%1)").arg(err), true);
+        else
+            showToast(tr("Dev: PaddleOCR: %1 (%2 glyphs)")
+                          .arg(words.size() >= 4 ? QStringLiteral("PASS") : QStringLiteral("FAIL"))
+                          .arg(words.size()),
+                      words.size() < 4);
+    });
+}
+
+void AppContext::devTestOcrResult()
+{
+    if (!devBuild())
+        return;
+    const QImage image = ocrBoxTestImage();
+    ocrBoxes(image, [this, image](const QVector<OcrWord> &words, const QString &err) {
+        if (!err.isEmpty() || words.isEmpty()) {
+            showToast(tr("Dev: OCR result: FAIL (%1)")
+                          .arg(err.isEmpty() ? tr("no text found") : err),
+                      true);
+            return;
+        }
+        m_ocrResult->setResult(image, words, QString());
+        emit ocrResultReady();
+        showToast(tr("Dev: OCR result: PASS (%1 lines)")
+                      .arg(m_ocrResult->lines().size()));
+    });
+}
+
+void AppContext::devTestTranslation()
+{
+    if (!devBuild())
+        return;
+    const QString result = translationCheck();
+    showToast(tr("Dev: translation: %1").arg(result), !result.startsWith(QLatin1String("PASS")));
 }
 
 void AppContext::devTestOcrRedactPattern()
@@ -6244,6 +6421,88 @@ void AppContext::runSmokeTest()
                                      : QStringLiteral("ocr highlight + redact: ") + ocrHighlightCheck(words));
             smokeNext();
         });
+    });
+
+    // 3f3b) PaddleOCR (optional): the downloadable PP-OCRv6 models. Skipped
+    // when they are not installed; a real run on the same digit fixture when
+    // they are. The language-coverage table is pinned without any model.
+    m_smokeSteps.append([this] {
+        PaddleOcr *paddle = m_ocr->paddle();
+        if (!paddle) {
+            smokeLog(QStringLiteral("paddleocr: SKIP (not built)"));
+            smokeNext();
+            return;
+        }
+        const bool mapOk = paddle->supportsLanguages(QStringLiteral("eng"), false)
+                           && paddle->supportsLanguages(QStringLiteral("chi_sim+jpn"), false)
+                           && !paddle->supportsLanguages(QStringLiteral("rus"), false)
+                           && !paddle->supportsLanguages(QStringLiteral("ara"), false)
+                           && paddle->supportsLanguages(QString(), true);
+        if (!paddle->ready()) {
+            smokeLog(QStringLiteral("paddleocr: SKIP (models not downloaded; script map %1)")
+                         .arg(mapOk ? QStringLiteral("PASS") : QStringLiteral("FAIL")));
+            smokeNext();
+            return;
+        }
+        paddle->recognizeBoxes(ocrBoxTestImage(), [this, mapOk](const QVector<OcrWord> &words, const QString &err) {
+            if (!err.isEmpty())
+                smokeLog(QStringLiteral("paddleocr: FAIL (%1)").arg(err));
+            else
+                smokeLog(QStringLiteral("paddleocr: %1 (%2 glyphs; script map %3)")
+                             .arg(words.size() >= 4 ? QStringLiteral("PASS") : QStringLiteral("FAIL"))
+                             .arg(words.size())
+                             .arg(mapOk ? QStringLiteral("PASS") : QStringLiteral("FAIL")));
+            smokeNext();
+        });
+    });
+
+    // 3f3c) OCR result model: the result window's text and line ranges must
+    // describe the same string. Runs on the digit fixture; no window is shown
+    // here (the Developer button opens it), so the smoke pass does not leave a
+    // top-level window behind.
+    m_smokeSteps.append([this] {
+        const QImage image = ocrBoxTestImage();
+        ocrBoxes(image, [this, image](const QVector<OcrWord> &words, const QString &err) {
+            if (!err.isEmpty() || words.isEmpty()) {
+                smokeLog(QStringLiteral("ocr result: FAIL (%1)")
+                             .arg(err.isEmpty() ? QStringLiteral("no text") : err));
+                smokeNext();
+                return;
+            }
+            m_ocrResult->setResult(image, words, QString());
+            const QVariantList lines = m_ocrResult->lines();
+            const QString text = m_ocrResult->text();
+            bool ok = !lines.isEmpty() && !text.isEmpty();
+            for (const QVariant &v : lines) {
+                const QVariantMap line = v.toMap();
+                const int start = line.value(QStringLiteral("start")).toInt();
+                const int length = line.value(QStringLiteral("length")).toInt();
+                if (start < 0 || length <= 0 || start + length > text.size()
+                    || text.mid(start, length) != line.value(QStringLiteral("text")).toString()) {
+                    ok = false;
+                    break;
+                }
+            }
+            smokeLog(QStringLiteral("ocr result: %1 (%2 lines)")
+                         .arg(ok ? QStringLiteral("PASS") : QStringLiteral("FAIL"))
+                         .arg(lines.size()));
+            smokeNext();
+        });
+    });
+
+    // 3f3d) Translation plumbing: OpenAI-compatible URL shapes, prompt and
+    // response/error parsing. No endpoint is contacted.
+    m_smokeSteps.append([this] {
+        smokeLog(QStringLiteral("translation: ") + translationCheck());
+        smokeNext();
+    });
+
+    // 3f3e) Translation over the picture: the per-line map the result window
+    // overlays must index the joined translation and pick readable colours.
+    // Synthetic image, so this step needs no OCR and no panel.
+    m_smokeSteps.append([this] {
+        smokeLog(QStringLiteral("translation overlay: ") + translationOverlayCheck());
+        smokeNext();
     });
 
     // 3f4) Auto-redact: pattern → redaction bars with no selection made.

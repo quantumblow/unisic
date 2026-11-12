@@ -230,6 +230,14 @@ Item {
         onAccepted: App.backgroundRemover.deleteDownloads()
     }
     UConfirmDialog {
+        id: paddleDeleteConfirm
+        title: qsTr("Delete the PaddleOCR models?")
+        text: qsTr("Only the selected model tier is removed. ONNX Runtime is shared with background removal and stays.")
+        confirmText: qsTr("Delete")
+        destructive: true
+        onAccepted: App.paddleOcr.deleteDownloads()
+    }
+    UConfirmDialog {
         id: helpDialog
         showCancel: false
         confirmText: qsTr("Close")
@@ -1176,6 +1184,134 @@ Item {
                             onActivated: (i) => App.settings.uiLanguage = ids[i]
                         }
                     }
+                    SectionTitle { text: qsTr("Text recognition (OCR)") }
+                    SettingRow {
+                        visible: App.paddleOcr.available
+                        label: qsTr("OCR engine")
+                        help: qsTr("Which engine reads text from a capture.")
+                        helpDetail: qsTr("Auto uses PaddleOCR when its models are downloaded and falls back to the built-in Tesseract otherwise. PaddleOCR reads Chinese, Japanese and Latin-script text more accurately; Tesseract still covers the other scripts. Both run on this computer and nothing is uploaded.")
+                        UComboBox {
+                            width: 220
+                            property var ids: ["auto", "tesseract", "paddle"]
+                            model: [qsTr("Auto (PaddleOCR)"), qsTr("Tesseract (built in)"), qsTr("PaddleOCR v6")]
+                            currentIndex: Math.max(0, ids.indexOf(App.settings.ocrEngine))
+                            onActivated: (i) => App.settings.ocrEngine = ids[i]
+                        }
+                    }
+                    SettingRow {
+                        available: App.paddleOcr.available && App.settings.ocrEngine !== "tesseract"
+                        label: qsTr("PaddleOCR model")
+                        help: qsTr("Model size and accuracy trade-off.")
+                        helpDetail: qsTr("Small is the recommended default: it reads Chinese (simplified and traditional), Japanese and 48 Latin-script languages in one model and takes about a second per page on a 4-core CPU. Tiny is for slow machines and cannot read Japanese; medium is the most accurate and the largest download. The files are downloaded once, checked against their pinned SHA-256, and run offline.")
+                        UComboBox {
+                            width: 220
+                            property var ids: ["tiny", "small", "medium"]
+                            model: [qsTr("Tiny (6 MB)"), qsTr("Small (31 MB)"), qsTr("Medium (139 MB)")]
+                            currentIndex: Math.max(0, ids.indexOf(App.settings.paddleTier))
+                            onActivated: (i) => App.settings.paddleTier = ids[i]
+                        }
+                    }
+                    Column {
+                        width: parent.width
+                        spacing: Theme.spacingS
+                        visible: App.paddleOcr.available && App.settings.ocrEngine !== "tesseract"
+                        Text {
+                            width: parent.width
+                            wrapMode: Text.WordWrap
+                            text: (App.paddleOcr.runtimeFound
+                                   ? App.paddleOcr.runtimeInfo
+                                   : App.paddleOcr.canDownloadRuntime
+                                     ? qsTr("ONNX Runtime: not installed, it is downloaded with the models")
+                                     : qsTr("ONNX Runtime: not installed - install the onnxruntime package from your distribution"))
+                                  + "\n" + (App.paddleOcr.modelInstalled
+                                             ? qsTr("PaddleOCR model: downloaded") : qsTr("PaddleOCR model: not downloaded"))
+                            color: Theme.textSecondary
+                            font.pixelSize: Theme.fontS
+                        }
+                        Text {
+                            visible: App.paddleOcr.error !== ""
+                            width: parent.width
+                            wrapMode: Text.WordWrap
+                            text: App.paddleOcr.error
+                            color: Theme.danger
+                            font.pixelSize: Theme.fontS
+                        }
+                        Row {
+                            spacing: Theme.spacingM
+                            UButton {
+                                compact: true
+                                variant: "tonal"
+                                iconName: "folder-cloud"
+                                visible: App.paddleOcr.downloading || !App.paddleOcr.modelInstalled
+                                         || (!App.paddleOcr.runtimeFound && App.paddleOcr.canDownloadRuntime)
+                                enabled: !App.paddleOcr.downloading
+                                text: App.paddleOcr.downloading
+                                      ? qsTr("Downloading… %1%").arg(Math.round(App.paddleOcr.progress * 100))
+                                      : qsTr("Download (%1)").arg(App.paddleOcr.downloadSizeText)
+                                onClicked: App.paddleOcr.download()
+                            }
+                            UButton {
+                                compact: true
+                                variant: "tonal"
+                                visible: App.paddleOcr.downloading
+                                text: qsTr("Cancel")
+                                onClicked: App.paddleOcr.cancelDownload()
+                            }
+                            UButton {
+                                compact: true
+                                variant: "tonal"
+                                iconName: "edit-delete"
+                                visible: App.paddleOcr.hasDownloads && !App.paddleOcr.downloading
+                                text: qsTr("Delete downloaded files")
+                                onClicked: paddleDeleteConfirm.open()
+                            }
+                        }
+                    }
+                    SectionTitle { text: qsTr("Translation") }
+                    SettingRow {
+                        label: qsTr("Translation endpoint")
+                        help: qsTr("OpenAI-compatible API base URL.")
+                        helpDetail: qsTr("For example https://api.openai.com/v1, https://api.deepseek.com, or http://localhost:11434/v1 for a local Ollama. You can also paste the full chat-completions URL. Nothing is sent until Translate is pressed in the OCR result window.")
+                        UTextField {
+                            width: 220
+                            text: App.settings.translationEndpoint
+                            placeholder: "https://api.openai.com/v1"
+                            onEdited: (t) => App.settings.translationEndpoint = t
+                        }
+                    }
+                    SettingRow {
+                        label: qsTr("API key")
+                        help: qsTr("Sent as a Bearer token. Leave empty for a local service.")
+                        UTextField {
+                            width: 220
+                            echoMode: TextInput.Password
+                            text: App.settings.translationApiKey
+                            placeholder: "sk-..."
+                            onEdited: (t) => App.settings.translationApiKey = t
+                        }
+                    }
+                    SettingRow {
+                        label: qsTr("Model")
+                        help: qsTr("Model name the endpoint expects.")
+                        UTextField {
+                            width: 220
+                            text: App.settings.translationModel
+                            placeholder: "gpt-4o-mini"
+                            onEdited: (t) => App.settings.translationModel = t
+                        }
+                    }
+                    SettingRow {
+                        label: qsTr("Target language")
+                        help: qsTr("Language name written in the prompt.")
+                        helpDetail: qsTr("Use the full name, for example English, Simplified Chinese or Japanese. The OCR text is sent to the endpoint only when you press Translate in the result window; the key is stored in your Unisic config file.")
+                        UTextField {
+                            width: 220
+                            text: App.settings.translationTarget
+                            placeholder: "English"
+                            onEdited: (t) => App.settings.translationTarget = t
+                        }
+                    }
+                    SectionTitle { text: qsTr("Tesseract") }
                     SettingRow {
                         label: qsTr("Detect languages automatically")
                         help: qsTr("Detects the script and recognizes with the matching language pack.")
@@ -4256,6 +4392,10 @@ Item {
                         UButton { compact: true; variant: "tonal"; text: qsTr("Overlay mode badge"); onClicked: App.devTestOverlayMode() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("Overlay preview"); onClicked: App.devTestOverlayPreview() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("OCR boxes"); onClicked: App.devTestOcrBoxes() }
+                        UButton { compact: true; variant: "tonal"; text: qsTr("PaddleOCR"); onClicked: App.devTestPaddleOcr() }
+                        UButton { compact: true; variant: "tonal"; text: qsTr("OCR result"); onClicked: App.devTestOcrResult() }
+                        UButton { compact: true; variant: "tonal"; text: qsTr("Translation"); onClicked: App.devTestTranslation() }
+                        UButton { compact: true; variant: "tonal"; text: qsTr("Translation overlay"); onClicked: App.devTestTranslationOverlay() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("OCR highlight + redact"); onClicked: App.devTestOcrHighlight() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("Auto-redact pattern"); onClicked: App.devTestOcrRedactPattern() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("Style presets"); onClicked: App.devTestStylePresets() }

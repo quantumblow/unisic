@@ -1,4 +1,7 @@
 #include "OcrEngine.h"
+#include "Barcode.h"
+#include "PaddleOcr.h"
+#include "Settings.h"
 #include <QtConcurrent>
 #include <QCoreApplication>
 #include <QFutureWatcher>
@@ -7,21 +10,6 @@
 #include <QSet>
 #include <tesseract/baseapi.h>
 #include <tesseract/ocrclass.h> // ETEXT_DESC - cancellable Recognize()
-#include <ZXing/ReadBarcode.h>
-// DecodeHints was renamed to ReaderOptions in zxing-cpp 2.2; the version
-// header itself moved names across releases, so probe the header directly.
-#if __has_include(<ZXing/ReaderOptions.h>)
-using ZXingOptions = ZXing::ReaderOptions;
-#else
-using ZXingOptions = ZXing::DecodeHints;
-#endif
-// Result::text() returns std::string in zxing-cpp 2.x but std::wstring in
-// 1.x (still what openSUSE Leap 15.6 ships) - overloads pick the right
-// conversion at compile time.
-// maybe_unused: exactly ONE of the two is called per zxing-cpp version, so the
-// other is always dead and would warn on every build.
-[[maybe_unused]] static QString zxingText(const std::string &s) { return QString::fromStdString(s); }
-[[maybe_unused]] static QString zxingText(const std::wstring &s) { return QString::fromStdWString(s); }
 
 namespace {
 struct OcrResult { QString text; QString error; };
@@ -264,20 +252,12 @@ OcrResult runOcr(QImage img, QString langs, bool autoScript,
     if (cancelled->load())
         return r;
     // Barcode pass first: a QR (or other code) in the region means the user
-    // wants its PAYLOAD - OCR-ing the code's pixels yields garbage. Grayscale
-    // keeps the ImageView format portable across zxing-cpp versions.
+    // wants its PAYLOAD - OCR-ing the code's pixels yields garbage.
     {
-        const QImage gray = img.convertToFormat(QImage::Format_Grayscale8);
-        ZXing::ImageView view(gray.constBits(), gray.width(), gray.height(),
-                              ZXing::ImageFormat::Lum, int(gray.bytesPerLine()));
-        ZXingOptions opts;
-        opts.setTryHarder(true);
-        opts.setTryRotate(true);
-        const auto res = ZXing::ReadBarcode(view, opts);
-        if (res.isValid()) {
-            r.text = zxingText(res.text()).trimmed();
-            if (!r.text.isEmpty())
-                return r;
+        const QString payload = scanBarcode(img);
+        if (!payload.isEmpty()) {
+            r.text = payload;
+            return r;
         }
     }
     if (cancelled->load())
@@ -322,7 +302,27 @@ OcrResult runOcr(QImage img, QString langs, bool autoScript,
 }
 } // namespace
 
-OcrEngine::OcrEngine(QObject *parent) : QObject(parent) {}
+OcrEngine::OcrEngine(Settings *settings, QObject *parent)
+    : QObject(parent), m_paddle(new PaddleOcr(settings, this))
+{
+    setBackend(settings ? settings->ocrEngine() : QStringLiteral("auto"));
+}
+
+void OcrEngine::setBackend(const QString &backend)
+{
+    m_backend = backend;
+}
+
+bool OcrEngine::usePaddle(const QString &langs, bool autoScript) const
+{
+    if (!m_paddle || m_backend == QLatin1String("tesseract"))
+        return false;
+    if (!m_paddle->ready())
+        return false;
+    if (m_backend == QLatin1String("paddle"))
+        return true;
+    return m_paddle->supportsLanguages(langs, autoScript);
+}
 
 OcrEngine::~OcrEngine()
 {
@@ -391,6 +391,10 @@ QString OcrEngine::languagesForScript(const QString &script, const QString &avai
 
 void OcrEngine::recognize(const QImage &img, const QString &langs, bool autoScript, Result cb)
 {
+    if (usePaddle(langs, autoScript)) {
+        m_paddle->recognize(img, std::move(cb));
+        return;
+    }
     auto *fw = new QFutureWatcher<OcrResult>(this);
     connect(fw, &QFutureWatcher<OcrResult>::finished, this, [fw, cb]() {
         const OcrResult r = fw->result();
@@ -403,6 +407,10 @@ void OcrEngine::recognize(const QImage &img, const QString &langs, bool autoScri
 void OcrEngine::recognizeBoxes(const QImage &img, const QString &langs, bool autoScript,
                                BoxResult cb)
 {
+    if (usePaddle(langs, autoScript)) {
+        m_paddle->recognizeBoxes(img, std::move(cb));
+        return;
+    }
     auto *fw = new QFutureWatcher<OcrBoxResult>(this);
     connect(fw, &QFutureWatcher<OcrBoxResult>::finished, this, [fw, cb]() {
         const OcrBoxResult r = fw->result();

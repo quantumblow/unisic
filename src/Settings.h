@@ -164,6 +164,16 @@ class Settings : public QObject
     Q_PROPERTY(bool muteOnFullscreen READ muteOnFullscreen WRITE setMuteOnFullscreen NOTIFY muteOnFullscreenChanged)
     Q_PROPERTY(bool ocrAutoLanguage READ ocrAutoLanguage WRITE setOcrAutoLanguage NOTIFY ocrAutoLanguageChanged)
     Q_PROPERTY(QString ocrLanguages READ ocrLanguages WRITE setOcrLanguages NOTIFY ocrLanguagesChanged)
+    // "auto" | "tesseract" | "paddle" - see OcrEngine::setBackend.
+    Q_PROPERTY(QString ocrEngine READ ocrEngine WRITE setOcrEngine NOTIFY ocrEngineChanged)
+    // PP-OCRv6 model tier: "tiny" | "small" | "medium".
+    Q_PROPERTY(QString paddleTier READ paddleTier WRITE setPaddleTier NOTIFY paddleTierChanged)
+    // OpenAI-compatible translation endpoint (base URL or full /chat/completions
+    // URL), an optional Bearer key, a model name, and the target language name.
+    Q_PROPERTY(QString translationEndpoint READ translationEndpoint WRITE setTranslationEndpoint NOTIFY translationEndpointChanged)
+    Q_PROPERTY(QString translationApiKey READ translationApiKey WRITE setTranslationApiKey NOTIFY translationApiKeyChanged)
+    Q_PROPERTY(QString translationModel READ translationModel WRITE setTranslationModel NOTIFY translationModelChanged)
+    Q_PROPERTY(QString translationTarget READ translationTarget WRITE setTranslationTarget NOTIFY translationTargetChanged)
     Q_PROPERTY(QString editorIconStyle READ editorIconStyle WRITE setEditorIconStyle NOTIFY editorIconStyleChanged)
     Q_PROPERTY(QString editorToolIcons READ editorToolIcons WRITE setEditorToolIcons NOTIFY editorToolIconsChanged)
     Q_PROPERTY(QString uiLanguage READ uiLanguage WRITE setUiLanguage NOTIFY uiLanguageChanged)
@@ -665,6 +675,20 @@ public:
     // turn it off to pin a specific, faster spec.
     U_SETTING(bool, ocrAutoLanguage, setOcrAutoLanguage, "ocr/autoLanguage", true)
     U_SETTING(QString, ocrLanguages, setOcrLanguages, "ocr/languages", QStringLiteral("eng"))
+    // Which OCR engine runs: Auto prefers PaddleOCR when its models are
+    // installed and the language is one PP-OCRv6 reads, Tesseract forces the
+    // built-in engine, PaddleOCR forces v6 once downloaded. Never a QSettings
+    // group named "general" (see AGENTS.md).
+    U_SETTING(QString, ocrEngine, setOcrEngine, "ocr/engine", QStringLiteral("auto"))
+    U_SETTING(QString, paddleTier, setPaddleTier, "ocr/paddleTier", QStringLiteral("small"))
+    // Translation is off until the user fills an endpoint and a model. The text
+    // leaves the machine only when they press Translate, and the key is stored
+    // in the config file like the upload credentials (settings export is
+    // owner-readable only).
+    U_SETTING(QString, translationEndpoint, setTranslationEndpoint, "translation/endpoint", QString())
+    U_SETTING(QString, translationApiKey, setTranslationApiKey, "translation/apiKey", QString())
+    U_SETTING(QString, translationModel, setTranslationModel, "translation/model", QString())
+    U_SETTING(QString, translationTarget, setTranslationTarget, "translation/target", QStringLiteral("English"))
     // Editor/overlay tool icons only (never the main app chrome): "custom" =
     // bundled monochrome glyphs, "system" = freedesktop QIcon::fromTheme.
     U_SETTING(QString, editorIconStyle, setEditorIconStyle, "ui/editorIconStyle", QStringLiteral("custom"))
@@ -777,6 +801,9 @@ public:
         emit capturePopupDurationSecChanged(); emit capturePopupStyleChanged(); emit capturePopupMarginChanged();
         emit hiddenNotifActionsChanged(); emit notificationActionOrderChanged();
         emit muteOnFullscreenChanged(); emit ocrLanguagesChanged();
+        emit ocrEngineChanged(); emit paddleTierChanged();
+        emit translationEndpointChanged(); emit translationApiKeyChanged();
+        emit translationModelChanged(); emit translationTargetChanged();
         emit editorIconStyleChanged(); emit editorToolIconsChanged();
         emit uiLanguageChanged();
         emit useSystemDecorationChanged(); emit trayIconPathChanged(); emit hiddenTrayItemsChanged();
@@ -913,6 +940,12 @@ signals:
     void muteOnFullscreenChanged();
     void ocrAutoLanguageChanged();
     void ocrLanguagesChanged();
+    void ocrEngineChanged();
+    void paddleTierChanged();
+    void translationEndpointChanged();
+    void translationApiKeyChanged();
+    void translationModelChanged();
+    void translationTargetChanged();
     void editorIconStyleChanged();
     void editorToolIconsChanged();
     void uiLanguageChanged();

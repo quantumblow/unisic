@@ -1046,5 +1046,20 @@ Window {
             }
         }
     }
+    // The OCR result window is kept alive: the next recognition updates its
+    // model and raises it, so a result is never lost by closing it first.
+    OcrResultWindow {
+        id: ocrResultWindow
+    }
+
+    Connections {
+        target: App
+        function onOcrResultReady() {
+            ocrResultWindow.show()
+            ocrResultWindow.raise()
+            ocrResultWindow.requestActivate()
+        }
+    }
+
     UWindowResizer { active: !App.settings.useSystemDecoration }
 }
