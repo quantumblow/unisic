@@ -85,12 +85,12 @@
     <message>
         <location filename="../src/AppContext.cpp" line="+5171"/>
         <location filename="../src/diag/SmokeTests.cpp" line="+810"/>
-        <location line="+2442"/>
+        <location line="+2445"/>
         <source>Quit</source>
         <translation>退出</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="-2430"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-2433"/>
         <source>Dev: language: %1</source>
         <translation>Dev: 语言：%1</translation>
     </message>
@@ -105,12 +105,12 @@
         <translation>Dev: OCR 文本框：%1（%2 个字形）</translation>
     </message>
     <message>
-        <location line="+265"/>
+        <location line="+268"/>
         <source>Dev: played capture sound &apos;%1&apos;</source>
         <translation>Dev: 已播放截图音效 “%1”</translation>
     </message>
     <message>
-        <location line="-1122"/>
+        <location line="-1125"/>
         <source>Dev: capture on release: %1</source>
         <translation>Dev: 释放时截图：%1</translation>
     </message>
@@ -169,7 +169,7 @@
         <translation>录制单个窗口需要窗口选择器，而此桌面不提供该功能，请改为录制屏幕或区域。</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="+1271"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="+1274"/>
         <source>no screen</source>
         <translation>无屏幕</translation>
     </message>
@@ -204,7 +204,7 @@
         <translation>已找到，OCR 会自动识别每张截图的文字体系。</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="-2548"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-2551"/>
         <source>Dev: custom theme: %1</source>
         <translation>Dev: 自定义主题：%1</translation>
     </message>
@@ -214,7 +214,7 @@
         <translation>Dev: 诊断信息已复制（%1 个字符）</translation>
     </message>
     <message>
-        <location line="+1892"/>
+        <location line="+1895"/>
         <source>Dev: OCR auto language: %1 (installed: %2; %3; map: %4)</source>
         <translation>Dev: OCR 自动语言：%1（已安装：%2；%3；映射：%4）</translation>
     </message>
@@ -529,7 +529,7 @@
         <translation>将在 %1 秒后开始录制…</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="-4565"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-4568"/>
         <source>Dev: clipboard paste: %1</source>
         <translation>Dev: 剪贴板粘贴：%1</translation>
     </message>
@@ -750,7 +750,7 @@
         <translation>Dev: 已暂存的更新：失败（%1）</translation>
     </message>
     <message>
-        <location line="+147"/>
+        <location line="+150"/>
         <source>Dev: translation overlay: %1</source>
         <translation>开发者：翻译覆盖层：%1</translation>
     </message>
@@ -865,7 +865,7 @@
         <translation>主窗口可见</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="-4050"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-4053"/>
         <source>Dev: OCR highlight + redact: FAIL (%1)</source>
         <translation>Dev: OCR 高亮与涂黑：失败（%1）</translation>
     </message>
@@ -885,7 +885,7 @@
         <translation>Dev: 样式预设：%1</translation>
     </message>
     <message>
-        <location line="+162"/>
+        <location line="+165"/>
         <source>Dev: auto-redact pattern: FAIL (%1)</source>
         <translation>Dev: 自动涂黑规则：失败（%1）</translation>
     </message>
@@ -1065,7 +1065,7 @@
         <translation>无法保存到 %1</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="-3514"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-3517"/>
         <source>Dev: hide while capturing: %1</source>
         <translation>Dev: 截图时隐藏：%1</translation>
     </message>
@@ -1336,7 +1336,7 @@
         <translation>Dev: 安装器更新：失败（%1）</translation>
     </message>
     <message>
-        <location line="+953"/>
+        <location line="+956"/>
         <source>memory only</source>
         <translation>仅在内存中</translation>
     </message>
@@ -4197,12 +4197,12 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
 <context>
     <name>OcrResultWindow</name>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="+22"/>
+        <location filename="../qml/OcrResultWindow.qml" line="+21"/>
         <source>Recognized text</source>
         <translation>识别结果</translation>
     </message>
     <message>
-        <location line="+93"/>
+        <location line="+110"/>
         <source>Minimize</source>
         <translation>最小化</translation>
     </message>
@@ -4217,7 +4217,7 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>关闭</translation>
     </message>
     <message>
-        <location line="+24"/>
+        <location line="+27"/>
         <source>Translated text. Select it below or copy it all.</source>
         <translation>翻译后的文本。可在下方选择，或直接全部复制。</translation>
     </message>
@@ -4237,7 +4237,17 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>已复制</translation>
     </message>
     <message>
-        <location line="+11"/>
+        <location line="+23"/>
+        <source>Target language</source>
+        <translation>目标语言</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Language name written in the prompt.</source>
+        <translation>写入提示词中的语言名称。</translation>
+    </message>
+    <message>
+        <location line="+15"/>
         <source>Copy selection</source>
         <translation>复制所选</translation>
     </message>

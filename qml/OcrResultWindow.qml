@@ -33,6 +33,23 @@ Window {
     // stays in the pane instead.
     readonly property bool overlayAvailable: App.ocrResult.translatedLines.length > 0
 
+    // Preset translation targets. The setting stays free text (a language name
+    // the model understands); this list exists so the window can switch target
+    // without a trip to Settings, and a hand-typed value is kept as the first
+    // entry instead of being replaced by a preset.
+    readonly property var translationTargets: [
+        "English", "Simplified Chinese", "Traditional Chinese", "Japanese",
+        "Korean", "Polish", "German", "French", "Spanish", "Italian",
+        "Russian", "Portuguese", "Ukrainian", "Turkish", "Vietnamese", "Thai",
+        "Indonesian", "Arabic", "Hindi"
+    ]
+    readonly property string targetName: App.ocrResult.translationTarget
+    readonly property var targetModel: {
+        const list = resultWindow.translationTargets
+        return list.indexOf(resultWindow.targetName) >= 0
+               ? list : [resultWindow.targetName].concat(list)
+    }
+
     // One place for "a line on the picture selects its range in the pane", so
     // the original boxes and the translated covers behave the same.
     function selectPaneRange(start, length) {
@@ -137,6 +154,9 @@ Window {
             anchors.fill: parent
             spacing: Theme.spacingM
 
+            // The hint keeps its own line, so the controls below keep their
+            // width when the window is narrow instead of squeezing the hint
+            // into a column next to them.
             RowLayout {
                 Layout.fillWidth: true
                 spacing: Theme.spacingM
@@ -160,6 +180,34 @@ Window {
                     opacity: 0
                     Behavior on opacity { NumberAnimation { duration: 120 } }
                 }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacingM
+                // The translation target, visible and switchable right here:
+                // picking a new one while a translation is up re-runs it with
+                // the new language (the first Translate stays an explicit
+                // choice - nothing is sent just by changing the target).
+                UComboBox {
+                    id: targetPicker
+                    width: 170
+                    visible: App.ocrResult.canTranslate
+                    enabled: !App.ocrResult.translating
+                    model: resultWindow.targetModel
+                    currentIndex: Math.max(0, resultWindow.targetModel.indexOf(resultWindow.targetName))
+                    accessibleName: qsTr("Target language")
+                    accessibleDescription: qsTr("Language name written in the prompt.")
+                    onActivated: (i) => {
+                        const picked = resultWindow.targetModel[i]
+                        if (picked === resultWindow.targetName)
+                            return
+                        App.settings.translationTarget = picked
+                        if (App.ocrResult.translation.length > 0)
+                            App.ocrResult.translate()
+                    }
+                }
+                Item { Layout.fillWidth: true }
                 UButton {
                     compact: true
                     variant: "tonal"
