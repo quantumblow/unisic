@@ -1,6 +1,7 @@
 #pragma once
 #include <QImage>
 #include <QList>
+#include <QNetworkReply>
 #include <QObject>
 #include <QPointer>
 #include <QString>
@@ -13,7 +14,6 @@
 
 class Settings;
 class QNetworkAccessManager;
-class QNetworkReply;
 class QProcess;
 class QTimer;
 
