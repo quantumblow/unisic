@@ -4813,6 +4813,11 @@ Oznaczone (ulubione) przechwycenia są zachowywane, zarówno wpis, jak i plik.</
         <source>PaddleOCR models are not downloaded - see Settings &gt; General</source>
         <translation>Modele PaddleOCR nie są pobrane - zobacz Ustawienia &gt; Ogólne</translation>
     </message>
+    <message>
+        <location filename="../src/ocr/PaddleOcr.cpp" line="128"/>
+        <source>PaddleOCR needs about %1 GB of free memory and %2 GB is free - close something and try again</source>
+        <translation>PaddleOCR wymaga około %1 GB wolnej pamięci, a wolne jest %2 GB - zamknij coś i spróbuj ponownie</translation>
+    </message>
 </context>
 <context>
     <name>PreviewWindow</name>

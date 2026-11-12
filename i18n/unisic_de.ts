@@ -4811,6 +4811,11 @@ Mit Stern markierte (favorisierte) Aufnahmen in der Auswahl bleiben erhalten - e
         <source>PaddleOCR models are not downloaded - see Settings &gt; General</source>
         <translation>Die PaddleOCR-Modelle sind nicht heruntergeladen - siehe Einstellungen &gt; Allgemein</translation>
     </message>
+    <message>
+        <location filename="../src/ocr/PaddleOcr.cpp" line="128"/>
+        <source>PaddleOCR needs about %1 GB of free memory and %2 GB is free - close something and try again</source>
+        <translation>PaddleOCR braucht etwa %1 GB freien Speicher, frei sind %2 GB - schließe etwas und versuche es erneut</translation>
+    </message>
 </context>
 <context>
     <name>PreviewWindow</name>

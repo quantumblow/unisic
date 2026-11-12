@@ -89,6 +89,46 @@ QString tierId(const TierPin *pin)
     return QString::fromLatin1(pin->id);
 }
 
+// What a run needs free before it starts: the loaded pair, measured at ~0.4 /
+// 0.6 / 1.2 GB resident with ORT 1.31.1, plus the detection tensor (a 2000 px
+// side is 48 MB of floats) and the scaled copies of the screenshot. Without the
+// check a 4 GB machine picks medium and gets an opaque ORT allocation failure
+// or the OOM killer instead of a sentence it can act on.
+qint64 runMiB(const QString &tier)
+{
+    if (tier == QLatin1String("tiny"))
+        return 700;
+    if (tier == QLatin1String("medium"))
+        return 1800;
+    return 1000; // small, the default
+}
+
+// MemAvailable from /proc/meminfo in MiB, -1 where there is no such file (not
+// Linux), which skips the check rather than refusing to run.
+qint64 availableMiB()
+{
+    QFile file(QStringLiteral("/proc/meminfo"));
+    if (!file.open(QIODevice::ReadOnly))
+        return -1;
+    for (const QByteArray &line : file.readAll().split('\n'))
+        if (line.startsWith("MemAvailable:"))
+            return line.mid(13).trimmed().split(' ').value(0).toLongLong() / 1024;
+    return -1;
+}
+
+QString memoryError(const QString &tier)
+{
+    const qint64 free = availableMiB();
+    if (free < 0)
+        return {};
+    const qint64 need = runMiB(tier);
+    if (free >= need)
+        return {};
+    const QLocale loc;
+    return PaddleOcr::tr("PaddleOCR needs about %1 GB of free memory and %2 GB is free - close something and try again")
+        .arg(loc.toString(need / 1024.0, 'f', 1), loc.toString(free / 1024.0, 'f', 1));
+}
+
 // The models are served from ModelScope, the same pinned copies Snow Shot
 // publishes. Swapping the mirror later means changing this base, the sizes and
 // the hashes together - never one of them.
@@ -1143,6 +1183,10 @@ void PaddleOcr::recognize(const QImage &img, Result cb)
         cb({}, tr("PaddleOCR models are not downloaded - see Settings > General"));
         return;
     }
+    if (const QString memory = memoryError(tier()); !memory.isEmpty()) {
+        cb({}, memory);
+        return;
+    }
     auto impl = m_impl;
     const QString selected = tier();
     auto *fw = new QFutureWatcher<RunOut>(this);
@@ -1164,6 +1208,10 @@ void PaddleOcr::recognizeBoxes(const QImage &img, BoxResult cb)
     }
     if (!runtimeFound() || !modelInstalled()) {
         cb({}, tr("PaddleOCR models are not downloaded - see Settings > General"));
+        return;
+    }
+    if (const QString memory = memoryError(tier()); !memory.isEmpty()) {
+        cb({}, memory);
         return;
     }
     auto impl = m_impl;

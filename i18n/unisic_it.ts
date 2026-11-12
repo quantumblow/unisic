@@ -4811,6 +4811,11 @@ Le catture con stella (preferite) nella selezione vengono mantenute - rimuovi pr
         <source>PaddleOCR models are not downloaded - see Settings &gt; General</source>
         <translation>I modelli PaddleOCR non sono scaricati - vedi Impostazioni &gt; Generale</translation>
     </message>
+    <message>
+        <location filename="../src/ocr/PaddleOcr.cpp" line="128"/>
+        <source>PaddleOCR needs about %1 GB of free memory and %2 GB is free - close something and try again</source>
+        <translation>PaddleOCR richiede circa %1 GB di memoria libera e ne sono liberi %2 GB - chiudi qualcosa e riprova</translation>
+    </message>
 </context>
 <context>
     <name>PreviewWindow</name>

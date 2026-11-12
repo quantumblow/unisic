@@ -4813,6 +4813,11 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <source>PaddleOCR models are not downloaded - see Settings &gt; General</source>
         <translation>Модели PaddleOCR не загружены - см. Настройки &gt; Общие</translation>
     </message>
+    <message>
+        <location filename="../src/ocr/PaddleOcr.cpp" line="128"/>
+        <source>PaddleOCR needs about %1 GB of free memory and %2 GB is free - close something and try again</source>
+        <translation>PaddleOCR нужно около %1 ГБ свободной памяти, а свободно %2 ГБ - закройте что-нибудь и попробуйте снова</translation>
+    </message>
 </context>
 <context>
     <name>PreviewWindow</name>

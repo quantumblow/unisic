@@ -4811,6 +4811,11 @@ Las capturas destacadas (favoritas) de la selección se conservan: quítales la 
         <source>PaddleOCR models are not downloaded - see Settings &gt; General</source>
         <translation>Los modelos de PaddleOCR no están descargados; consulta Ajustes &gt; General</translation>
     </message>
+    <message>
+        <location filename="../src/ocr/PaddleOcr.cpp" line="128"/>
+        <source>PaddleOCR needs about %1 GB of free memory and %2 GB is free - close something and try again</source>
+        <translation>PaddleOCR necesita unos %1 GB de memoria libre y hay %2 GB libres - cierra algo y vuelve a intentarlo</translation>
+    </message>
 </context>
 <context>
     <name>PreviewWindow</name>
