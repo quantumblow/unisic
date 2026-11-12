@@ -207,18 +207,11 @@ Window {
                             App.ocrResult.translate()
                     }
                 }
-                Item { Layout.fillWidth: true }
-                UButton {
-                    compact: true
-                    variant: "tonal"
-                    visible: textEdit.selectedText.length > 0
-                    text: qsTr("Copy selection")
-                    onClicked: {
-                        textEdit.copy()
-                        copiedLabel.opacity = 1
-                        copiedTimer.restart()
-                    }
-                }
+                // Translation controls stay together on the left, the view
+                // and copy controls on the right. Everything keeps its place
+                // and disables instead of disappearing: a hidden button
+                // reflows the row and slides its neighbours while the pointer
+                // is still down on the previous one.
                 UButton {
                     compact: true
                     variant: "tonal"
@@ -232,21 +225,34 @@ Window {
                 UButton {
                     compact: true
                     variant: "tonal"
-                    visible: App.ocrResult.translating
+                    enabled: App.ocrResult.translating
                     text: qsTr("Cancel")
                     onClicked: App.ocrResult.cancelTranslation()
                 }
+                Item { Layout.fillWidth: true }
+                UButton {
+                    compact: true
+                    variant: "tonal"
+                    enabled: textEdit.selectedText.length > 0
+                    text: qsTr("Copy selection")
+                    onClicked: {
+                        textEdit.copy()
+                        copiedLabel.opacity = 1
+                        copiedTimer.restart()
+                    }
+                }
                 Row {
-                    visible: App.ocrResult.translation.length > 0
                     spacing: 2
                     UButton {
                         compact: true
+                        enabled: App.ocrResult.translation.length > 0
                         variant: resultWindow.showTranslation ? "tonal" : "filled"
                         text: qsTr("Original")
                         onClicked: resultWindow.showTranslation = false
                     }
                     UButton {
                         compact: true
+                        enabled: App.ocrResult.translation.length > 0
                         variant: resultWindow.showTranslation ? "filled" : "tonal"
                         text: qsTr("Translation")
                         onClicked: resultWindow.showTranslation = true
@@ -317,6 +323,21 @@ Window {
 
                     readonly property real picScale: preview.paintedWidth
                                                      / Math.max(1, App.ocrResult.imageSize.width)
+
+                    // A hairline around the picture: on a light theme a white
+                    // screenshot on the pane background otherwise looks like
+                    // empty space instead of a capture.
+                    Rectangle {
+                        z: 1
+                        visible: preview.status === Image.Ready && preview.paintedWidth > 0
+                        x: (imagePane.width - preview.paintedWidth) / 2
+                        y: (imagePane.height - preview.paintedHeight) / 2
+                        width: preview.paintedWidth
+                        height: preview.paintedHeight
+                        color: "transparent"
+                        border.width: 1
+                        border.color: Theme.divider
+                    }
 
                     Repeater {
                         model: App.ocrResult.lines
