@@ -44,8 +44,9 @@ QString Translator::numberedPrompt(const QString &target)
                "You are a translation engine. The user sends numbered lines of text taken from a "
                "screenshot. Translate every line into %1. Answer with the same number of lines and the "
                "same numbering, one numbered line per input line, never merged and never split, even "
-               "when an input line is a single word or a number. Return only the numbered translation, "
-               "with no explanation, notes or quotation marks.")
+               "when an input line is a single word or a number. Start the answer with \"1.\" and keep "
+               "the lines in order. Return only the numbered translation, with no explanation, notes, "
+               "quotation marks, markdown or code fences.")
         .arg(target);
 }
 
@@ -62,16 +63,17 @@ QStringList Translator::parseNumberedLines(const QString &text, int expected, QS
 {
     if (error)
         error->clear();
-    // "1. text", "1) text", "[1] text", "**1.** text" and a bare "1 text" are
-    // all accepted; anything else means the model rewrote the layout and the
-    // caller must fall back to the whole-text translation.
-    static const QRegularExpression marker(
-        QStringLiteral("^(\\d{1,3})\\s*[*]*\\s*[.)\\]\\-:：、]?\\s*(.*)$"));
     const auto fail = [error] {
         if (error)
             *error = tr("The translation service did not keep the line numbering");
         return QStringList{};
     };
+    if (expected <= 0)
+        return fail();
+    // "1. text", "1) text", "[1] text", "**1.** text" and a bare "1 text" are
+    // all accepted; anything else means the model rewrote the layout.
+    static const QRegularExpression marker(
+        QStringLiteral("^(\\d{1,3})\\s*[*]*\\s*[.)\\]\\-:：、]?\\s*(.*)$"));
     const auto stripMarks = [](QString value) {
         value = value.trimmed();
         while (value.startsWith(QLatin1String("**")))
@@ -80,32 +82,88 @@ QStringList Translator::parseNumberedLines(const QString &text, int expected, QS
             value = value.left(value.size() - 2).trimmed();
         return value;
     };
-    QStringList out;
-    const QStringList rows = text.split(QLatin1Char('\n'));
-    for (const QString &row : rows) {
+
+    // Answer lines in order, without blanks, code fences or leading bullets.
+    QStringList rows;
+    for (const QString &raw : text.split(QLatin1Char('\n'))) {
+        QString row = raw.trimmed();
+        if (row.isEmpty() || row.startsWith(QLatin1String("```")))
+            continue;
         int start = 0;
         while (start < row.size()
-               && (row.at(start).isSpace() || row.at(start) == QLatin1Char('*')
-                   || row.at(start) == QLatin1Char('#') || row.at(start) == QLatin1Char('>')
-                   || row.at(start) == QChar(0x2022)))
+               && (row.at(start) == QLatin1Char('*') || row.at(start) == QLatin1Char('#')
+                   || row.at(start) == QLatin1Char('>') || row.at(start) == QChar(0x2022)))
             ++start;
-        const QString line = row.mid(start);
-        if (line.isEmpty())
-            continue;
-        int index = 0;
-        if (line.startsWith(QLatin1Char('['))) {
-            index = 1;
-            if (line.size() < 2 || !line.at(index).isDigit())
-                return fail();
-        }
-        const QRegularExpressionMatch match = marker.match(line.mid(index));
-        if (!match.hasMatch() || match.captured(1).toInt() != out.size() + 1)
-            return fail();
-        out.append(stripMarks(match.captured(2)));
+        row = row.mid(start).trimmed();
+        if (!row.isEmpty())
+            rows.append(row);
     }
-    if (out.size() != expected)
+    if (rows.isEmpty())
         return fail();
-    return out;
+
+    // The number a row starts with, or -1 when it does not start with one.
+    const auto rowNumber = [](const QString &row, QString *rest) {
+        const int skip = row.startsWith(QLatin1Char('[')) ? 1 : 0;
+        const QRegularExpressionMatch match = marker.match(row.mid(skip));
+        if (!match.hasMatch())
+            return -1;
+        if (rest)
+            *rest = match.captured(2);
+        return match.captured(1).toInt();
+    };
+
+    // Numbered block: start at the line that carries "1" (a sentence before it
+    // is a preamble, not a translation), then walk the sequence. An unnumbered
+    // line inside the block is a wrapped continuation of the line before it; a
+    // sentence after the last expected line is noise.
+    int first = -1;
+    for (int i = 0; i < rows.size(); ++i) {
+        if (rowNumber(rows.at(i), nullptr) == 1) {
+            first = i;
+            break;
+        }
+    }
+    if (first >= 0) {
+        QStringList out;
+        for (int i = first; i < rows.size(); ++i) {
+            QString rest;
+            const int number = rowNumber(rows.at(i), &rest);
+            if (number == out.size() + 1) {
+                out.append(stripMarks(rest));
+                continue;
+            }
+            if (out.size() >= expected)
+                break; // a closing sentence after the last translation line
+            if (number < 0) {
+                out.last() += QLatin1Char(' ') + stripMarks(rows.at(i));
+                continue;
+            }
+            // A numbered line out of sequence: the model rewrote the layout.
+            out.clear();
+            break;
+        }
+        if (out.size() == expected)
+            return out;
+    }
+
+    // Positional fallback: exactly one answer line per input line. A model that
+    // translated line by line but dropped the numbering is still usable; when a
+    // numbering block was found first, strip its numbers so the picture never
+    // shows "1." in front of a translation.
+    if (rows.size() == expected) {
+        QStringList plain;
+        for (const QString &row : rows) {
+            QString rest;
+            const int number = rowNumber(row, &rest);
+            // Strip a number that could be a line number (1-based, 0-based, or
+            // one the block skipped); a translation that itself starts with a
+            // bigger number ("2024 was a year") keeps it.
+            const bool looksNumbered = first >= 0 && number >= 0 && number <= expected + 2;
+            plain.append(stripMarks(looksNumbered ? rest : row));
+        }
+        return plain;
+    }
+    return fail();
 }
 
 QString Translator::parseResponse(const QByteArray &body, QString *error)

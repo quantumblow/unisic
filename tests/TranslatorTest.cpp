@@ -17,6 +17,7 @@ private slots:
     void parsesServiceError();
     void numberedPromptKeepsOneLinePerLine();
     void parsesNumberedLines();
+    void toleratesRealWorldAnswers();
     void rejectsUnnumberedTranslation();
 };
 
@@ -92,7 +93,8 @@ void TranslatorTest::parsesNumberedLines()
 void TranslatorTest::rejectsUnnumberedTranslation()
 {
     QString error;
-    QVERIFY(Translator::parseNumberedLines(QStringLiteral("Cześć świecie"), 1, &error).isEmpty());
+    // One line where two were asked for: a count mismatch, no guessing.
+    QVERIFY(Translator::parseNumberedLines(QStringLiteral("Cześć świecie"), 2, &error).isEmpty());
     QVERIFY(!error.isEmpty());
 
     // Two input lines merged into one answer: a count mismatch, so the caller
@@ -101,10 +103,50 @@ void TranslatorTest::rejectsUnnumberedTranslation()
     QVERIFY(Translator::parseNumberedLines(QStringLiteral("1. One two"), 2, &error).isEmpty());
     QVERIFY(!error.isEmpty());
 
-    // Out-of-order numbering is a rewritten layout too.
+    // A skipped number still has one answer line per input line: map it by
+    // position and drop the number (the picture must not show "3." either).
     error.clear();
-    QVERIFY(Translator::parseNumberedLines(QStringLiteral("1. One\n3. Three"), 2, &error).isEmpty());
-    QVERIFY(!error.isEmpty());
+    QCOMPARE(Translator::parseNumberedLines(QStringLiteral("1. One\n3. Three"), 2, &error),
+             QStringList({QStringLiteral("One"), QStringLiteral("Three")}));
+    QVERIFY(error.isEmpty());
+}
+
+void TranslatorTest::toleratesRealWorldAnswers()
+{
+    QString error;
+    // A sentence before the numbered block is a preamble, not a translation.
+    QCOMPARE(Translator::parseNumberedLines(
+                 QStringLiteral("Here is the translation:\n1. One\n2. Two"), 2, &error),
+             QStringList({QStringLiteral("One"), QStringLiteral("Two")}));
+    QVERIFY(error.isEmpty());
+
+    // A closing sentence after the last line is noise.
+    QCOMPARE(Translator::parseNumberedLines(
+                 QStringLiteral("1. One\n2. Two\nHope this helps."), 2, &error),
+             QStringList({QStringLiteral("One"), QStringLiteral("Two")}));
+    QVERIFY(error.isEmpty());
+
+    // Code fences around the answer.
+    QCOMPARE(Translator::parseNumberedLines(
+                 QStringLiteral("```\n1. One\n2. Two\n```"), 2, &error),
+             QStringList({QStringLiteral("One"), QStringLiteral("Two")}));
+
+    // A wrapped translation line continues the previous one instead of
+    // breaking the block.
+    QCOMPARE(Translator::parseNumberedLines(
+                 QStringLiteral("1. One long line\nthat wrapped\n2. Two"), 2, &error),
+             QStringList({QStringLiteral("One long line that wrapped"), QStringLiteral("Two")}));
+
+    // One line per input line but no numbering at all: map positionally.
+    QCOMPARE(Translator::parseNumberedLines(QStringLiteral("One\nTwo\nThree"), 3, &error),
+             QStringList({QStringLiteral("One"), QStringLiteral("Two"), QStringLiteral("Three")}));
+    QVERIFY(error.isEmpty());
+
+    // Numbering the block cannot use (a restart, a 0-based list) still maps by
+    // position when the count matches, and the numbers do not reach the picture.
+    QCOMPARE(Translator::parseNumberedLines(QStringLiteral("0. One\n1. Two"), 2, &error),
+             QStringList({QStringLiteral("One"), QStringLiteral("Two")}));
+    QVERIFY(error.isEmpty());
 }
 
 QTEST_GUILESS_MAIN(TranslatorTest)

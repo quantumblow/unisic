@@ -2946,9 +2946,19 @@ static QString translationCheck()
     const bool rejects =
         Translator::parseNumberedLines(QStringLiteral("One two"), 2, &error).isEmpty()
         && !error.isEmpty();
-    if (!numberedOk || !rejects)
+    // Real answers often carry a preamble, markdown fences or no numbering at
+    // all; the parser still maps one line per input line.
+    const bool tolerant =
+        Translator::parseNumberedLines(QStringLiteral("Here it is:\n1. One\n2. Two"), 2, &error)
+            == QStringList({QStringLiteral("One"), QStringLiteral("Two")})
+        && error.isEmpty()
+        && Translator::parseNumberedLines(QStringLiteral("One\nTwo"), 2, &error)
+               == QStringList({QStringLiteral("One"), QStringLiteral("Two")})
+        && error.isEmpty();
+    if (!numberedOk || !rejects || !tolerant)
         return QStringLiteral("FAIL (numbered lines)");
-    return QStringLiteral("PASS (URL shapes, prompt, numbered lines, response, service error)");
+    return QStringLiteral(
+        "PASS (URL shapes, prompt, numbered lines, tolerant mapping, response, service error)");
 }
 
 // Translation laid over the picture: every line box gets its own translation,
