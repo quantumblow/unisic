@@ -28,8 +28,10 @@ class QTimer;
 // languages with one det+rec pair.
 //
 // Recognition runs on a worker thread; callbacks are delivered on the GUI
-// thread. The loaded sessions are dropped after a minute of idling so an idle
-// Unisic does not keep ~60 MB of ORT arenas around.
+// thread. The loaded sessions are dropped after two minutes of idling and
+// reloaded when the selected tier changes, because they are not small: about
+// 0.4 GB resident for tiny, 0.6 GB for small and 1.2 GB for medium with ORT
+// 1.31.1 (a 1600x1000 page: tiny 0.1 s, small 0.2 s, medium 0.55 s warm).
 class PaddleOcr : public QObject
 {
     Q_OBJECT

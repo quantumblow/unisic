@@ -7400,8 +7400,8 @@ Applies to the next capture.</source>
     </message>
     <message>
         <location line="+1"/>
-        <source>Small is the recommended default: it reads Chinese (simplified and traditional), Japanese and 48 Latin-script languages in one model and takes about a second per page on a 4-core CPU. Tiny is for slow machines and cannot read Japanese; medium is the most accurate and the largest download. The files are downloaded once, checked against their pinned SHA-256, and run offline.</source>
-        <translation>小号是推荐的默认选择：一个模型即可识别中文（简体和繁体）、日文以及 48 种拉丁语系语言，在 4 核 CPU 上每页约需一秒。极小号适合较慢的机器，但不支持日文；中号最准确，下载也最大。模型只需下载一次，会按固定的 SHA-256 校验，然后完全离线运行。</translation>
+        <source>Small is the recommended default: it reads Chinese (simplified and traditional), Japanese and 48 Latin-script languages in one model and takes about a second per page on a 4-core CPU. Tiny is for slow machines and cannot read Japanese; medium is the most accurate and the largest download, and holds about 1 GB of memory while it is loaded. The files are downloaded once, checked against their pinned SHA-256, and run offline.</source>
+        <translation>小号是推荐的默认选择：一个模型即可识别中文（简体和繁体）、日文以及 48 种拉丁语系语言，在 4 核 CPU 上每页约需一秒。极小号适合较慢的机器，但不支持日文；中号最准确，下载也最大，加载后约占用 1 GB 内存。模型只需下载一次，会按固定的 SHA-256 校验，然后完全离线运行。</translation>
     </message>
     <message>
         <location line="+4"/>

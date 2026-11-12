@@ -7227,8 +7227,8 @@ S’applique à la prochaine capture.</translation>
     </message>
     <message>
         <location filename="../qml/pages/SettingsPage.qml" line="1205"/>
-        <source>Small is the recommended default: it reads Chinese (simplified and traditional), Japanese and 48 Latin-script languages in one model and takes about a second per page on a 4-core CPU. Tiny is for slow machines and cannot read Japanese; medium is the most accurate and the largest download. The files are downloaded once, checked against their pinned SHA-256, and run offline.</source>
-        <translation>Petit est le choix recommandé : il lit le chinois (simplifié et traditionnel), le japonais et 48 langues latines dans un seul modèle et prend environ une seconde par page sur un processeur à 4 cœurs. Minuscule est pour les machines lentes et ne lit pas le japonais ; moyen est le plus précis et le plus gros téléchargement. Les fichiers sont téléchargés une fois, vérifiés par leur SHA-256 épinglé et fonctionnent hors ligne.</translation>
+        <source>Small is the recommended default: it reads Chinese (simplified and traditional), Japanese and 48 Latin-script languages in one model and takes about a second per page on a 4-core CPU. Tiny is for slow machines and cannot read Japanese; medium is the most accurate and the largest download, and holds about 1 GB of memory while it is loaded. The files are downloaded once, checked against their pinned SHA-256, and run offline.</source>
+        <translation>Petit est le choix recommandé : il lit le chinois (simplifié et traditionnel), le japonais et 48 langues latines dans un seul modèle et prend environ une seconde par page sur un processeur à 4 cœurs. Minuscule est pour les machines lentes et ne lit pas le japonais ; moyen est le plus précis et le plus gros téléchargement, et occupe environ 1 Go de mémoire tant qu'il est chargé. Les fichiers sont téléchargés une fois, vérifiés par leur SHA-256 épinglé et fonctionnent hors ligne.</translation>
     </message>
     <message>
         <location filename="../qml/pages/SettingsPage.qml" line="1209"/>
