@@ -1202,7 +1202,7 @@ Item {
                         available: App.paddleOcr.available && App.settings.ocrEngine !== "tesseract"
                         label: qsTr("PaddleOCR model")
                         help: qsTr("Model size and accuracy trade-off.")
-                        helpDetail: qsTr("Small is the recommended default: it reads Chinese (simplified and traditional), Japanese and 48 Latin-script languages in one model and takes about a second per page on a 4-core CPU. Tiny is for slow machines and cannot read Japanese; medium is the most accurate and the largest download. The files are downloaded once, checked against their pinned SHA-256, and run offline.")
+                        helpDetail: qsTr("Small is the recommended default: it reads Chinese (simplified and traditional), Japanese and 48 Latin-script languages in one model and takes about a second per page on a 4-core CPU. Tiny is for slow machines and cannot read Japanese; medium is the most accurate and the largest download, and holds about 1 GB of memory while it is loaded. The files are downloaded once, checked against their pinned SHA-256, and run offline.")
                         UComboBox {
                             width: 220
                             property var ids: ["tiny", "small", "medium"]

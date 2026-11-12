@@ -4811,6 +4811,11 @@ Le catture con stella (preferite) nella selezione vengono mantenute - rimuovi pr
         <source>PaddleOCR models are not downloaded - see Settings &gt; General</source>
         <translation>I modelli PaddleOCR non sono scaricati - vedi Impostazioni &gt; Generale</translation>
     </message>
+    <message>
+        <location filename="../src/ocr/PaddleOcr.cpp" line="128"/>
+        <source>PaddleOCR needs about %1 GB of free memory and %2 GB is free - close something and try again</source>
+        <translation>PaddleOCR richiede circa %1 GB di memoria libera e ne sono liberi %2 GB - chiudi qualcosa e riprova</translation>
+    </message>
 </context>
 <context>
     <name>PreviewWindow</name>
@@ -8529,8 +8534,8 @@ Si applica alla prossima cattura.</translation>
     </message>
     <message>
         <location filename="../qml/pages/SettingsPage.qml" line="1205"/>
-        <source>Small is the recommended default: it reads Chinese (simplified and traditional), Japanese and 48 Latin-script languages in one model and takes about a second per page on a 4-core CPU. Tiny is for slow machines and cannot read Japanese; medium is the most accurate and the largest download. The files are downloaded once, checked against their pinned SHA-256, and run offline.</source>
-        <translation>Piccolo è la scelta consigliata: legge cinese (semplificato e tradizionale), giapponese e 48 lingue latine in un solo modello e impiega circa un secondo per pagina su una CPU a 4 core. Minuscolo è per macchine lente e non legge il giapponese; medio è il più preciso e il download più grande. I file vengono scaricati una volta, verificati con il loro SHA-256 fissato e funzionano offline.</translation>
+        <source>Small is the recommended default: it reads Chinese (simplified and traditional), Japanese and 48 Latin-script languages in one model and takes about a second per page on a 4-core CPU. Tiny is for slow machines and cannot read Japanese; medium is the most accurate and the largest download, and holds about 1 GB of memory while it is loaded. The files are downloaded once, checked against their pinned SHA-256, and run offline.</source>
+        <translation>Piccolo è la scelta consigliata: legge cinese (semplificato e tradizionale), giapponese e 48 lingue latine in un solo modello e impiega circa un secondo per pagina su una CPU a 4 core. Minuscolo è per macchine lente e non legge il giapponese; medio è il più preciso e il download più grande, e occupa circa 1 GB di memoria mentre è caricato. I file vengono scaricati una volta, verificati con il loro SHA-256 fissato e funzionano offline.</translation>
     </message>
     <message>
         <location filename="../qml/pages/SettingsPage.qml" line="1209"/>

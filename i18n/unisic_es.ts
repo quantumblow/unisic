@@ -4811,6 +4811,11 @@ Las capturas destacadas (favoritas) de la selección se conservan: quítales la 
         <source>PaddleOCR models are not downloaded - see Settings &gt; General</source>
         <translation>Los modelos de PaddleOCR no están descargados; consulta Ajustes &gt; General</translation>
     </message>
+    <message>
+        <location filename="../src/ocr/PaddleOcr.cpp" line="128"/>
+        <source>PaddleOCR needs about %1 GB of free memory and %2 GB is free - close something and try again</source>
+        <translation>PaddleOCR necesita unos %1 GB de memoria libre y hay %2 GB libres - cierra algo y vuelve a intentarlo</translation>
+    </message>
 </context>
 <context>
     <name>PreviewWindow</name>
@@ -8529,8 +8534,8 @@ Se aplica a la próxima captura.</translation>
     </message>
     <message>
         <location filename="../qml/pages/SettingsPage.qml" line="1205"/>
-        <source>Small is the recommended default: it reads Chinese (simplified and traditional), Japanese and 48 Latin-script languages in one model and takes about a second per page on a 4-core CPU. Tiny is for slow machines and cannot read Japanese; medium is the most accurate and the largest download. The files are downloaded once, checked against their pinned SHA-256, and run offline.</source>
-        <translation>Pequeño es la opción recomendada: lee chino (simplificado y tradicional), japonés y 48 lenguas latinas en un solo modelo y tarda alrededor de un segundo por página en una CPU de 4 núcleos. Diminuto es para equipos lentos y no lee japonés; mediano es el más preciso y la descarga más grande. Los archivos se descargan una vez, se verifican con su SHA-256 fijado y funcionan sin conexión.</translation>
+        <source>Small is the recommended default: it reads Chinese (simplified and traditional), Japanese and 48 Latin-script languages in one model and takes about a second per page on a 4-core CPU. Tiny is for slow machines and cannot read Japanese; medium is the most accurate and the largest download, and holds about 1 GB of memory while it is loaded. The files are downloaded once, checked against their pinned SHA-256, and run offline.</source>
+        <translation>Pequeño es la opción recomendada: lee chino (simplificado y tradicional), japonés y 48 lenguas latinas en un solo modelo y tarda alrededor de un segundo por página en una CPU de 4 núcleos. Diminuto es para equipos lentos y no lee japonés; mediano es el más preciso y la descarga más grande, y ocupa alrededor de 1 GB de memoria mientras está cargado. Los archivos se descargan una vez, se verifican con su SHA-256 fijado y funcionan sin conexión.</translation>
     </message>
     <message>
         <location filename="../qml/pages/SettingsPage.qml" line="1209"/>

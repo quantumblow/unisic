@@ -4813,6 +4813,11 @@ Oznaczone (ulubione) przechwycenia są zachowywane, zarówno wpis, jak i plik.</
         <source>PaddleOCR models are not downloaded - see Settings &gt; General</source>
         <translation>Modele PaddleOCR nie są pobrane - zobacz Ustawienia &gt; Ogólne</translation>
     </message>
+    <message>
+        <location filename="../src/ocr/PaddleOcr.cpp" line="128"/>
+        <source>PaddleOCR needs about %1 GB of free memory and %2 GB is free - close something and try again</source>
+        <translation>PaddleOCR wymaga około %1 GB wolnej pamięci, a wolne jest %2 GB - zamknij coś i spróbuj ponownie</translation>
+    </message>
 </context>
 <context>
     <name>PreviewWindow</name>
@@ -6065,8 +6070,8 @@ Oznaczone (ulubione) przechwycenia są zachowywane, zarówno wpis, jak i plik.</
     </message>
     <message>
         <location filename="../qml/pages/SettingsPage.qml" line="1205"/>
-        <source>Small is the recommended default: it reads Chinese (simplified and traditional), Japanese and 48 Latin-script languages in one model and takes about a second per page on a 4-core CPU. Tiny is for slow machines and cannot read Japanese; medium is the most accurate and the largest download. The files are downloaded once, checked against their pinned SHA-256, and run offline.</source>
-        <translation>Mały to zalecany domyślny wybór: czyta chiński (uproszczony i tradycyjny), japoński oraz 48 języków łacińskich w jednym modelu i zajmuje około sekundy na stronę na 4-rdzeniowym procesorze. Malutki jest dla wolnych maszyn i nie czyta japońskiego; średni jest najdokładniejszy i największy do pobrania. Pliki są pobierane raz, sprawdzane względem przypiętego SHA-256 i działają offline.</translation>
+        <source>Small is the recommended default: it reads Chinese (simplified and traditional), Japanese and 48 Latin-script languages in one model and takes about a second per page on a 4-core CPU. Tiny is for slow machines and cannot read Japanese; medium is the most accurate and the largest download, and holds about 1 GB of memory while it is loaded. The files are downloaded once, checked against their pinned SHA-256, and run offline.</source>
+        <translation>Mały to zalecany domyślny wybór: czyta chiński (uproszczony i tradycyjny), japoński oraz 48 języków łacińskich w jednym modelu i zajmuje około sekundy na stronę na 4-rdzeniowym procesorze. Malutki jest dla wolnych maszyn i nie czyta japońskiego; średni jest najdokładniejszy i największy do pobrania, a po wczytaniu zajmuje około 1 GB pamięci. Pliki są pobierane raz, sprawdzane względem przypiętego SHA-256 i działają offline.</translation>
     </message>
     <message>
         <location filename="../qml/pages/SettingsPage.qml" line="1209"/>

@@ -4813,6 +4813,11 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <source>PaddleOCR models are not downloaded - see Settings &gt; General</source>
         <translation>Модели PaddleOCR не загружены - см. Настройки &gt; Общие</translation>
     </message>
+    <message>
+        <location filename="../src/ocr/PaddleOcr.cpp" line="128"/>
+        <source>PaddleOCR needs about %1 GB of free memory and %2 GB is free - close something and try again</source>
+        <translation>PaddleOCR нужно около %1 ГБ свободной памяти, а свободно %2 ГБ - закройте что-нибудь и попробуйте снова</translation>
+    </message>
 </context>
 <context>
     <name>PreviewWindow</name>
@@ -7229,8 +7234,8 @@ Applies to the next capture.</source>
     </message>
     <message>
         <location filename="../qml/pages/SettingsPage.qml" line="1205"/>
-        <source>Small is the recommended default: it reads Chinese (simplified and traditional), Japanese and 48 Latin-script languages in one model and takes about a second per page on a 4-core CPU. Tiny is for slow machines and cannot read Japanese; medium is the most accurate and the largest download. The files are downloaded once, checked against their pinned SHA-256, and run offline.</source>
-        <translation>Малая - рекомендуемый вариант по умолчанию: читает китайский (упрощённый и традиционный), японский и 48 языков с латинской письменностью одной моделью и тратит около секунды на страницу на 4-ядерном CPU. Крошечная - для медленных машин, не читает японский; средняя - самая точная и самая большая. Файлы загружаются один раз, проверяются по закреплённому SHA-256 и работают офлайн.</translation>
+        <source>Small is the recommended default: it reads Chinese (simplified and traditional), Japanese and 48 Latin-script languages in one model and takes about a second per page on a 4-core CPU. Tiny is for slow machines and cannot read Japanese; medium is the most accurate and the largest download, and holds about 1 GB of memory while it is loaded. The files are downloaded once, checked against their pinned SHA-256, and run offline.</source>
+        <translation>Малая - рекомендуемый вариант по умолчанию: читает китайский (упрощённый и традиционный), японский и 48 языков с латинской письменностью одной моделью и тратит около секунды на страницу на 4-ядерном CPU. Крошечная - для медленных машин, не читает японский; средняя - самая точная и самая большая, а в загруженном виде занимает около 1 ГБ памяти. Файлы загружаются один раз, проверяются по закреплённому SHA-256 и работают офлайн.</translation>
     </message>
     <message>
         <location filename="../qml/pages/SettingsPage.qml" line="1209"/>
