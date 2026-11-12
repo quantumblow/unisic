@@ -34,7 +34,7 @@ Measured on the tree that this change starts from:
 | Item | Value |
 |---|---|
 | Existing catalogs | 7 (`en`, `pl`, `es`, `it`, `fr`, `ru`, `de`) |
-| Messages per catalog | 1,943 active, of which 1,760 unique source strings (the older catalogs also carry vanished entries that lupdate drops) |
+| Messages per catalog | 2,023 active, of which 1,824 unique source strings (the older catalogs also carry vanished entries that lupdate drops) |
 | English source text | about 76,000 characters, about 12,900 words |
 | Long help texts | 60 messages over 200 characters (17,555 characters total) |
 | Messages with `%` placeholders | 299 |
@@ -141,7 +141,7 @@ same commit:
 
 | File | Change |
 |---|---|
-| `i18n/unisic_zh_CN.ts` | New, 1,943 translated messages |
+| `i18n/unisic_zh_CN.ts` | New, 2,023 translated messages |
 | `CMakeLists.txt` | Add the TS file, update the "seven" comments and status line |
 | `src/AppContext.cpp` | One language-code helper, used by `applyLanguage()` and `showNotificationHelper()`; add `zh_CN` |
 | `src/Settings.h` | Update the settings comment |
@@ -217,7 +217,7 @@ previous one is green.
 
 ## 6. Acceptance criteria
 
-1. `i18n/unisic_zh_CN.ts` has 1,943 entries, 0 unfinished, 0 empty.
+1. `i18n/unisic_zh_CN.ts` has 2,023 entries, 0 unfinished, 0 empty.
 2. `lrelease` emits `unisic_zh_CN.qm`; the qrc contains it.
 3. A `zh_CN` system locale boots the app in Chinese; `zh_TW` falls back to
    English as documented.
@@ -271,7 +271,7 @@ parallel with review once the catalog skeleton exists.
 | Phase | Status | Evidence |
 |---|---|---|
 | P0 | done | Fedora 43 container, Qt 6.10.3, full build and 24/24 ctest |
-| P1 | done | 1,943-entry catalog generated from the source tree, glossary in place |
+| P1 | done | 2,023-entry catalog generated from the source tree, glossary in place |
 | P2 | done | 1,760 unique strings translated, 56 review findings on the initial pass plus 125 dev-delta strings, automated checks clean |
 | P3 | done | code, pickers, CMake, smoke test, docs and changelog wired |
 | P4 | done | Qt 6.10.3 build exit 0, 24/24 ctest, .qm load check, CI completeness check green |
@@ -289,7 +289,7 @@ set, Qt 6.10.3, CMake 3.31.11, Ninja, 20-way build.
 | `cmake --build build` | exit 0, `unisic_zh_CN.qm` baked into the qrc |
 | `ctest --test-dir build` | 24/24 passed |
 | CI completeness rule (unfinished and empty in every `.ts`) | 0 and 0 in all eight catalogs |
-| `lupdate -no-obsolete` over `src`, `qml` and the kit | 1,943 current sources, 0 new, 2 obsolete entries dropped |
+| `lupdate -no-obsolete` over `src`, `qml` and the kit | 2,023 current sources, 0 new, 2 obsolete entries dropped |
 | `QTranslator` load of `unisic_zh_CN.qm` | `Quit -> 退出`, `Language -> 语言`, `Today -> 今天`, and five more |
 
 The initial catalog was translated against `main`. The feature branch was then

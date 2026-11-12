@@ -57,7 +57,10 @@
 #include "FilenameTemplate.h"
 #include "ImageEncode.h"
 #include <QSaveFile>
+#include "ocr/Barcode.h"
 #include "ocr/OcrEngine.h"
+#include "ocr/OcrResultController.h"
+#include "ocr/PaddleOcr.h"
 // zxing-cpp 3 removed MultiFormatWriter/BitMatrix in favour of CreateBarcode.
 #if __has_include(<ZXing/MultiFormatWriter.h>)
 #include <ZXing/BitMatrix.h>
@@ -97,6 +100,7 @@
 #include <QStyleHints>
 #include <QFileSystemWatcher>
 #include <QFutureWatcher>
+#include <QtConcurrent>
 #include <QFileDialog>
 #include <QKeySequence>
 #include <QDesktopServices>
@@ -317,7 +321,15 @@ AppContext::AppContext(QObject *parent)
         });
     }
 
-    m_ocr = new OcrEngine(this);
+    m_ocr = new OcrEngine(m_settings, this);
+    m_ocrResult = new OcrResultController(m_settings, this);
+    connect(m_settings, &Settings::ocrEngineChanged, this,
+            [this] { m_ocr->setBackend(m_settings->ocrEngine()); });
+}
+
+PaddleOcr *AppContext::paddleOcr() const
+{
+    return m_ocr ? m_ocr->paddle() : nullptr;
 }
 
 AppContext::~AppContext()
@@ -762,6 +774,25 @@ QString AppContext::effectiveOcrLanguages() const
     return m_settings->ocrLanguages();
 }
 
+// The result window and the clipboard must agree character for character; both
+// come from the same glyph order and line breaks.
+static QString ocrTextFromWords(const QVector<OcrWord> &words)
+{
+    QString text;
+    int line = -1;
+    for (const OcrWord &w : words) {
+        if (w.line != line) {
+            if (line >= 0)
+                text += QLatin1Char('\n');
+            line = w.line;
+        } else if (w.spaceBefore) {
+            text += QLatin1Char(' ');
+        }
+        text += w.text;
+    }
+    return text;
+}
+
 void AppContext::ocrImage(const QImage &img)
 {
     if (img.isNull()) {
@@ -769,16 +800,38 @@ void AppContext::ocrImage(const QImage &img)
         return;
     }
     showToast(tr("Recognizing text…"));
-    m_ocr->recognize(img, effectiveOcrLanguages(), m_settings->ocrAutoLanguage(), [this](const QString &text, const QString &err) {
-        if (!err.isEmpty())
-            showToast(err);
-        else if (text.isEmpty())
-            showToast(tr("No text found"));
-        else {
-            copyText(text);
+    // The barcode scan can be slow on a busy 4K picture, so it runs off the GUI
+    // thread. A code has no glyph geometry: its payload becomes a text-only
+    // result and never goes through the box pass.
+    auto *scan = new QFutureWatcher<QString>(this);
+    connect(scan, &QFutureWatcher<QString>::finished, this, [this, scan, img] {
+        const QString payload = scan->result();
+        scan->deleteLater();
+        if (!payload.isEmpty()) {
+            m_ocrResult->setResult(img, {}, payload);
+            emit ocrResultReady();
+            copyText(payload);
             showToast(tr("Text copied"));
+            return;
         }
+        m_ocr->recognizeBoxes(img, effectiveOcrLanguages(), m_settings->ocrAutoLanguage(),
+                              [this, img](const QVector<OcrWord> &words, const QString &err) {
+                                  if (!err.isEmpty()) {
+                                      showToast(err);
+                                      return;
+                                  }
+                                  const QString text = ocrTextFromWords(words);
+                                  if (text.isEmpty()) {
+                                      showToast(tr("No text found"));
+                                      return;
+                                  }
+                                  m_ocrResult->setResult(img, words, text);
+                                  emit ocrResultReady();
+                                  copyText(text);
+                                  showToast(tr("Text copied"));
+                              });
     });
+    scan->setFuture(QtConcurrent::run([img] { return scanBarcode(img); }));
 }
 
 void AppContext::ocrFile(const QString &path)
@@ -1930,6 +1983,13 @@ QString AppContext::systemDiagnostics() const
              .arg(langs.isEmpty() ? QStringLiteral("(none installed)") : langs);
     L << QStringLiteral("OCR script-detect (osd): %1")
              .arg(yn(OcrEngine::scriptDetectionAvailable()));
+    if (PaddleOcr *paddle = m_ocr->paddle()) {
+        L << QStringLiteral("PaddleOCR runtime: %1")
+                 .arg(paddle->runtimeFound() ? paddle->runtimeInfo() : QStringLiteral("not installed"));
+        L << QStringLiteral("PaddleOCR model (%1): %2")
+                 .arg(paddle->tier(), paddle->modelInstalled() ? QStringLiteral("installed")
+                                                               : QStringLiteral("not installed"));
+    }
     L << QString() << QStringLiteral("[Log]");
     const QString lf = DiagLog::logFilePath();
     L << QStringLiteral("File: %1").arg(lf.isEmpty() ? QStringLiteral("(memory only)") : lf);

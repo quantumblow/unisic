@@ -73,6 +73,8 @@
 #include "FilenameTemplate.h"
 #include "ImageEncode.h"
 #include "ocr/OcrEngine.h"
+#include "ocr/PaddleOcr.h"
+#include "ocr/Translator.h"
 // Clipboard offers (the KDE force-image-copy hint), clipboard reads and drop
 // payloads all speak QMimeData; KSystemClipboard consumes the same objects.
 #include <QMimeData>
@@ -2905,6 +2907,78 @@ void AppContext::devTestStylePresets()
     if (!devBuild())
         return;
     showToast(tr("Dev: style presets: %1").arg(stylePresetsCheck(m_settings)));
+}
+
+// Pure translation plumbing, shared by the Developer button and the F8 step:
+// no endpoint is contacted.
+static QString translationCheck()
+{
+    QString error;
+    const QString text =
+        Translator::parseResponse(R"({"choices":[{"message":{"content":"ok"}}]})", &error);
+    const bool shapes = Translator::endpointUrl(QStringLiteral("https://api.openai.com/v1")).toString()
+                            == QStringLiteral("https://api.openai.com/v1/chat/completions")
+                        && Translator::endpointUrl(QStringLiteral("http://localhost:11434")).toString()
+                            == QStringLiteral("http://localhost:11434/v1/chat/completions")
+                        && Translator::endpointUrl(
+                               QStringLiteral("https://api.example.test/v1/chat/completions")).toString()
+                            == QStringLiteral("https://api.example.test/v1/chat/completions")
+                        && Translator::systemPrompt(QStringLiteral("Polish"))
+                               .contains(QStringLiteral("Polish"));
+    if (!shapes || text != QLatin1String("ok") || !error.isEmpty())
+        return QStringLiteral("FAIL (URL shapes, prompt or response)");
+    const QString failure =
+        Translator::parseResponse(R"({"error":{"message":"bad key"}})", &error);
+    if (!failure.isEmpty() || error != QLatin1String("bad key"))
+        return QStringLiteral("FAIL (service error)");
+    return QStringLiteral("PASS (URL shapes, prompt, response, service error)");
+}
+
+void AppContext::devTestPaddleOcr()
+{
+    if (!devBuild())
+        return;
+    PaddleOcr *paddle = m_ocr->paddle();
+    if (!paddle || !paddle->ready()) {
+        showToast(tr("Dev: PaddleOCR: SKIP (models not downloaded)"));
+        return;
+    }
+    paddle->recognizeBoxes(ocrBoxTestImage(), [this](const QVector<OcrWord> &words, const QString &err) {
+        if (!err.isEmpty())
+            showToast(tr("Dev: PaddleOCR: FAIL (%1)").arg(err), true);
+        else
+            showToast(tr("Dev: PaddleOCR: %1 (%2 glyphs)")
+                          .arg(words.size() >= 4 ? QStringLiteral("PASS") : QStringLiteral("FAIL"))
+                          .arg(words.size()),
+                      words.size() < 4);
+    });
+}
+
+void AppContext::devTestOcrResult()
+{
+    if (!devBuild())
+        return;
+    const QImage image = ocrBoxTestImage();
+    ocrBoxes(image, [this, image](const QVector<OcrWord> &words, const QString &err) {
+        if (!err.isEmpty() || words.isEmpty()) {
+            showToast(tr("Dev: OCR result: FAIL (%1)")
+                          .arg(err.isEmpty() ? tr("no text found") : err),
+                      true);
+            return;
+        }
+        m_ocrResult->setResult(image, words, QString());
+        emit ocrResultReady();
+        showToast(tr("Dev: OCR result: PASS (%1 lines)")
+                      .arg(m_ocrResult->lines().size()));
+    });
+}
+
+void AppContext::devTestTranslation()
+{
+    if (!devBuild())
+        return;
+    const QString result = translationCheck();
+    showToast(tr("Dev: translation: %1").arg(result), !result.startsWith(QLatin1String("PASS")));
 }
 
 void AppContext::devTestOcrRedactPattern()
@@ -6244,6 +6318,80 @@ void AppContext::runSmokeTest()
                                      : QStringLiteral("ocr highlight + redact: ") + ocrHighlightCheck(words));
             smokeNext();
         });
+    });
+
+    // 3f3b) PaddleOCR (optional): the downloadable PP-OCRv6 models. Skipped
+    // when they are not installed; a real run on the same digit fixture when
+    // they are. The language-coverage table is pinned without any model.
+    m_smokeSteps.append([this] {
+        PaddleOcr *paddle = m_ocr->paddle();
+        if (!paddle) {
+            smokeLog(QStringLiteral("paddleocr: SKIP (not built)"));
+            smokeNext();
+            return;
+        }
+        const bool mapOk = paddle->supportsLanguages(QStringLiteral("eng"), false)
+                           && paddle->supportsLanguages(QStringLiteral("chi_sim+jpn"), false)
+                           && !paddle->supportsLanguages(QStringLiteral("rus"), false)
+                           && !paddle->supportsLanguages(QStringLiteral("ara"), false)
+                           && paddle->supportsLanguages(QString(), true);
+        if (!paddle->ready()) {
+            smokeLog(QStringLiteral("paddleocr: SKIP (models not downloaded; script map %1)")
+                         .arg(mapOk ? QStringLiteral("PASS") : QStringLiteral("FAIL")));
+            smokeNext();
+            return;
+        }
+        paddle->recognizeBoxes(ocrBoxTestImage(), [this, mapOk](const QVector<OcrWord> &words, const QString &err) {
+            if (!err.isEmpty())
+                smokeLog(QStringLiteral("paddleocr: FAIL (%1)").arg(err));
+            else
+                smokeLog(QStringLiteral("paddleocr: %1 (%2 glyphs; script map %3)")
+                             .arg(words.size() >= 4 ? QStringLiteral("PASS") : QStringLiteral("FAIL"))
+                             .arg(words.size())
+                             .arg(mapOk ? QStringLiteral("PASS") : QStringLiteral("FAIL")));
+            smokeNext();
+        });
+    });
+
+    // 3f3c) OCR result model: the result window's text and line ranges must
+    // describe the same string. Runs on the digit fixture; no window is shown
+    // here (the Developer button opens it), so the smoke pass does not leave a
+    // top-level window behind.
+    m_smokeSteps.append([this] {
+        const QImage image = ocrBoxTestImage();
+        ocrBoxes(image, [this, image](const QVector<OcrWord> &words, const QString &err) {
+            if (!err.isEmpty() || words.isEmpty()) {
+                smokeLog(QStringLiteral("ocr result: FAIL (%1)")
+                             .arg(err.isEmpty() ? QStringLiteral("no text") : err));
+                smokeNext();
+                return;
+            }
+            m_ocrResult->setResult(image, words, QString());
+            const QVariantList lines = m_ocrResult->lines();
+            const QString text = m_ocrResult->text();
+            bool ok = !lines.isEmpty() && !text.isEmpty();
+            for (const QVariant &v : lines) {
+                const QVariantMap line = v.toMap();
+                const int start = line.value(QStringLiteral("start")).toInt();
+                const int length = line.value(QStringLiteral("length")).toInt();
+                if (start < 0 || length <= 0 || start + length > text.size()
+                    || text.mid(start, length) != line.value(QStringLiteral("text")).toString()) {
+                    ok = false;
+                    break;
+                }
+            }
+            smokeLog(QStringLiteral("ocr result: %1 (%2 lines)")
+                         .arg(ok ? QStringLiteral("PASS") : QStringLiteral("FAIL"))
+                         .arg(lines.size()));
+            smokeNext();
+        });
+    });
+
+    // 3f3d) Translation plumbing: OpenAI-compatible URL shapes, prompt and
+    // response/error parsing. No endpoint is contacted.
+    m_smokeSteps.append([this] {
+        smokeLog(QStringLiteral("translation: ") + translationCheck());
+        smokeNext();
     });
 
     // 3f4) Auto-redact: pattern → redaction bars with no selection made.

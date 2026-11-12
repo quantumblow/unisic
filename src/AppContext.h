@@ -19,6 +19,8 @@
 #include "record/GifRecorder.h"
 #include "update/UpdateChecker.h"
 #include "editor/BackgroundRemover.h"
+#include "ocr/PaddleOcr.h"
+#include "ocr/OcrResultController.h"
 #include "hotkeys/ShortcutBinder.h"
 #include "hotkeys/PrintKeyRelay.h"
 
@@ -42,6 +44,7 @@ class PortalGlobalShortcuts;
 class X11Hotkeys;
 class GifRecorder;
 class OcrEngine;
+class PaddleOcr;
 class AnnotationCanvas;
 class CaptureNotification;
 class DesktopNotifier;
@@ -65,6 +68,10 @@ class AppContext : public QObject
     Q_PROPERTY(HistoryStore *history READ history CONSTANT)
     Q_PROPERTY(UpdateChecker *updater READ updater CONSTANT)
     Q_PROPERTY(BackgroundRemover *backgroundRemover READ backgroundRemover CONSTANT)
+    // PP-OCRv6 (PaddleOCR) engine state + model download, for Settings.
+    Q_PROPERTY(PaddleOcr *paddleOcr READ paddleOcr CONSTANT)
+    // The last OCR result shown in the result window (image + selectable text).
+    Q_PROPERTY(OcrResultController *ocrResult READ ocrResult CONSTANT)
     Q_PROPERTY(bool recording READ recording NOTIFY recordingChanged)
     Q_PROPERTY(bool converting READ converting NOTIFY recordingChanged)
     Q_PROPERTY(bool instantReplayActive READ instantReplayActive NOTIFY recordingChanged)
@@ -208,6 +215,8 @@ public:
     HistoryStore *history() const { return m_history; }
     UpdateChecker *updater() const { return m_updater; }
     BackgroundRemover *backgroundRemover() const { return m_bgRemover; }
+    PaddleOcr *paddleOcr() const;
+    OcrResultController *ocrResult() const { return m_ocrResult; }
     CaptureManager *captureManager() const { return m_capture; }
     QQmlEngine *qmlEngine() const { return m_engine; }
 
@@ -398,6 +407,9 @@ public:
     Q_INVOKABLE void devTestCursorOverlay();
     Q_INVOKABLE void devTestStylePresets();
     Q_INVOKABLE void devTestOcrAutoLang();
+    Q_INVOKABLE void devTestOcrResult();
+    Q_INVOKABLE void devTestTranslation();
+    Q_INVOKABLE void devTestPaddleOcr();
     Q_INVOKABLE void devTestClipboardPaste();
     Q_INVOKABLE void devTestCaptureDelay();
     Q_INVOKABLE void devTestCopyAs();
@@ -803,6 +815,8 @@ signals:
     void recordingChanged();
     void recordSecondsChanged();
     void toastChanged();
+    // A fresh OCR result is in `ocrResult`; Main.qml shows the result window.
+    void ocrResultReady();
     void showMainWindowRequested();
     // A native-package update was discovered and can be installed via the
     // install.sh-in-a-terminal path - QML opens the "Install now?" prompt.
@@ -1232,6 +1246,7 @@ private:
     GifRecorder *m_recorder;
     ScrollCaptureController *m_scrollCapture = nullptr;
     OcrEngine *m_ocr = nullptr;
+    OcrResultController *m_ocrResult = nullptr;
     QTranslator *m_appTranslator = nullptr; // bundled unisic_<lang>.qm
     QTranslator *m_qtTranslator = nullptr;  // Qt's own strings for the locale
     QSystemTrayIcon *m_tray = nullptr;

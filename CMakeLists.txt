@@ -277,6 +277,10 @@ endif()
 # PipeWireGrabber is there too, under the kit's own HAVE_PIPEWIRE, likewise PUBLIC.
 
 target_sources(unisic PRIVATE src/ocr/OcrEngine.h src/ocr/OcrEngine.cpp)
+target_sources(unisic PRIVATE src/ocr/Barcode.h src/ocr/Barcode.cpp
+                             src/ocr/PaddleOcr.h src/ocr/PaddleOcr.cpp
+                             src/ocr/OcrResultController.h src/ocr/OcrResultController.cpp
+                             src/ocr/Translator.h src/ocr/Translator.cpp)
 target_link_libraries(unisic PRIVATE PkgConfig::TESSERACT ZXing::ZXing)
 target_compile_definitions(unisic PRIVATE HAVE_TESSERACT HAVE_ZXING)
 
@@ -329,6 +333,7 @@ qt_add_qml_module(unisic
         qml/ScrollCaptureOverlay.qml
         qml/PreviewWindow.qml
         qml/TrimWindow.qml
+        qml/OcrResultWindow.qml
         qml/pages/CapturePage.qml
         qml/pages/RecordPage.qml
         qml/pages/EditPage.qml
@@ -659,6 +664,25 @@ include(CPack)
 include(CTest)
 if(BUILD_TESTING)
     find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
+    qt_add_executable(unisic_translator_test
+        tests/TranslatorTest.cpp
+        src/ocr/Translator.cpp src/ocr/Translator.h
+        src/Settings.cpp src/Settings.h)
+    target_include_directories(unisic_translator_test PRIVATE src external/unisic-kit/src)
+    target_compile_definitions(unisic_translator_test PRIVATE UNISIC_VERSION="test")
+    target_link_libraries(unisic_translator_test PRIVATE Qt6::Core Qt6::Qml Qt6::Network Qt6::Test)
+    add_test(NAME unisic_translator_test COMMAND unisic_translator_test)
+
+    qt_add_executable(unisic_ocr_result_test
+        tests/OcrResultTest.cpp
+        src/ocr/OcrResultController.cpp src/ocr/OcrResultController.h
+        src/ocr/Translator.cpp src/ocr/Translator.h
+        src/Settings.cpp src/Settings.h)
+    target_include_directories(unisic_ocr_result_test PRIVATE src external/unisic-kit/src)
+    target_compile_definitions(unisic_ocr_result_test PRIVATE UNISIC_VERSION="test")
+    target_link_libraries(unisic_ocr_result_test PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Network Qt6::Test)
+    add_test(NAME unisic_ocr_result_test COMMAND unisic_ocr_result_test)
+
     qt_add_executable(unisic_shortcut_format_test
         tests/ShortcutFormatTest.cpp
         src/hotkeys/ShortcutFormat.h
