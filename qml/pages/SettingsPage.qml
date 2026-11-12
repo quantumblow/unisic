@@ -4395,6 +4395,7 @@ Item {
                         UButton { compact: true; variant: "tonal"; text: qsTr("PaddleOCR"); onClicked: App.devTestPaddleOcr() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("OCR result"); onClicked: App.devTestOcrResult() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("Translation"); onClicked: App.devTestTranslation() }
+                        UButton { compact: true; variant: "tonal"; text: qsTr("Translation overlay"); onClicked: App.devTestTranslationOverlay() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("OCR highlight + redact"); onClicked: App.devTestOcrHighlight() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("Auto-redact pattern"); onClicked: App.devTestOcrRedactPattern() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("Style presets"); onClicked: App.devTestStylePresets() }

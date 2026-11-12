@@ -2,6 +2,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QString>
+#include <QStringList>
 #include <QUrl>
 #include <functional>
 
@@ -31,6 +32,19 @@ public:
     // message (or a shape error) when there is no text.
     static QString parseResponse(const QByteArray &body, QString *error);
 
+    // Line-by-line translation, used when the result window has line boxes to
+    // put a translation on. The prompt asks for one numbered output line per
+    // numbered input line, so the answer can be mapped back one box at a time;
+    // a model that ignores that is detected by parseNumberedLines() and the
+    // caller falls back to the whole text.
+    static QString numberedPrompt(const QString &target);
+    static QString numberedRequest(const QStringList &lines);
+    // `expected` numbered lines or nothing, with `error` explaining a count or
+    // numbering mismatch. Empty and blank lines are dropped before counting.
+    static QStringList parseNumberedLines(const QString &text, int expected, QString *error);
+
+    // A request with an explicit system prompt.
+    void translateWith(const QString &system, const QString &text, Done done);
     void translate(const QString &text, const QString &target, Done done);
     void cancel();
 

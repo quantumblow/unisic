@@ -27,9 +27,20 @@ Window {
     // Side by side on a normal desktop window; stacked once it gets narrow,
     // so neither pane squeezes the picture into a strip.
     readonly property bool sideBySide: width >= 820
-    // The translated pane has no per-line geometry, so the clickable line
-    // boxes belong to the original view only.
     property bool showTranslation: false
+    // Translation over the picture needs one translation per recognized line;
+    // a service that merged or split lines leaves this empty and the whole text
+    // stays in the pane instead.
+    readonly property bool overlayAvailable: App.ocrResult.translatedLines.length > 0
+
+    // One place for "a line on the picture selects its range in the pane", so
+    // the original boxes and the translated covers behave the same.
+    function selectPaneRange(start, length) {
+        textEdit.select(start, start + length)
+        textEdit.forceActiveFocus()
+        const r = textEdit.positionToRectangle(start)
+        textFlick.contentY = Math.max(0, r.y - 24)
+    }
 
     onVisibleChanged: {
         if (visible)
@@ -131,9 +142,11 @@ Window {
                 spacing: Theme.spacingM
                 Text {
                     Layout.fillWidth: true
-                    text: resultWindow.showTranslation
-                          ? qsTr("Translated text. Select it below or copy it all.")
-                          : qsTr("Click a line on the picture to select it, or select text in the pane.")
+                    text: !resultWindow.showTranslation
+                          ? qsTr("Click a line on the picture to select it, or select text in the pane.")
+                          : resultWindow.overlayAvailable
+                            ? qsTr("Click a translated line on the picture to select it, or select text in the pane.")
+                            : qsTr("Translated text. Select it below or copy it all.")
                     color: Theme.textSecondary
                     font.pixelSize: Theme.fontS
                     wrapMode: Text.WordWrap
@@ -214,6 +227,18 @@ Window {
                 wrapMode: Text.WordWrap
             }
 
+            // A translation that did not come back one line per line is still
+            // shown, in the pane; say so instead of leaving the picture bare.
+            Text {
+                Layout.fillWidth: true
+                visible: resultWindow.showTranslation && App.ocrResult.translation !== ""
+                         && !resultWindow.overlayAvailable && App.ocrResult.lines.length > 1
+                text: qsTr("The service did not translate line by line, so the translation is shown in the pane instead of on the picture.")
+                color: Theme.textSecondary
+                font.pixelSize: Theme.fontS
+                wrapMode: Text.WordWrap
+            }
+
             GridLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -275,13 +300,76 @@ Window {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.IBeamCursor
-                                onClicked: {
-                                    textEdit.select(modelData.start,
-                                                    modelData.start + modelData.length)
-                                    textEdit.forceActiveFocus()
-                                    const r = textEdit.positionToRectangle(modelData.start)
-                                    textFlick.contentY = Math.max(0, r.y - 24)
-                                }
+                                onClicked: resultWindow.selectPaneRange(modelData.start,
+                                                                        modelData.length)
+                            }
+                        }
+                    }
+
+                    // The translation layer: one opaque patch per line box, in
+                    // the page colour sampled around that line, with the
+                    // translation on it. Sizes, wrapping and the shrinking font
+                    // keep long translations inside the original box; a click
+                    // selects that line's translation in the pane.
+                    Repeater {
+                        model: App.ocrResult.translatedLines
+                        delegate: Item {
+                            required property var modelData
+                            visible: resultWindow.showTranslation
+                                     && preview.status === Image.Ready
+                                     && imagePane.picScale > 0
+                            // The cover rect already carries the overshoot pad
+                            // in image pixels; this only adds the anti-aliased
+                            // edge of the scaling itself.
+                            readonly property real pad: Math.max(1, Math.min(2,
+                                                           Math.round(imagePane.picScale)))
+                            readonly property bool picked:
+                                textEdit.selectionStart < modelData.start + modelData.length
+                                && textEdit.selectionEnd > modelData.start
+                            x: (imagePane.width - preview.paintedWidth) / 2
+                               + modelData.x * imagePane.picScale - pad
+                            y: (imagePane.height - preview.paintedHeight) / 2
+                               + modelData.y * imagePane.picScale - pad
+                            width: Math.max(1, modelData.width * imagePane.picScale + 2 * pad)
+                            height: Math.max(1, modelData.height * imagePane.picScale + 2 * pad)
+                            z: 3
+
+                            Rectangle {
+                                anchors.fill: parent
+                                color: modelData.background
+                                radius: Math.min(3, height / 4)
+                            }
+                            Text {
+                                anchors.fill: parent
+                                text: modelData.text
+                                color: modelData.foreground
+                                // Text.Fit shrinks from this size until the
+                                // translation fits the box; minimumPixelSize
+                                // keeps it from vanishing on a tiny window.
+                                font.pixelSize: Math.max(8, height)
+                                fontSizeMode: Text.Fit
+                                minimumPixelSize: 5
+                                wrapMode: Text.Wrap
+                                horizontalAlignment: Text.AlignLeft
+                                verticalAlignment: Text.AlignVCenter
+                                clip: true
+                            }
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: Math.min(3, height / 4)
+                                color: "transparent"
+                                border.width: 1
+                                border.color: picked ? Theme.accent
+                                                     : Theme.alpha(Theme.accent, 0.85)
+                                visible: picked || coverHover.containsMouse
+                            }
+                            MouseArea {
+                                id: coverHover
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.IBeamCursor
+                                onClicked: resultWindow.selectPaneRange(modelData.start,
+                                                                        modelData.length)
                             }
                         }
                     }

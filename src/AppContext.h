@@ -409,6 +409,7 @@ public:
     Q_INVOKABLE void devTestOcrAutoLang();
     Q_INVOKABLE void devTestOcrResult();
     Q_INVOKABLE void devTestTranslation();
+    Q_INVOKABLE void devTestTranslationOverlay();
     Q_INVOKABLE void devTestPaddleOcr();
     Q_INVOKABLE void devTestClipboardPaste();
     Q_INVOKABLE void devTestCaptureDelay();

@@ -2931,7 +2931,92 @@ static QString translationCheck()
         Translator::parseResponse(R"({"error":{"message":"bad key"}})", &error);
     if (!failure.isEmpty() || error != QLatin1String("bad key"))
         return QStringLiteral("FAIL (service error)");
-    return QStringLiteral("PASS (URL shapes, prompt, response, service error)");
+    // Numbered lines: the prompt has to ask for the same count back and the
+    // parser has to reject anything that lost the layout.
+    error.clear();
+    const QStringList numbered =
+        Translator::parseNumberedLines(QStringLiteral("1. One\n2. Two"), 2, &error);
+    const bool numberedOk = numbered.size() == 2 && numbered.at(0) == QLatin1String("One")
+                            && numbered.at(1) == QLatin1String("Two") && error.isEmpty()
+                            && Translator::numberedPrompt(QStringLiteral("Polish"))
+                                   .contains(QStringLiteral("Polish"))
+                            && Translator::numberedRequest({QStringLiteral("a"), QStringLiteral("b")})
+                                   == QLatin1String("1. a\n2. b");
+    error.clear();
+    const bool rejects =
+        Translator::parseNumberedLines(QStringLiteral("One two"), 2, &error).isEmpty()
+        && !error.isEmpty();
+    if (!numberedOk || !rejects)
+        return QStringLiteral("FAIL (numbered lines)");
+    return QStringLiteral("PASS (URL shapes, prompt, numbered lines, response, service error)");
+}
+
+// Translation laid over the picture: every line box gets its own translation,
+// the [start, length) ranges index the joined text the pane shows, and the
+// sampled background/ink pair is readable. Synthetic image, no OCR, no network.
+static QString translationOverlayCheck()
+{
+    QImage image(240, 90, QImage::Format_RGB32);
+    image.fill(QColor(250, 250, 245));
+    QPainter painter(&image);
+    // A glyph stroke inside each line box, not a filled box: a REAL line box is
+    // mostly page with strokes in it, and the sampled background comes from
+    // that majority. A filled box would test a picture, not a line of text.
+    painter.fillRect(QRect(12, 17, 86, 6), QColor(20, 20, 20));
+    painter.fillRect(QRect(12, 53, 136, 6), QColor(20, 20, 20));
+    painter.end();
+
+    const QVariantList lines = {
+        QVariantMap{{QStringLiteral("text"), QStringLiteral("Hello")},
+                    {QStringLiteral("x"), 10},
+                    {QStringLiteral("y"), 12},
+                    {QStringLiteral("width"), 90},
+                    {QStringLiteral("height"), 16},
+                    {QStringLiteral("start"), 0},
+                    {QStringLiteral("length"), 5}},
+        QVariantMap{{QStringLiteral("text"), QStringLiteral("Second line")},
+                    {QStringLiteral("x"), 10},
+                    {QStringLiteral("y"), 48},
+                    {QStringLiteral("width"), 140},
+                    {QStringLiteral("height"), 16},
+                    {QStringLiteral("start"), 6},
+                    {QStringLiteral("length"), 11}},
+    };
+    const QStringList translated{QStringLiteral("Translated one"),
+                                 QStringLiteral("Translated two")};
+    QString joined;
+    const QVariantList overlay =
+        OcrResultController::translatedLineMap(lines, translated, image, &joined);
+    if (overlay.size() != lines.size())
+        return QStringLiteral("FAIL (line map size)");
+    if (joined != translated.join(QLatin1Char('\n')))
+        return QStringLiteral("FAIL (joined text)");
+    for (int i = 0; i < overlay.size(); ++i) {
+        const QVariantMap entry = overlay.at(i).toMap();
+        const int start = entry.value(QStringLiteral("start")).toInt();
+        const int length = entry.value(QStringLiteral("length")).toInt();
+        if (start < 0 || length <= 0 || start + length > joined.size()
+            || joined.mid(start, length) != entry.value(QStringLiteral("text")).toString())
+            return QStringLiteral("FAIL (line %1 range)").arg(i + 1);
+        const QColor background(entry.value(QStringLiteral("background")).toString());
+        const QColor foreground(entry.value(QStringLiteral("foreground")).toString());
+        if (!background.isValid() || !foreground.isValid())
+            return QStringLiteral("FAIL (line %1 colours)").arg(i + 1);
+        // Near-white paper, near-black ink: a cover with the page colour has to
+        // take the ink colour with it or the translation stays unreadable.
+        if (background.lightnessF() < 0.8f || foreground.lightnessF() > 0.35f)
+            return QStringLiteral("FAIL (line %1 contrast)").arg(i + 1);
+    }
+    return QStringLiteral("PASS (line map, ranges, colours)");
+}
+
+void AppContext::devTestTranslationOverlay()
+{
+    if (!devBuild())
+        return;
+    const QString result = translationOverlayCheck();
+    showToast(tr("Dev: translation overlay: %1").arg(result),
+              !result.startsWith(QLatin1String("PASS")));
 }
 
 void AppContext::devTestPaddleOcr()
@@ -6391,6 +6476,14 @@ void AppContext::runSmokeTest()
     // response/error parsing. No endpoint is contacted.
     m_smokeSteps.append([this] {
         smokeLog(QStringLiteral("translation: ") + translationCheck());
+        smokeNext();
+    });
+
+    // 3f3e) Translation over the picture: the per-line map the result window
+    // overlays must index the joined translation and pick readable colours.
+    // Synthetic image, so this step needs no OCR and no panel.
+    m_smokeSteps.append([this] {
+        smokeLog(QStringLiteral("translation overlay: ") + translationOverlayCheck());
         smokeNext();
     });
 
