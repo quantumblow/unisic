@@ -214,6 +214,20 @@ void OcrResultController::requestWholeText(quint64 seq)
         m_translation = text;
         m_translationError.clear();
         m_translatedLines.clear();
+        // The whole-text answer may still be one line per input line (the
+        // service ignored the numbering but translated line by line): map it
+        // back onto the picture with the same tolerant parser instead of
+        // leaving the covers empty.
+        if (m_lines.size() > 1) {
+            const QStringList rows =
+                Translator::parseNumberedLines(text, int(m_lines.size()), nullptr);
+            if (rows.size() == m_lines.size()) {
+                QString joined;
+                const QVariantList map = translatedLineMap(m_lines, rows, m_image, &joined);
+                m_translation = joined;
+                m_translatedLines = map;
+            }
+        }
         if (m_lines.size() == 1) {
             // One line box: the whole translation is that line's translation,
             // so the overlay works without a numbered round trip.
