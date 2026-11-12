@@ -85,12 +85,12 @@
     <message>
         <location filename="../src/AppContext.cpp" line="+5171"/>
         <location filename="../src/diag/SmokeTests.cpp" line="+810"/>
-        <location line="+2455"/>
+        <location line="+2463"/>
         <source>Quit</source>
         <translation>退出</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="-2443"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-2451"/>
         <source>Dev: language: %1</source>
         <translation>Dev: 语言：%1</translation>
     </message>
@@ -105,12 +105,12 @@
         <translation>Dev: OCR 文本框：%1（%2 个字形）</translation>
     </message>
     <message>
-        <location line="+278"/>
+        <location line="+286"/>
         <source>Dev: played capture sound &apos;%1&apos;</source>
         <translation>Dev: 已播放截图音效 “%1”</translation>
     </message>
     <message>
-        <location line="-1135"/>
+        <location line="-1143"/>
         <source>Dev: capture on release: %1</source>
         <translation>Dev: 释放时截图：%1</translation>
     </message>
@@ -169,7 +169,7 @@
         <translation>录制单个窗口需要窗口选择器，而此桌面不提供该功能，请改为录制屏幕或区域。</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="+1284"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="+1292"/>
         <source>no screen</source>
         <translation>无屏幕</translation>
     </message>
@@ -204,7 +204,7 @@
         <translation>已找到，OCR 会自动识别每张截图的文字体系。</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="-2561"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-2569"/>
         <source>Dev: custom theme: %1</source>
         <translation>Dev: 自定义主题：%1</translation>
     </message>
@@ -214,7 +214,7 @@
         <translation>Dev: 诊断信息已复制（%1 个字符）</translation>
     </message>
     <message>
-        <location line="+1905"/>
+        <location line="+1913"/>
         <source>Dev: OCR auto language: %1 (installed: %2; %3; map: %4)</source>
         <translation>Dev: OCR 自动语言：%1（已安装：%2；%3；映射：%4）</translation>
     </message>
@@ -529,7 +529,7 @@
         <translation>将在 %1 秒后开始录制…</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="-4578"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-4586"/>
         <source>Dev: clipboard paste: %1</source>
         <translation>Dev: 剪贴板粘贴：%1</translation>
     </message>
@@ -750,7 +750,7 @@
         <translation>Dev: 已暂存的更新：失败（%1）</translation>
     </message>
     <message>
-        <location line="+160"/>
+        <location line="+168"/>
         <source>Dev: translation overlay: %1</source>
         <translation>开发者：翻译覆盖层：%1</translation>
     </message>
@@ -865,7 +865,7 @@
         <translation>主窗口可见</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="-4063"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-4071"/>
         <source>Dev: OCR highlight + redact: FAIL (%1)</source>
         <translation>Dev: OCR 高亮与涂黑：失败（%1）</translation>
     </message>
@@ -885,7 +885,7 @@
         <translation>Dev: 样式预设：%1</translation>
     </message>
     <message>
-        <location line="+175"/>
+        <location line="+183"/>
         <source>Dev: auto-redact pattern: FAIL (%1)</source>
         <translation>Dev: 自动涂黑规则：失败（%1）</translation>
     </message>
@@ -1065,7 +1065,7 @@
         <translation>无法保存到 %1</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="-3527"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-3535"/>
         <source>Dev: hide while capturing: %1</source>
         <translation>Dev: 截图时隐藏：%1</translation>
     </message>
@@ -1336,7 +1336,7 @@
         <translation>Dev: 安装器更新：失败（%1）</translation>
     </message>
     <message>
-        <location line="+966"/>
+        <location line="+974"/>
         <source>memory only</source>
         <translation>仅在内存中</translation>
     </message>
@@ -4247,7 +4247,7 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>已复制</translation>
     </message>
     <message>
-        <location line="+23"/>
+        <location line="+24"/>
         <source>Target language</source>
         <translation>目标语言</translation>
     </message>
@@ -4305,6 +4305,11 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <location line="+25"/>
         <source>The service did not translate line by line, so the translation is shown in the pane instead of on the picture.</source>
         <translation>该服务未按行翻译，因此译文显示在面板中，而不是覆盖在图片上。</translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>The service returned the text unchanged. Check the target language and the model.</source>
+        <translation>翻译服务返回的文本与原文相同，请检查目标语言和模型。</translation>
     </message>
 </context>
 <context>
@@ -9166,7 +9171,7 @@ Applies to the next capture.</source>
 <context>
     <name>Translator</name>
     <message>
-        <location filename="../src/ocr/Translator.cpp" line="+68"/>
+        <location filename="../src/ocr/Translator.cpp" line="+70"/>
         <source>The translation service did not keep the line numbering</source>
         <translation>翻译服务未保留行编号</translation>
     </message>

@@ -21,6 +21,7 @@ private slots:
     void translatedLinesIndexThePane();
     void lineColorsFollowThePicture();
     void longPagesSplitIntoRequests();
+    void spotsAnUnchangedAnswer();
 };
 
 void OcrResultTest::rangesMatchTheText()
@@ -181,6 +182,21 @@ void OcrResultTest::longPagesSplitIntoRequests()
     QCOMPARE(rejoined, lines);
     QVERIFY(OcrResultController::chunkLines({}).isEmpty());
     QCOMPARE(OcrResultController::chunkLines({QStringLiteral("a")}, 0).size(), 1);
+}
+
+// A service that echoes the input is not a translation the window should
+// present silently; the comparison ignores the re-wrapping such answers often
+// carry.
+void OcrResultTest::spotsAnUnchangedAnswer()
+{
+    QVERIFY(OcrResultController::translationLooksUnchanged(
+        QStringLiteral("从磁盘打开任何文件\n搜索截图"),
+        QStringLiteral("从磁盘打开任何文件\n搜索截图")));
+    QVERIFY(OcrResultController::translationLooksUnchanged(
+        QStringLiteral("Hello world"), QStringLiteral("  Hello   world  ")));
+    QVERIFY(!OcrResultController::translationLooksUnchanged(
+        QStringLiteral("你好"), QStringLiteral("Hello")));
+    QVERIFY(!OcrResultController::translationLooksUnchanged(QString(), QString()));
 }
 
 QTEST_MAIN(OcrResultTest)

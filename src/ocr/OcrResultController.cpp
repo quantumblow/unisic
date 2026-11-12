@@ -134,6 +134,7 @@ void OcrResultController::translate()
     m_translationError.clear();
     m_translation.clear();
     m_translatedLines.clear();
+    m_translationUnchanged = false;
     emit translationChanged();
 
     const quint64 seq = ++m_translationSeq;
@@ -166,6 +167,7 @@ void OcrResultController::requestNextLineChunk(quint64 seq)
         QString text;
         m_translatedLines = translatedLineMap(m_lines, translated, m_image, &text);
         m_translation = text;
+        m_translationUnchanged = translationLooksUnchanged(m_text, m_translation);
         m_translating = false;
         emit translationChanged();
         if (!m_translation.isEmpty())
@@ -228,6 +230,7 @@ void OcrResultController::requestWholeText(quint64 seq)
                 m_translatedLines = map;
             }
         }
+        m_translationUnchanged = translationLooksUnchanged(m_text, m_translation);
         if (m_lines.size() == 1) {
             // One line box: the whole translation is that line's translation,
             // so the overlay works without a numbered round trip.
@@ -273,6 +276,7 @@ void OcrResultController::setResult(const QImage &image, const QVector<OcrWord> 
         m_translator->cancel();
     m_translation.clear();
     m_translatedLines.clear();
+    m_translationUnchanged = false;
     m_chunks.clear();
     m_translatedChunks.clear();
     m_chunkIndex = 0;
@@ -417,6 +421,22 @@ OcrResultController::LineColors OcrResultController::sampleLineColors(const QIma
                             : (relativeLuminance(background) > 0.45 ? QColor(0, 0, 0)
                                                                     : QColor(255, 255, 255));
     return colors;
+}
+
+bool OcrResultController::translationLooksUnchanged(const QString &source,
+                                                    const QString &translation)
+{
+    const auto squash = [](const QString &text) {
+        QString out;
+        out.reserve(text.size());
+        for (const QChar c : text) {
+            if (!c.isSpace())
+                out.append(c);
+        }
+        return out;
+    };
+    const QString from = squash(source);
+    return !from.isEmpty() && from == squash(translation);
 }
 
 QVector<QStringList> OcrResultController::chunkLines(const QStringList &lines, int perRequest)

@@ -2955,10 +2955,18 @@ static QString translationCheck()
         && Translator::parseNumberedLines(QStringLiteral("One\nTwo"), 2, &error)
                == QStringList({QStringLiteral("One"), QStringLiteral("Two")})
         && error.isEmpty();
-    if (!numberedOk || !rejects || !tolerant)
+    // A service that echoes the input must be caught, or the source would be
+    // shown as if it were the translation.
+    const bool unchangedOk =
+        OcrResultController::translationLooksUnchanged(QStringLiteral("你好世界"),
+                                                       QStringLiteral("你好世界"))
+        && !OcrResultController::translationLooksUnchanged(QStringLiteral("你好世界"),
+                                                           QStringLiteral("Hello world"));
+    if (!numberedOk || !rejects || !tolerant || !unchangedOk)
         return QStringLiteral("FAIL (numbered lines)");
     return QStringLiteral(
-        "PASS (URL shapes, prompt, numbered lines, tolerant mapping, response, service error)");
+        "PASS (URL shapes, prompt, numbered lines, tolerant mapping, unchanged answer, response, "
+        "service error)");
 }
 
 // Translation laid over the picture: every line box gets its own translation,

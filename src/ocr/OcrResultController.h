@@ -49,6 +49,10 @@ class OcrResultController : public QObject
     Q_PROPERTY(QString translationError READ translationError NOTIFY translationChanged)
     Q_PROPERTY(bool canTranslate READ canTranslate NOTIFY translationChanged)
     Q_PROPERTY(QString translationTarget READ translationTarget NOTIFY translationChanged)
+    // True when a successful answer is the recognized text itself (a service
+    // that echoed the input, often for a language pair it handles badly). The
+    // window says so instead of presenting the source as a translation.
+    Q_PROPERTY(bool translationUnchanged READ translationUnchanged NOTIFY translationChanged)
 
 public:
     explicit OcrResultController(Settings *settings = nullptr, QObject *parent = nullptr);
@@ -65,6 +69,7 @@ public:
     QString translationError() const { return m_translationError; }
     bool canTranslate() const;
     QString translationTarget() const;
+    bool translationUnchanged() const { return m_translationUnchanged; }
 
     // Translates the current text with the OpenAI-compatible endpoint from
     // Settings. One request at a time; a new OCR result cancels it.
@@ -92,6 +97,9 @@ public:
     // picture selects exactly its translation in the pane.
     static QVariantList translatedLineMap(const QVariantList &lines, const QStringList &translated,
                                           const QImage &image, QString *text);
+    // Comparing with whitespace squashed: a service that echoes the input often
+    // re-wraps or re-spaces it, and that is still "unchanged" to the reader.
+    static bool translationLooksUnchanged(const QString &source, const QString &translation);
     // A page can be hundreds of lines; one request per this many keeps the
     // prompt (and the cost) bounded and still leaves every answer mappable.
     static QVector<QStringList> chunkLines(const QStringList &lines, int perRequest = 40);
@@ -113,6 +121,7 @@ private:
     Translator *m_translator = nullptr;
     QString m_translation;
     QVariantList m_translatedLines;
+    bool m_translationUnchanged = false;
     QString m_translationError;
     bool m_translating = false;
     // A line-by-line translation runs one numbered request per chunk; the

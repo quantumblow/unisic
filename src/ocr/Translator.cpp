@@ -33,6 +33,7 @@ QString Translator::systemPrompt(const QString &target)
 {
     return QStringLiteral(
                "You are a translation engine. Translate the user's text into %1. "
+               "The text may be in another language; translate it and never return it unchanged. "
                "Keep the original line breaks, numbers, punctuation and order. "
                "Return only the translation, with no explanation, notes or quotation marks.")
         .arg(target);
@@ -44,9 +45,10 @@ QString Translator::numberedPrompt(const QString &target)
                "You are a translation engine. The user sends numbered lines of text taken from a "
                "screenshot. Translate every line into %1. Answer with the same number of lines and the "
                "same numbering, one numbered line per input line, never merged and never split, even "
-               "when an input line is a single word or a number. Start the answer with \"1.\" and keep "
-               "the lines in order. Return only the numbered translation, with no explanation, notes, "
-               "quotation marks, markdown or code fences.")
+               "when an input line is a single word or a number. The text may be in another language; "
+               "translate it and never return an input line unchanged. Start the answer with \"1.\" and "
+               "keep the lines in order. Return only the numbered translation, with no explanation, "
+               "notes, quotation marks, markdown or code fences.")
         .arg(target);
 }
 

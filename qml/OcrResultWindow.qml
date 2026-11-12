@@ -223,6 +223,7 @@ Window {
                 // choice - nothing is sent just by changing the target).
                 UComboBox {
                     id: targetPicker
+                    objectName: "targetPicker"
                     width: 170
                     visible: App.ocrResult.canTranslate
                     enabled: !App.ocrResult.translating
@@ -320,6 +321,18 @@ Window {
                 visible: resultWindow.showTranslation && App.ocrResult.translation !== ""
                          && !resultWindow.overlayAvailable && App.ocrResult.lines.length > 1
                 text: qsTr("The service did not translate line by line, so the translation is shown in the pane instead of on the picture.")
+                color: Theme.textSecondary
+                font.pixelSize: Theme.fontS
+                wrapMode: Text.WordWrap
+            }
+
+            // A service that answers with the recognized text itself (often a
+            // language pair it handles badly) is not a translation: say so
+            // instead of letting the source look like the result.
+            Text {
+                Layout.fillWidth: true
+                visible: resultWindow.showTranslation && App.ocrResult.translationUnchanged
+                text: qsTr("The service returned the text unchanged. Check the target language and the model.")
                 color: Theme.textSecondary
                 font.pixelSize: Theme.fontS
                 wrapMode: Text.WordWrap
