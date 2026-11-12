@@ -45,8 +45,10 @@ Window {
     ]
     // 100%: one capture pixel per screen pixel. A HiDPI screen reports
     // devicePixelRatio > 1, so the picture's logical size is smaller by that
-    // factor - that is what "original size" means for a screenshot.
-    readonly property real pictureScale: {
+    // factor - that is what "original size" means for a screenshot. The pane
+    // scales below this only when the capture does not fit (a full-screen
+    // shot), and then uniformly.
+    readonly property real hundredScale: {
         const s = resultWindow.screen
         const dpr = s ? s.devicePixelRatio : 1
         return 1 / Math.max(1, dpr)
@@ -69,8 +71,8 @@ Window {
         if (resultWindow.visibility === Window.Maximized
                 || resultWindow.visibility === Window.FullScreen)
             return
-        const picW = img.width * resultWindow.pictureScale
-        const picH = img.height * resultWindow.pictureScale
+        const picW = img.width * resultWindow.hundredScale
+        const picH = img.height * resultWindow.hundredScale
         const maxW = Math.floor(resultWindow.screen.width * 0.92)
         const maxH = Math.floor(resultWindow.screen.height * 0.92)
         resultWindow.width = Math.max(resultWindow.minimumWidth,
@@ -341,64 +343,32 @@ Window {
                     Layout.minimumWidth: 220
                     Layout.minimumHeight: 130
                     Layout.preferredWidth: Math.round(App.ocrResult.imageSize.width
-                                                      * resultWindow.pictureScale)
+                                                      * resultWindow.hundredScale)
                     Layout.maximumWidth: resultWindow.sideBySide
                                          ? Math.round(App.ocrResult.imageSize.width
-                                                      * resultWindow.pictureScale)
+                                                      * resultWindow.hundredScale)
                                          : 1000000
                     color: Theme.primary
                     radius: Theme.radiusM
                     clip: true
 
-                    // The picture at 100%, not squeezed to fit: scroll when the
-                    // pane is smaller than the capture, center it when bigger.
-                    Flickable {
-                        id: imageFlick
-                        anchors.fill: parent
-                        // Two pixels of slack: an exact fit must not show a
-                        // scroll bar because of sub-pixel rounding.
-                        contentWidth: imageHolder.width > width + 2 ? imageHolder.width : width
-                        contentHeight: imageHolder.height > height + 2 ? imageHolder.height : height
-                        clip: true
-                        boundsBehavior: Flickable.StopAtBounds
-                        // A themed handle on purpose: the default one is a very
-                        // light grey and disappears over a white screenshot.
-                        ScrollBar.horizontal: ScrollBar {
-                            // AsNeeded alone kept drawing a full-length bar at
-                            // an exact fit on this Qt, so the boundary is
-                            // explicit here.
-                            policy: imageFlick.contentWidth > imageFlick.width + 2
-                                    ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
-                            contentItem: Rectangle {
-                                implicitHeight: 6
-                                implicitWidth: 40
-                                radius: 3
-                                color: Theme.alpha(Theme.textSecondary, 0.55)
-                            }
-                            background: Rectangle { color: "transparent" }
-                        }
-                        ScrollBar.vertical: ScrollBar {
-                            policy: imageFlick.contentHeight > imageFlick.height + 2
-                                    ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
-                            contentItem: Rectangle {
-                                implicitWidth: 6
-                                implicitHeight: 40
-                                radius: 3
-                                color: Theme.alpha(Theme.textSecondary, 0.55)
-                            }
-                            background: Rectangle { color: "transparent" }
-                        }
-                        MiddleScroll { flickable: imageFlick }
-                        WheelBoost { flickable: imageFlick }
+                    // The picture is drawn at its own size and only shrunk
+                    // (proportionally, never past 100%) when the capture does
+                    // not fit the pane - a full-screen shot, or a window the
+                    // user made smaller.
+                    readonly property real renderScale: {
+                        const img = App.ocrResult.imageSize
+                        if (img.width <= 0 || img.height <= 0)
+                            return resultWindow.hundredScale
+                        const fit = Math.min(width / img.width, height / img.height)
+                        return Math.min(resultWindow.hundredScale, fit)
+                    }
 
-                        Item {
-                            id: imageHolder
-                            width: Math.round(App.ocrResult.imageSize.width
-                                              * resultWindow.pictureScale)
-                            height: Math.round(App.ocrResult.imageSize.height
-                                               * resultWindow.pictureScale)
-                            x: Math.max(0, (imageFlick.width - width) / 2)
-                            y: Math.max(0, (imageFlick.height - height) / 2)
+                    Item {
+                        id: imageHolder
+                        width: App.ocrResult.imageSize.width * imagePane.renderScale
+                        height: App.ocrResult.imageSize.height * imagePane.renderScale
+                        anchors.centerIn: parent
 
                             Image {
                                 id: preview
@@ -432,10 +402,10 @@ Window {
                                         && textEdit.selectionEnd > modelData.start
                                     visible: preview.status === Image.Ready
                                              && !resultWindow.showTranslation
-                                    x: modelData.x * resultWindow.pictureScale
-                                    y: modelData.y * resultWindow.pictureScale
-                                    width: Math.max(1, modelData.width * resultWindow.pictureScale)
-                                    height: Math.max(1, modelData.height * resultWindow.pictureScale)
+                                    x: modelData.x * imagePane.renderScale
+                                    y: modelData.y * imagePane.renderScale
+                                    width: Math.max(1, modelData.width * imagePane.renderScale)
+                                    height: Math.max(1, modelData.height * imagePane.renderScale)
                                     radius: 2
                                     color: picked ? Theme.alpha(Theme.accent, 0.32)
                                          : hoverArea.containsMouse
@@ -474,11 +444,11 @@ Window {
                                     readonly property bool picked:
                                         textEdit.selectionStart < modelData.start + modelData.length
                                         && textEdit.selectionEnd > modelData.start
-                                    x: modelData.x * resultWindow.pictureScale - pad
-                                    y: modelData.y * resultWindow.pictureScale - pad
-                                    width: Math.max(1, modelData.width * resultWindow.pictureScale
+                                    x: modelData.x * imagePane.renderScale - pad
+                                    y: modelData.y * imagePane.renderScale - pad
+                                    width: Math.max(1, modelData.width * imagePane.renderScale
                                                     + 2 * pad)
-                                    height: Math.max(1, modelData.height * resultWindow.pictureScale
+                                    height: Math.max(1, modelData.height * imagePane.renderScale
                                                      + 2 * pad)
                                     z: 3
 
@@ -524,7 +494,6 @@ Window {
                             }
                         }
                     }
-                }
 
                 Rectangle {
                     Layout.fillWidth: true
