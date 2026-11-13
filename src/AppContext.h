@@ -452,6 +452,9 @@ public:
     // endpoint.
     Q_INVOKABLE void devTestTranslationPartialOverlay();
     Q_INVOKABLE void devTestPaddleOcr();
+    // M5: PP-OCRv5 script routing, plus a real det+script-rec read when
+    // at least one script model is installed.
+    Q_INVOKABLE void devTestOcrScripts();
     Q_INVOKABLE void devTestClipboardPaste();
     Q_INVOKABLE void devTestCaptureDelay();
     Q_INVOKABLE void devTestCopyAs();

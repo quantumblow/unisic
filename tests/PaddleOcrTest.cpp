@@ -28,6 +28,15 @@ private slots:
     void tierMemoryTableIsPinned();
     void memAvailableParsesProcText();
     void selectedTierInstalledWinsOverBundledTiny();
+    void scriptIdsAndStatesAreComplete();
+    void scriptRoutingTable();
+    void osdScriptRouting();
+    void scriptDictYmlParses();
+    void rtlTextReverses();
+    void rtlWordsReorder();
+    void scriptMemoryTableIsPinned();
+    void unknownScriptHasNoPaths();
+    void scriptMirrorUrl();
 
 private:
     static void clearDownloads();
@@ -211,5 +220,210 @@ void PaddleOcrTest::selectedTierInstalledWinsOverBundledTiny()
     QVERIFY(!fresh.tierDownloaded());
 }
 
+void PaddleOcrTest::scriptIdsAndStatesAreComplete()
+{
+    const QStringList ids = PaddleOcr::scriptIds();
+    QCOMPARE(ids.size(), 8);
+    QCOMPARE(ids, QStringList({QStringLiteral("korean"), QStringLiteral("arabic"),
+                               QStringLiteral("cyrillic"), QStringLiteral("thai"),
+                               QStringLiteral("devanagari"), QStringLiteral("tamil"),
+                               QStringLiteral("telugu"), QStringLiteral("greek")}));
+    PaddleOcr paddle;
+    const QVariantList states = paddle.scriptStates();
+    QCOMPARE(states.size(), 8);
+    for (const QVariant &v : states) {
+        const QVariantMap entry = v.toMap();
+        QVERIFY(!entry.value(QStringLiteral("name")).toString().isEmpty());
+        QVERIFY(entry.value(QStringLiteral("bytes")).toLongLong() > 0);
+        // A clean data dir: every pool is missing, and none reports installed.
+        QCOMPARE(entry.value(QStringLiteral("state")).toString(), QStringLiteral("missing"));
+        QVERIFY(!entry.value(QStringLiteral("installed")).toBool());
+        QVERIFY(!paddle.scriptInstalled(entry.value(QStringLiteral("id")).toString()));
+    }
+    QVERIFY(!paddle.hasInstalledScripts());
+}
+
+void PaddleOcrTest::scriptRoutingTable()
+{
+    using P = PaddleOcr;
+    QCOMPARE(P::scriptForTesseractLanguages(QStringLiteral("kor")), QStringLiteral("korean"));
+    QCOMPARE(P::scriptForTesseractLanguages(QStringLiteral("kor+eng")), QStringLiteral("korean"));
+    QCOMPARE(P::scriptForTesseractLanguages(QStringLiteral("ara+fas+eng")),
+             QStringLiteral("arabic"));
+    QCOMPARE(P::scriptForTesseractLanguages(QStringLiteral("rus+ukr")),
+             QStringLiteral("cyrillic"));
+    QCOMPARE(P::scriptForTesseractLanguages(QStringLiteral("tha")), QStringLiteral("thai"));
+    QCOMPARE(P::scriptForTesseractLanguages(QStringLiteral("hin+mar")),
+             QStringLiteral("devanagari"));
+    QCOMPARE(P::scriptForTesseractLanguages(QStringLiteral("tam")), QStringLiteral("tamil"));
+    QCOMPARE(P::scriptForTesseractLanguages(QStringLiteral("tel")), QStringLiteral("telugu"));
+    QCOMPARE(P::scriptForTesseractLanguages(QStringLiteral("ell")), QStringLiteral("greek"));
+    QVERIFY(P::scriptForTesseractLanguages(QStringLiteral("kor+jpn")).isEmpty());
+    QVERIFY(P::scriptForTesseractLanguages(QStringLiteral("kor+chi_sim")).isEmpty());
+    QVERIFY(P::scriptForTesseractLanguages(QStringLiteral("kor+ara")).isEmpty());
+    QVERIFY(P::scriptForTesseractLanguages(QStringLiteral("deu+kor")).isEmpty());
+    QVERIFY(P::scriptForTesseractLanguages(QStringLiteral("heb")).isEmpty());
+    QVERIFY(P::scriptForTesseractLanguages(QStringLiteral("ben")).isEmpty());
+    QVERIFY(P::scriptForTesseractLanguages(QStringLiteral("grc")).isEmpty());
+    QVERIFY(P::scriptForTesseractLanguages(QStringLiteral("kor_vert")).isEmpty());
+    QVERIFY(P::scriptForTesseractLanguages(QStringLiteral("chi_sim")).isEmpty());
+    QVERIFY(P::scriptForTesseractLanguages(QStringLiteral("eng")).isEmpty());
+    QVERIFY(P::scriptForTesseractLanguages(QString()).isEmpty());
+    QVERIFY(P::scriptSupportsLanguages(QStringLiteral("korean"), QStringLiteral("kor+eng")));
+    QVERIFY(P::scriptSupportsLanguages(QStringLiteral("arabic"),
+                                       QStringLiteral("ara+fas+eng")));
+    QVERIFY(!P::scriptSupportsLanguages(QStringLiteral("korean"),
+                                        QStringLiteral("kor+jpn")));
+}
+
+void PaddleOcrTest::osdScriptRouting()
+{
+    using P = PaddleOcr;
+    QCOMPARE(P::scriptForOsd(QStringLiteral("Hangul")), QStringLiteral("korean"));
+    QCOMPARE(P::scriptForOsd(QStringLiteral("Arabic")), QStringLiteral("arabic"));
+    QCOMPARE(P::scriptForOsd(QStringLiteral("Cyrillic")), QStringLiteral("cyrillic"));
+    QCOMPARE(P::scriptForOsd(QStringLiteral("Thai")), QStringLiteral("thai"));
+    QCOMPARE(P::scriptForOsd(QStringLiteral("Devanagari")), QStringLiteral("devanagari"));
+    QCOMPARE(P::scriptForOsd(QStringLiteral("Tamil")), QStringLiteral("tamil"));
+    QCOMPARE(P::scriptForOsd(QStringLiteral("Telugu")), QStringLiteral("telugu"));
+    QCOMPARE(P::scriptForOsd(QStringLiteral("Greek")), QStringLiteral("greek"));
+    QVERIFY(P::scriptForOsd(QStringLiteral("Latin")).isEmpty());
+    QVERIFY(P::scriptForOsd(QStringLiteral("Han")).isEmpty());
+    QVERIFY(P::scriptForOsd(QStringLiteral("Japanese")).isEmpty());
+    QVERIFY(P::scriptForOsd(QStringLiteral("Hangul_vert")).isEmpty());
+    QVERIFY(P::scriptForOsd(QStringLiteral("Hebrew")).isEmpty());
+    QVERIFY(P::scriptForOsd(QString()).isEmpty());
+}
+
+void PaddleOcrTest::scriptDictYmlParses()
+{
+    // The real inference.yml has a PostProcess block and a YAML list; the
+    // parser must stop at the next key and unescape single quotes.
+    const QByteArray yml = R"YML(Global:
+  model_name: test
+PostProcess:
+  name: CTCLabelDecode
+  character_dict:
+  - '!'
+  - ''''
+  - \
+  - ᄀ
+  - '!'
+Next:
+  x: 1
+)YML";
+    QString error;
+    const QVector<QString> dict = PaddleOcr::parseDictYml(yml, &error);
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    QCOMPARE(dict.size(), 5);
+    QCOMPARE(dict.at(0), QStringLiteral("!"));
+    QCOMPARE(dict.at(1), QStringLiteral("'"));
+    QCOMPARE(dict.at(2), QStringLiteral("\\"));
+    QCOMPARE(dict.at(3), QString::fromUtf8("ᄀ"));
+    QCOMPARE(dict.at(4), QStringLiteral("!")); // duplicates stay: index order matters
+    QString missing;
+    QVERIFY(PaddleOcr::parseDictYml("Global:\n  x: 1\n", &missing).isEmpty());
+    QVERIFY(!missing.isEmpty());
+}
+
+void PaddleOcrTest::rtlTextReverses()
+{
+    // The Arabic model emits visual order; these are the same letters reversed.
+    const QString visual = QString::fromUtf8("ملاعلاب ابحرم");
+    const QString logical = QString::fromUtf8("مرحبا بالعالم");
+    QCOMPARE(PaddleOcr::reverseRtlText(visual), logical);
+    QCOMPARE(PaddleOcr::reverseRtlText(QStringLiteral("abc 123")), QStringLiteral("abc 123"));
+    QCOMPARE(PaddleOcr::reverseRtlText(QString()), QString());
+}
+
+void PaddleOcrTest::scriptMemoryTableIsPinned()
+{
+    // The v5 rec replaces the v6 rec; 320 MiB is the measured script path plus
+    // headroom. Every id reads the same value today, but the table is per id
+    // so a heavier future model is a one-line change.
+    for (const QString &id : PaddleOcr::scriptIds())
+        QCOMPARE(PaddleOcr::scriptRunMiB(id), 320);
+    QCOMPARE(PaddleOcr::scriptRunMiB(QStringLiteral("unknown")), 320);
+}
+
+void PaddleOcrTest::unknownScriptHasNoPaths()
+{
+    QVERIFY(PaddleOcr::scriptDir(QStringLiteral("../korean")).isEmpty());
+    QVERIFY(PaddleOcr::scriptRecPath(QStringLiteral("nope")).isEmpty());
+    QVERIFY(PaddleOcr::scriptDictPath(QStringLiteral("nope")).isEmpty());
+    const QString korean = PaddleOcr::scriptDir(QStringLiteral("korean"));
+    QVERIFY(korean.endsWith(QStringLiteral("/paddleocr/scripts/korean")));
+    QVERIFY(PaddleOcr::scriptRecPath(QStringLiteral("korean")).endsWith(
+        QStringLiteral("/inference.onnx")));
+    QVERIFY(PaddleOcr::scriptDictPath(QStringLiteral("korean")).endsWith(
+        QStringLiteral("/inference.yml")));
+}
+
+
+void PaddleOcrTest::scriptMirrorUrl()
+{
+    qputenv("UNISIC_PADDLE_MODEL_BASE", "http://127.0.0.1:9/mirror");
+    QCOMPARE(PaddleOcr::scriptDownloadUrl(QStringLiteral("korean"),
+                                          QStringLiteral("inference.onnx")),
+             QStringLiteral("http://127.0.0.1:9/mirror/v5/korean/inference.onnx"));
+    QCOMPARE(PaddleOcr::scriptDownloadUrl(QStringLiteral("korean"),
+                                          QStringLiteral("inference.yml")),
+             QStringLiteral("http://127.0.0.1:9/mirror/v5/korean/inference.yml"));
+    QVERIFY(PaddleOcr::scriptDownloadUrl(QStringLiteral("nope"),
+                                         QStringLiteral("inference.onnx")).isEmpty());
+    qunsetenv("UNISIC_PADDLE_MODEL_BASE");
+    const QString official = PaddleOcr::scriptDownloadUrl(QStringLiteral("korean"),
+                                                          QStringLiteral("inference.onnx"));
+    QVERIFY(official.startsWith(QStringLiteral(
+        "https://www.modelscope.cn/models/PaddlePaddle/korean_PP-OCRv5_mobile_rec_onnx/resolve/")));
+    QVERIFY(official.endsWith(QStringLiteral("/inference.onnx")));
+}
+
+void PaddleOcrTest::rtlWordsReorder()
+{
+    // The recognizer emits the line left to right; the words are one glyph
+    // each and a space is recorded as spaceBefore on the next glyph.
+    auto wordsFrom = [](const QString &text) {
+        QVector<OcrWord> words;
+        bool afterSpace = false;
+        int x = 0;
+        for (const QChar c : text) {
+            if (c == QLatin1Char(' ')) {
+                afterSpace = true;
+                continue;
+            }
+            OcrWord w;
+            w.text = QString(c);
+            w.rect = QRect(x, 0, 10, 20);
+            w.spaceBefore = afterSpace;
+            afterSpace = false;
+            words.append(w);
+            x += 10;
+        }
+        return words;
+    };
+    auto textFrom = [](const QVector<OcrWord> &words) {
+        QString text;
+        for (const OcrWord &w : words) {
+            if (w.spaceBefore)
+                text += QLatin1Char(' ');
+            text += w.text;
+        }
+        return text;
+    };
+
+    QVector<OcrWord> words = wordsFrom(QString::fromUtf8("ملاعلاب ابحرم"));
+    const QRect firstRect = words.first().rect;
+    PaddleOcr::reorderRtlWords(words);
+    QCOMPARE(textFrom(words), QString::fromUtf8("مرحبا بالعالم"));
+    // The box travels with its glyph: the logical first word is the visual
+    // last one, not the old leftmost box.
+    QCOMPARE(words.first().rect, QRect(110, 0, 10, 20));
+    QCOMPARE(words.last().rect, firstRect);
+
+    QVector<OcrWord> mixed = wordsFrom(QString::fromUtf8("ملاعلاب abc"));
+    PaddleOcr::reorderRtlWords(mixed);
+    QCOMPARE(textFrom(mixed), QString::fromUtf8("abc بالعالم"));
+}
 QTEST_MAIN(PaddleOcrTest)
 #include "PaddleOcrTest.moc"

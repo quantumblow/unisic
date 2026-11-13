@@ -1,10 +1,12 @@
 #pragma once
+#include <QByteArray>
 #include <QImage>
 #include <QList>
 #include <QNetworkReply>
 #include <QObject>
 #include <QPointer>
 #include <QString>
+#include <QStringList>
 #include <QVariantList>
 #include <QVector>
 #include <functional>
@@ -22,10 +24,12 @@ class QTimer;
 // second OCR engine next to Tesseract.
 //
 // Like "Remove background", nothing is linked: the runtime is dlopen()ed and
-// the small/medium models are one-time downloads. Tesseract stays the
-// always-available engine for scripts PP-OCRv6 does not cover (Korean, Arabic,
-// Cyrillic, Thai, Indic, Greek) - v6 reads Chinese (both scripts), Japanese and
-// 48 Latin-script languages with one det+rec pair.
+// the small/medium models are one-time downloads. PP-OCRv6 reads Chinese (both
+// scripts), Japanese and 48 Latin-script languages with one det+rec pair; the
+// other scripts use PP-OCRv5's per-script recognizers (Korean, Arabic,
+// Cyrillic, Thai, Devanagari, Tamil, Telugu, Greek), one rec+dict pair each,
+// while DETECTION stays the v6 DB model. Tesseract stays the always-available
+// engine for everything without a downloadable recognizer.
 //
 // The "tiny" pair ships INSIDE the binary (a qrc built from the bytes in
 // third_party/paddleocr/tiny/), so a fresh install has a working PP-OCRv6
@@ -67,6 +71,12 @@ class PaddleOcr : public QObject
     // [{id: "tiny", state: "included"|"downloaded"|"missing"}, ...] for every
     // tier, so Settings can list all three states without one property each.
     Q_PROPERTY(QVariantList tierStates READ tierStates NOTIFY stateChanged)
+    // [{id, name, state, bytes, sizeText, installed}, ...] for the eight
+    // PP-OCRv5 script recognizers, so Settings can list all of them.
+    Q_PROPERTY(QVariantList scriptStates READ scriptStates NOTIFY stateChanged)
+    // The script model being downloaded, or "" when the queue is idle or
+    // fetching a PP-OCRv6 tier. Settings puts the progress on that row.
+    Q_PROPERTY(QString downloadingScript READ downloadingScript NOTIFY stateChanged)
 
 public:
     using Result = std::function<void(const QString &text, const QString &error)>;
@@ -85,6 +95,52 @@ public:
     bool tierDownloaded() const;
     QVariantList tierStates() const;
 
+    // PP-OCRv5 script recognizers. Detection still comes from the
+    // effective PP-OCRv6 tier; only the recognizer and its dictionary are
+    // per script, in <AppData>/paddleocr/scripts/<script>/.
+    static QStringList scriptIds();
+    static QString scriptName(const QString &script);
+    static QString scriptDir(const QString &script);
+    static QString scriptRecPath(const QString &script);
+    static QString scriptDictPath(const QString &script);
+    // The URL a script file is fetched from: the mirror layout under
+    // UNISIC_PADDLE_MODEL_BASE, or the revision-pinned official URL.
+    static QString scriptDownloadUrl(const QString &script, const QString &fileName);
+    bool scriptInstalled(const QString &script) const;
+    bool hasInstalledScripts() const;
+    QVariantList scriptStates() const;
+    QString downloadingScript() const { return m_downloadScript; }
+    // The missing bytes of a script model; includes the shared ONNX
+    // Runtime when it is not loaded yet.
+    Q_INVOKABLE QString scriptDownloadSizeText(const QString &script);
+    Q_INVOKABLE void downloadScript(const QString &script);
+    Q_INVOKABLE void deleteScriptDownloads(const QString &script);
+
+    // The pure routing rules, public and static so the whole table is
+    // pinned by a test that needs no model file and no runtime.
+    // The script a Tesseract language spec needs, or "" when one
+    // recognizer cannot read the whole spec (mixed or unsupported
+    // scripts, Latin-only, empty).
+    static QString scriptForTesseractLanguages(const QString &langs);
+    // The script a Tesseract OSD script name maps to, or "".
+    static QString scriptForOsd(const QString &osdScript);
+    // Whether this one script recognizer can read the whole spec.
+    static bool scriptSupportsLanguages(const QString &script, const QString &langs);
+    // PaddleX pred_reverse: the model emits Arabic in visual order; this
+    // turns one line into logical order and keeps Latin/digit runs intact.
+    static QString reverseRtlText(const QString &text);
+    // The word-box form of the same rule: reverses one Arabic line in
+    // place and moves `spaceBefore` with it, so text and boxes agree.
+    static void reorderRtlWords(QVector<OcrWord> &words);
+    // MiB the script path needs free before it starts. The v5 rec
+    // replaces the v6 rec instead of adding to it, so the guard takes the
+    // larger of this and tierRunMiB(), never their sum. Public and static
+    // so the numbers are pinned by a test.
+    static qint64 scriptRunMiB(const QString &script);
+    // Parses the official ONNX package's inference.yml character_dict
+    // list. Public and static so the parser is pinned by a test.
+    static QVector<QString> parseDictYml(const QByteArray &raw, QString *error = nullptr);
+
     bool runtimeFound();
     QString runtimeInfo();
     bool canDownloadRuntime() const;
@@ -98,13 +154,14 @@ public:
     bool hasDownloads() const;
     QString downloadSizeText();
 
-    // Whether PP-OCRv6 can read the requested Tesseract language spec, for the
-    // tier that will actually run. No tier at all says no. Auto script mode is
-    // normally accepted (the common case is mixed Chinese/Latin, which v6 reads
-    // in one pass), except where the running tier cannot read what the installed
-    // packs might contain: tiny has no kana, so with Japanese installed an auto
-    // read stays on Tesseract. A manual spec that names a script the tier lacks
-    // says no, and OcrEngine keeps Tesseract for it.
+    // Whether PP-OCRv6 or an INSTALLED PP-OCRv5 script recognizer can read
+    // the requested Tesseract language spec, for the tier that will actually
+    // run. No tier at all says no. Auto script mode keeps the v6 rule here
+    // (the common case is mixed Chinese/Latin, which v6 reads in one pass,
+    // except where tiny cannot read kana and Japanese is installed);
+    // OcrEngine runs Tesseract OSD first when a v5 script model is installed
+    // and routes to it there. A manual spec that names a script neither can
+    // read says no, and OcrEngine keeps Tesseract for it.
     bool supportsLanguages(const QString &langs, bool autoScript) const;
     // The pure rule behind it: can THIS tier read the spec? Public and static so
     // the whole table, Japanese on small/medium included, is pinned by a test
@@ -129,6 +186,10 @@ public:
     void recognize(const QImage &img, Result cb);
     // Same recognition with glyph boxes for the editor's selectable text.
     void recognizeBoxes(const QImage &img, BoxResult cb);
+    // Recognition with one PP-OCRv5 script recognizer. Detection is the
+    // same PP-OCRv6 model; only the rec+dict pair changes.
+    void recognizeScript(const QImage &img, const QString &script, Result cb);
+    void recognizeScriptBoxes(const QImage &img, const QString &script, BoxResult cb);
 
     // Downloads what is missing: ONNX Runtime when no usable copy exists, then
     // the det, rec and dictionary files of the selected tier when that tier is
@@ -178,7 +239,15 @@ private:
     QPointer<QNetworkReply> m_reply;
     QPointer<QProcess> m_tar;
     QString m_downloadTier;
-    QList<int> m_queue; // file indices still to fetch (-1 = the runtime archive)
+    QString m_downloadScript;
+    struct FetchJob {
+        QString url;
+        QString dest;
+        qint64 bytes = 0;
+        QByteArray sha256;
+        bool runtime = false;
+    };
+    QList<FetchJob> m_queue;
     bool m_extractingRuntime = false;
     bool m_cancelled = false;
     qint64 m_doneBytes = 0;

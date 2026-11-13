@@ -3939,6 +3939,70 @@ void AppContext::devTestPaddleOcr()
     });
 }
 
+void AppContext::devTestOcrScripts()
+{
+    if (!devBuild())
+        return;
+    PaddleOcr *paddle = m_ocr->paddle();
+    if (!paddle) {
+        showToast(tr("Dev: OCR scripts: SKIP (not built)"));
+        return;
+    }
+    const bool routes = PaddleOcr::scriptForTesseractLanguages(QStringLiteral("kor"))
+                            == QStringLiteral("korean")
+                        && PaddleOcr::scriptForTesseractLanguages(QStringLiteral("ara+fas"))
+                               == QStringLiteral("arabic")
+                        && PaddleOcr::scriptForTesseractLanguages(QStringLiteral("rus+ukr"))
+                               == QStringLiteral("cyrillic")
+                        && PaddleOcr::scriptForTesseractLanguages(QStringLiteral("hin"))
+                               == QStringLiteral("devanagari")
+                        && PaddleOcr::scriptForTesseractLanguages(QStringLiteral("tam"))
+                               == QStringLiteral("tamil")
+                        && PaddleOcr::scriptForTesseractLanguages(QStringLiteral("tel"))
+                               == QStringLiteral("telugu")
+                        && PaddleOcr::scriptForTesseractLanguages(QStringLiteral("tha"))
+                               == QStringLiteral("thai")
+                        && PaddleOcr::scriptForTesseractLanguages(QStringLiteral("ell"))
+                               == QStringLiteral("greek")
+                        && PaddleOcr::scriptForTesseractLanguages(QStringLiteral("kor+jpn")).isEmpty()
+                        && PaddleOcr::scriptForTesseractLanguages(QStringLiteral("heb")).isEmpty();
+    const QVariantList states = paddle->scriptStates();
+    if (!routes || states.size() != 8) {
+        showToast(tr("Dev: OCR scripts: FAIL (routing or state table)"), true);
+        return;
+    }
+    QString installed;
+    for (const QVariant &v : states) {
+        if (v.toMap().value(QStringLiteral("state")).toString()
+            == QLatin1String("downloaded")) {
+            installed = v.toMap().value(QStringLiteral("id")).toString();
+            break;
+        }
+    }
+    if (installed.isEmpty()) {
+        showToast(tr("Dev: OCR scripts: PASS (routing; no script model installed)"));
+        return;
+    }
+    if (!paddle->ready()) {
+        showToast(tr("Dev: OCR scripts: PASS (routing), SKIP (no ONNX Runtime)"));
+        return;
+    }
+    paddle->recognizeScriptBoxes(
+        ocrBoxTestImage(), installed,
+        [this, installed](const QVector<OcrWord> &words, const QString &err) {
+            if (!err.isEmpty()) {
+                showToast(tr("Dev: OCR scripts: FAIL (%1)").arg(err), true);
+                return;
+            }
+            const bool ok = words.size() >= 4;
+            showToast(tr("Dev: OCR scripts: %1 (%2 read %3 glyphs)")
+                          .arg(ok ? QStringLiteral("PASS") : QStringLiteral("FAIL"),
+                               PaddleOcr::scriptName(installed))
+                          .arg(words.size()),
+                      !ok);
+        });
+}
+
 void AppContext::devTestOcrResult()
 {
     if (!devBuild())
@@ -7378,6 +7442,77 @@ void AppContext::runSmokeTest()
                              .arg(mapOk ? QStringLiteral("PASS") : QStringLiteral("FAIL"), running));
             smokeNext();
         });
+    });
+
+    // 3f3b2) PP-OCRv5 script routing, and the full det + script-rec pipeline
+    // when at least one script model is installed. A clean profile has none, so
+    // the routing/state half still runs and the read half is skipped.
+    m_smokeSteps.append([this] {
+        PaddleOcr *paddle = m_ocr->paddle();
+        if (!paddle) {
+            smokeLog(QStringLiteral("ocr scripts: SKIP (not built)"));
+            smokeNext();
+            return;
+        }
+        const bool routes = PaddleOcr::scriptForTesseractLanguages(QStringLiteral("kor"))
+                                == QStringLiteral("korean")
+                            && PaddleOcr::scriptForTesseractLanguages(QStringLiteral("ara+fas"))
+                                   == QStringLiteral("arabic")
+                            && PaddleOcr::scriptForTesseractLanguages(QStringLiteral("rus+ukr"))
+                                   == QStringLiteral("cyrillic")
+                            && PaddleOcr::scriptForTesseractLanguages(QStringLiteral("hin"))
+                                   == QStringLiteral("devanagari")
+                            && PaddleOcr::scriptForTesseractLanguages(QStringLiteral("tam"))
+                                   == QStringLiteral("tamil")
+                            && PaddleOcr::scriptForTesseractLanguages(QStringLiteral("tel"))
+                                   == QStringLiteral("telugu")
+                            && PaddleOcr::scriptForTesseractLanguages(QStringLiteral("tha"))
+                                   == QStringLiteral("thai")
+                            && PaddleOcr::scriptForTesseractLanguages(QStringLiteral("ell"))
+                                   == QStringLiteral("greek")
+                            && PaddleOcr::scriptForTesseractLanguages(QStringLiteral("kor+jpn"))
+                                   .isEmpty()
+                            && PaddleOcr::scriptForTesseractLanguages(QStringLiteral("heb"))
+                                   .isEmpty();
+        const QVariantList states = paddle->scriptStates();
+        QString installed;
+        for (const QVariant &v : states) {
+            if (v.toMap().value(QStringLiteral("state")).toString()
+                == QLatin1String("downloaded")) {
+                installed = v.toMap().value(QStringLiteral("id")).toString();
+                break;
+            }
+        }
+        if (!routes || states.size() != 8) {
+            smokeLog(QStringLiteral("ocr scripts: FAIL (routing or state table)"));
+            smokeNext();
+            return;
+        }
+        if (installed.isEmpty()) {
+            smokeLog(QStringLiteral("ocr scripts: PASS (routing; no script model installed)"));
+            smokeNext();
+            return;
+        }
+        if (!paddle->ready()) {
+            smokeLog(QStringLiteral("ocr scripts: PASS (routing), SKIP (no ONNX Runtime; %1)")
+                         .arg(installed));
+            smokeNext();
+            return;
+        }
+        paddle->recognizeScriptBoxes(
+            ocrBoxTestImage(), installed,
+            [this, installed](const QVector<OcrWord> &words, const QString &err) {
+                if (!err.isEmpty()) {
+                    smokeLog(QStringLiteral("ocr scripts: FAIL (%1)").arg(err));
+                } else {
+                    smokeLog(QStringLiteral("ocr scripts: %1 (%2, %3 glyphs)")
+                                 .arg(words.size() >= 4 ? QStringLiteral("PASS")
+                                                        : QStringLiteral("FAIL"),
+                                      installed)
+                                 .arg(words.size()));
+                }
+                smokeNext();
+            });
     });
 
     // 3f3c) OCR result model: the result window's text and line ranges must

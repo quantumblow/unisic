@@ -238,6 +238,16 @@ Item {
         onAccepted: App.paddleOcr.deleteDownloads()
     }
     UConfirmDialog {
+        id: scriptDeleteConfirm
+        property string scriptId: ""
+        property string scriptName: ""
+        title: qsTr("Delete the %1 model?").arg(scriptName)
+        text: qsTr("The recognition model and any partial download are removed. OCR for this script returns to Tesseract.")
+        confirmText: qsTr("Delete")
+        destructive: true
+        onAccepted: App.paddleOcr.deleteScriptDownloads(scriptId)
+    }
+    UConfirmDialog {
         id: helpDialog
         showCancel: false
         confirmText: qsTr("Close")
@@ -377,6 +387,14 @@ Item {
         return App.paddleOcr.runtimeFound && entry.id === App.paddleOcr.effectiveTier
                 ? qsTr("%1: %2, in use").arg(label).arg(state)
                 : qsTr("%1: %2").arg(label).arg(state)
+    }
+
+    // PP-OCRv5 script models. The state tokens are stable C++ values; the
+    // wording lives here so every catalog translates it like any other string.
+    function scriptStateLabel(state) {
+        if (state === "downloaded") return qsTr("Downloaded")
+        if (state === "partial") return qsTr("Interrupted")
+        return qsTr("Not downloaded")
     }
 
     // FPS dropdown options (15/30/45/60); snap a stored value to the nearest.
@@ -1308,7 +1326,7 @@ Item {
                         visible: App.paddleOcr.available
                         label: qsTr("OCR engine")
                         help: qsTr("Which engine reads text from a capture.")
-                        helpDetail: qsTr("Auto uses PaddleOCR when it can run and falls back to the built-in Tesseract otherwise. Tiny is included with Unisic, so Auto starts on PaddleOCR for Chinese and Latin text without a download; Japanese stays on Tesseract until Small or Medium is downloaded. PaddleOCR reads Chinese, Japanese and Latin-script text more accurately; Tesseract still covers the other scripts. Both run on this computer and nothing is uploaded.")
+                        helpDetail: qsTr("Auto uses PaddleOCR when it can run and falls back to the built-in Tesseract otherwise. Tiny is included with Unisic, so Auto starts on PaddleOCR for Chinese and Latin text without a download; Japanese stays on Tesseract until Small or Medium is downloaded. PaddleOCR reads Chinese, Japanese and Latin-script text with PP-OCRv6, and Korean, Arabic, Cyrillic, Thai, Devanagari, Tamil, Telugu and Greek with the PP-OCRv5 script models once downloaded; Tesseract covers everything else. Both run on this computer and nothing is uploaded.")
                         UComboBox {
                             width: 220
                             property var ids: ["auto", "tesseract", "paddle"]
@@ -1321,7 +1339,7 @@ Item {
                         available: App.paddleOcr.available && App.settings.ocrEngine !== "tesseract"
                         label: qsTr("PaddleOCR model")
                         help: qsTr("Model size and accuracy trade-off.")
-                        helpDetail: qsTr("Tiny is included with Unisic, so PaddleOCR works without a model download; it reads Chinese and Latin text but not Japanese, and it is the least accurate. Small is the recommended download: it also reads Japanese, and it takes about a second per page on a 4-core CPU. Medium is the most accurate and the largest, and holds about 1 GB of memory while it is loaded. Downloaded tiers are checked against their pinned SHA-256 and run offline. Until a downloaded tier is present, Tiny (included) does the work and this list says which one is in use.")
+                        helpDetail: qsTr("Tiny is included with Unisic, so PaddleOCR works without a model download; it reads Chinese and Latin text but not Japanese, and it is the least accurate. Small is the recommended download: it also reads Japanese, and it takes about a second per page on a 4-core CPU. Medium is the most accurate and the largest, and holds about 1 GB of memory while it is loaded. The script models below are separate downloads and only change recognition; detection always uses the PP-OCRv6 model selected here. Downloaded files are checked against their pinned SHA-256 and run offline. Until a downloaded tier is present, Tiny (included) does the work and this list says which one is in use.")
                         UComboBox {
                             width: 220
                             property var ids: ["tiny", "small", "medium"]
@@ -1430,11 +1448,89 @@ Item {
                             }
                         }
                     }
+                    SectionTitle {
+                        visible: App.paddleOcr.available && App.settings.ocrEngine !== "tesseract"
+                        text: qsTr("Other scripts (PP-OCRv5)")
+                    }
+                    Text {
+                        width: parent.width
+                        wrapMode: Text.WordWrap
+                        visible: App.paddleOcr.available && App.settings.ocrEngine !== "tesseract"
+                        text: qsTr("Detection still uses the PP-OCRv6 model selected above. Each PP-OCRv5 model adds recognition for one script plus English; a script whose model is not downloaded stays on Tesseract. Auto detects the script of each capture with the OSD data first.")
+                        color: Theme.textSecondary
+                        font.pixelSize: Theme.fontS
+                    }
+                    UButton {
+                        compact: true
+                        variant: "tonal"
+                        visible: App.paddleOcr.available && App.settings.ocrEngine !== "tesseract"
+                                 && App.paddleOcr.downloading
+                                 && App.paddleOcr.downloadingScript !== ""
+                        text: qsTr("Cancel")
+                        onClicked: App.paddleOcr.cancelDownload()
+                    }
+                    Column {
+                        width: parent.width
+                        spacing: Theme.spacingS
+                        visible: App.paddleOcr.available && App.settings.ocrEngine !== "tesseract"
+                        Repeater {
+                            model: App.paddleOcr.scriptStates
+                            delegate: Row {
+                                width: parent.width
+                                spacing: Theme.spacingM
+                                Column {
+                                    width: Math.max(120, parent.width - 190)
+                                    spacing: 1
+                                    Text {
+                                        width: parent.width
+                                        text: modelData.name
+                                        color: Theme.textPrimary
+                                        font.pixelSize: Theme.fontS
+                                    }
+                                    Text {
+                                        width: parent.width
+                                        text: page.scriptStateLabel(modelData.state)
+                                        color: modelData.state === "downloaded"
+                                               ? Theme.textPrimary : Theme.textSecondary
+                                        font.pixelSize: Theme.fontS
+                                        wrapMode: Text.WordWrap
+                                    }
+                                }
+                                Row {
+                                    spacing: Theme.spacingS
+                                    UButton {
+                                        compact: true
+                                        variant: "tonal"
+                                        iconName: "folder-cloud"
+                                        visible: modelData.state !== "downloaded"
+                                        enabled: !App.paddleOcr.downloading
+                                        text: App.paddleOcr.downloadingScript === modelData.id
+                                              ? qsTr("Downloading… %1%").arg(Math.round(App.paddleOcr.progress * 100))
+                                              : qsTr("Download (%1)").arg(App.paddleOcr.scriptDownloadSizeText(modelData.id))
+                                        onClicked: App.paddleOcr.downloadScript(modelData.id)
+                                    }
+                                    UButton {
+                                        compact: true
+                                        variant: "tonal"
+                                        iconName: "edit-delete"
+                                        visible: modelData.state !== "missing"
+                                        enabled: !App.paddleOcr.downloading
+                                        text: qsTr("Delete")
+                                        onClicked: {
+                                            scriptDeleteConfirm.scriptId = modelData.id
+                                            scriptDeleteConfirm.scriptName = modelData.name
+                                            scriptDeleteConfirm.open()
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     SectionTitle { text: qsTr("Tesseract") }
                     SettingRow {
                         label: qsTr("Detect languages automatically")
                         help: qsTr("Detects the script and recognizes with the matching language pack.")
-                        helpDetail: qsTr("No need to know Tesseract language codes. With the OSD data installed (the “osd” Tesseract pack), Unisic detects the script of each capture - Latin, Arabic, Hebrew, Chinese/Japanese/Korean, Devanagari, and so on - and recognizes with just that script's installed packs, which is faster and more accurate than loading them all. Without the OSD pack it falls back to loading every installed pack. Install the packs for the scripts you use.")
+                        helpDetail: qsTr("No need to know Tesseract language codes. With the OSD data installed (the “osd” Tesseract pack), Unisic detects the script of each capture - Latin, Arabic, Hebrew, Chinese/Japanese/Korean, Devanagari, and so on - and recognizes with just that script's installed packs, which is faster and more accurate than loading them all. A downloaded PP-OCRv5 script model takes that script first. Without the OSD pack it falls back to loading every installed pack. Install the packs for the scripts you use.")
                         USwitch { checked: App.settings.ocrAutoLanguage; onToggled: (c) => App.settings.ocrAutoLanguage = c }
                     }
                     SettingRow {
@@ -4584,6 +4680,7 @@ Item {
                         UButton { compact: true; variant: "tonal"; text: qsTr("Overlay preview"); onClicked: App.devTestOverlayPreview() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("OCR boxes"); onClicked: App.devTestOcrBoxes() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("PaddleOCR"); onClicked: App.devTestPaddleOcr() }
+                        UButton { compact: true; variant: "tonal"; text: qsTr("OCR scripts"); onClicked: App.devTestOcrScripts() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("OCR result"); onClicked: App.devTestOcrResult() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("OCR result image"); onClicked: App.devTestOcrResultImage() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("OCR result window"); onClicked: App.devTestOcrResultWindow() }

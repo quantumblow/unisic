@@ -133,15 +133,15 @@ QString langsForScript(const QString &script, const QStringList &available)
     return picked.join(QLatin1Char('+'));
 }
 
-// Detect the image's script via osd.traineddata and narrow `availableSpec`
-// (the "+"-joined load-all list) to the langpacks for that script. Returns ""
-// on any failure - no OSD data, low confidence, nothing installed - so the
-// caller falls back to load-all. Runs on the worker thread.
-QString resolveScriptLangs(const QImage &img, const QString &availableSpec)
+// Detect the image's script via osd.traineddata. Returns "" on any failure -
+// no OSD data, low confidence - so the caller keeps its fallback. Runs on the
+// worker thread. The M5 router uses the raw name to pick a PP-OCRv5 rec; the
+// Tesseract path narrows it to installed langpacks.
+QString detectScriptName(const QImage &img)
 {
     const QString osdDir = tessdataDirWith(QStringLiteral("osd"));
     if (osdDir.isEmpty())
-        return {}; // no OSD model → can't detect; load-all fallback
+        return {};
     tesseract::TessBaseAPI api;
     if (api.Init(osdDir.toUtf8().constData(), "osd") != 0)
         return {};
@@ -158,7 +158,15 @@ QString resolveScriptLangs(const QImage &img, const QString &availableSpec)
     const QString script = (ok && scriptName) ? QString::fromLatin1(scriptName) : QString();
     api.End();
     if (script.isEmpty() || scriptConf <= 0.f)
-        return {}; // no detection → load-all
+        return {};
+    return script;
+}
+
+QString resolveScriptLangs(const QImage &img, const QString &availableSpec)
+{
+    const QString script = detectScriptName(img);
+    if (script.isEmpty())
+        return {};
     return OcrEngine::languagesForScript(script, availableSpec);
 }
 
@@ -167,7 +175,7 @@ QString resolveScriptLangs(const QImage &img, const QString &availableSpec)
 // tracking the text-line index (for per-line underlines) and word boundaries
 // (so a copied range keeps its spaces). No barcode short-circuit - a QR
 // payload has no glyph geometry.
-OcrBoxResult runOcrBoxes(QImage img, QString langs, bool autoScript,
+OcrBoxResult runOcrBoxes(QImage img, QString langs, bool autoScript, QString knownScript,
                          std::shared_ptr<std::atomic_bool> cancelled)
 {
     OcrBoxResult r;
@@ -179,8 +187,14 @@ OcrBoxResult runOcrBoxes(QImage img, QString langs, bool autoScript,
         return r;
     // Auto-language: detect the script (OSD) and narrow to its langpacks - far
     // more accurate than loading every installed pack at once. Empty result
-    // keeps `langs` (the full load-all spec) as the fallback.
-    if (autoScript) {
+    // keeps `langs` (the full load-all spec) as the fallback. `knownScript`
+    // comes from the M5 router, which already ran OSD to choose an engine, so
+    // the Tesseract fallback does not run it a second time.
+    if (!knownScript.isEmpty()) {
+        const QString picked = OcrEngine::languagesForScript(knownScript, langs);
+        if (!picked.isEmpty())
+            langs = picked;
+    } else if (autoScript) {
         const QString picked = resolveScriptLangs(img, langs);
         if (!picked.isEmpty())
             langs = picked;
@@ -241,7 +255,7 @@ OcrBoxResult runOcrBoxes(QImage img, QString langs, bool autoScript,
 // `cancelled` is flipped by ~OcrEngine so a job in flight aborts at its next
 // checkpoint on quit instead of pinning the global thread pool (whose
 // destructor waits) until tesseract finishes; nobody consumes the result then.
-OcrResult runOcr(QImage img, QString langs, bool autoScript,
+OcrResult runOcr(QImage img, QString langs, bool autoScript, QString knownScript,
                  std::shared_ptr<std::atomic_bool> cancelled)
 {
     OcrResult r;
@@ -263,7 +277,11 @@ OcrResult runOcr(QImage img, QString langs, bool autoScript,
     if (cancelled->load())
         return r;
     // Auto-language: narrow to the detected script's langpacks (see runOcrBoxes).
-    if (autoScript) {
+    if (!knownScript.isEmpty()) {
+        const QString picked = OcrEngine::languagesForScript(knownScript, langs);
+        if (!picked.isEmpty())
+            langs = picked;
+    } else if (autoScript) {
         const QString picked = resolveScriptLangs(img, langs);
         if (!picked.isEmpty())
             langs = picked;
@@ -389,33 +407,121 @@ QString OcrEngine::languagesForScript(const QString &script, const QString &avai
     return langsForScript(script, availableSpec.split(QLatin1Char('+'), Qt::SkipEmptyParts));
 }
 
-void OcrEngine::recognize(const QImage &img, const QString &langs, bool autoScript, Result cb)
+void OcrEngine::startTesseract(const QImage &img, const QString &langs, bool autoScript,
+                               const QString &knownScript, Result cb)
 {
-    if (usePaddle(langs, autoScript)) {
-        m_paddle->recognize(img, std::move(cb));
-        return;
-    }
     auto *fw = new QFutureWatcher<OcrResult>(this);
     connect(fw, &QFutureWatcher<OcrResult>::finished, this, [fw, cb]() {
         const OcrResult r = fw->result();
         fw->deleteLater();
         cb(r.text, r.error);
     });
-    fw->setFuture(QtConcurrent::run(runOcr, img, langs, autoScript, m_cancelled));
+    fw->setFuture(QtConcurrent::run(runOcr, img, langs, autoScript, knownScript, m_cancelled));
 }
 
-void OcrEngine::recognizeBoxes(const QImage &img, const QString &langs, bool autoScript,
-                               BoxResult cb)
+void OcrEngine::startTesseractBoxes(const QImage &img, const QString &langs, bool autoScript,
+                                    const QString &knownScript, BoxResult cb)
 {
-    if (usePaddle(langs, autoScript)) {
-        m_paddle->recognizeBoxes(img, std::move(cb));
-        return;
-    }
     auto *fw = new QFutureWatcher<OcrBoxResult>(this);
     connect(fw, &QFutureWatcher<OcrBoxResult>::finished, this, [fw, cb]() {
         const OcrBoxResult r = fw->result();
         fw->deleteLater();
         cb(r.words, r.error);
     });
-    fw->setFuture(QtConcurrent::run(runOcrBoxes, img, langs, autoScript, m_cancelled));
+    fw->setFuture(QtConcurrent::run(runOcrBoxes, img, langs, autoScript, knownScript,
+                                    m_cancelled));
+}
+
+void OcrEngine::recognize(const QImage &img, const QString &langs, bool autoScript, Result cb)
+{
+    // M5: a v5 script recognizer is installed, so let OSD tell this page's
+    // script apart before choosing v5, v6 or Tesseract. Without OSD (or with no
+    // script model) the v6/Tesseract routing below is unchanged.
+    if (m_backend != QLatin1String("tesseract") && autoScript && m_paddle->ready()
+        && m_paddle->hasInstalledScripts() && scriptDetectionAvailable()) {
+        auto *fw = new QFutureWatcher<QString>(this);
+        connect(fw, &QFutureWatcher<QString>::finished, this, [this, fw, img, langs, cb]() {
+            const QString osd = fw->result();
+            fw->deleteLater();
+            if (m_cancelled->load())
+                return;
+            const QString script = PaddleOcr::scriptForOsd(osd);
+            if (!script.isEmpty()) {
+                if (m_paddle->scriptInstalled(script))
+                    m_paddle->recognizeScript(img, script, cb);
+                else
+                    startTesseract(img, langs, true, osd, cb);
+                return;
+            }
+            if (osd.isEmpty()) {
+                if (usePaddle(langs, true))
+                    m_paddle->recognize(img, cb);
+                else
+                    startTesseract(img, langs, false, QString(), cb);
+                return;
+            }
+            const bool japanese = osd == QLatin1String("Japanese")
+                                  || osd == QLatin1String("Katakana")
+                                  || osd == QLatin1String("Hiragana");
+            if (osd == QLatin1String("Latin") || osd == QLatin1String("Han")
+                || (japanese && PaddleOcr::tierReadsJapanese(m_paddle->effectiveTier()))) {
+                m_paddle->recognize(img, cb);
+                return;
+            }
+            startTesseract(img, langs, true, osd, cb);
+        });
+        fw->setFuture(QtConcurrent::run(detectScriptName, img));
+        return;
+    }
+    if (usePaddle(langs, autoScript)) {
+        m_paddle->recognize(img, std::move(cb));
+        return;
+    }
+    startTesseract(img, langs, autoScript, QString(), std::move(cb));
+}
+
+void OcrEngine::recognizeBoxes(const QImage &img, const QString &langs, bool autoScript,
+                               BoxResult cb)
+{
+    if (m_backend != QLatin1String("tesseract") && autoScript && m_paddle->ready()
+        && m_paddle->hasInstalledScripts() && scriptDetectionAvailable()) {
+        auto *fw = new QFutureWatcher<QString>(this);
+        connect(fw, &QFutureWatcher<QString>::finished, this, [this, fw, img, langs, cb]() {
+            const QString osd = fw->result();
+            fw->deleteLater();
+            if (m_cancelled->load())
+                return;
+            const QString script = PaddleOcr::scriptForOsd(osd);
+            if (!script.isEmpty()) {
+                if (m_paddle->scriptInstalled(script))
+                    m_paddle->recognizeScriptBoxes(img, script, cb);
+                else
+                    startTesseractBoxes(img, langs, true, osd, cb);
+                return;
+            }
+            if (osd.isEmpty()) {
+                if (usePaddle(langs, true))
+                    m_paddle->recognizeBoxes(img, cb);
+                else
+                    startTesseractBoxes(img, langs, false, QString(), cb);
+                return;
+            }
+            const bool japanese = osd == QLatin1String("Japanese")
+                                  || osd == QLatin1String("Katakana")
+                                  || osd == QLatin1String("Hiragana");
+            if (osd == QLatin1String("Latin") || osd == QLatin1String("Han")
+                || (japanese && PaddleOcr::tierReadsJapanese(m_paddle->effectiveTier()))) {
+                m_paddle->recognizeBoxes(img, cb);
+                return;
+            }
+            startTesseractBoxes(img, langs, true, osd, cb);
+        });
+        fw->setFuture(QtConcurrent::run(detectScriptName, img));
+        return;
+    }
+    if (usePaddle(langs, autoScript)) {
+        m_paddle->recognizeBoxes(img, std::move(cb));
+        return;
+    }
+    startTesseractBoxes(img, langs, autoScript, QString(), std::move(cb));
 }

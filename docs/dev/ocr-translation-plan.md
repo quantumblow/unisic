@@ -817,6 +817,34 @@ official PaddleOCR release assets.
 Large enough to deserve its own round; do it after M2 and M3 so the result window
 and translation paths are settled.
 
+**Implementation (2026-11-13).** Eight revision-pinned PP-OCRv5 mobile
+recognizers (Korean, Arabic, Cyrillic, Thai, Devanagari, Tamil, Telugu, Greek),
+each `inference.onnx` + `inference.yml` with the dictionary in
+`PostProcess.character_dict`, about 69 MB total. Storage is
+`<AppDataLocation>/paddleocr/scripts/<script>/`; detection stays the v6 det of
+`effectiveTier()`. `supportsLanguages()` routes an explicit spec to an installed
+script model, `auto` runs Tesseract OSD first when a script model is installed,
+and mixed or unsupported specs stay on Tesseract. Arabic is reordered from
+visual to logical order. `UNISIC_PADDLE_MODEL_BASE` keeps the v6
+`<base><tier>/` layout and adds `<base>v5/<script>/`. Settings has the eight-row
+scripts group; F8 `ocr scripts`, the Developer OCR scripts button and
+`PaddleOcrTest` cover the routing/state table, the yml parser, the RTL rule and
+the memory table. Verification (2026-11-13): build + `ctest` 28/28 in
+`unisic-zh-build` with `QT_QPA_PLATFORM=offscreen`; F8 under Xvfb +
+`dbus-run-session` 112 PASS, 5 FAIL, 31 SKIP, with both new steps `paddleocr:
+PASS (8 glyphs; script map PASS; tiny in use)` and `ocr scripts: PASS (korean, 8
+glyphs)`. The five FAILs are the known container gaps (WebP encoder, portal
+twice, ffmpeg twice). The Settings scripts group, a Korean Download, a resumed
+`.part` download (final SHA-256 matched) and the Delete confirmation were
+checked under the same Xvfb session at 1280x800. The AppImage was rebuilt from
+this tree in `unisic-appimage-env:latest` with `UNISIC_BUILD_NUMBER=20261113`:
+175,299,064 bytes, sha256
+`1ae1e2ae44b567a4cd2eed110ac8a1e925e06cb2a3b6eb23d192219a4436b0d9`, all 10
+gates ON, `--version` answers 0.8.9, `Other scripts (PP-OCRv5)` is in the
+binary, and it starts under Xvfb + `dbus-run-session` and exits cleanly on
+SIGTERM. `dist/SHA256SUMS` was regenerated; `dist/` is gitignored. The real
+desktop pass below is still unticked; this paragraph is not a substitute for it.
+
 ## M6. Packaging and quality (3-4 days, spread over the rounds)
 
 **T6.1** Flatpak: download the models inside a real sandbox and run OCR there
@@ -917,7 +945,8 @@ the English README). The site copy stays T6.7.
 8. T6.x release chores before 0.8.10: T6.1 and T6.3 need a real machine, T6.7 waits
    for every string to freeze, T6.8 is the Nix fork pin and T6.9 the README plus
    Chinese README. T6.2, T6.4, T6.5 and T6.6 are done (2026-11-13).
-9. M5 last, on its own; the next round is M5.
+9. M5 (landed 2026-11-13) on its own; the real desktop pass and the AppImage
+   are still open, then M6 is next.
 
 Every milestone ends with: build, `ctest` (28 + new tests), F8 on a desktop, a
 rebuilt AppImage, a CHANGELOG entry under the current beta heading (EN/PL), and the
@@ -962,7 +991,7 @@ drops by one. Treat the other FAILs as the known container gaps
 ## Manual verification pass (before the 0.8.10 release)
 
 Everything below needs a real desktop or the real machine; the container covers the
-logic and the windows only. Run it once M2/M3/M4/M4.5 have landed, and add their
+logic and the windows only. Run it once M2/M3/M4/M4.5/M5 have landed, and add their
 acceptance lines to the Desktop block as each milestone closes. Tick a line only with
 the compositor or OS named next to it: "verified in a container" is not a tick here.
 
@@ -1030,6 +1059,35 @@ the compositor or OS named next to it: "verified in a container" is not a tick h
       on a Polish UI the default target is Polish until another one is typed, and
       a typed target survives a UI-language switch; the tray entry says OCR
       region… and opens the OCR pill.
+
+### M5: PP-OCRv5 script models (needs a real desktop, unticked)
+
+- [ ] Settings > General > Text recognition lists all eight script models with
+      Download (8-13 MB) and a state. Download Korean, OCR a Korean page, then
+      Delete it and confirm that page falls back to Tesseract.
+- [ ] Download all eight and OCR one real page per script: Korean, Arabic,
+      Cyrillic, Thai, Devanagari, Tamil, Telugu, Greek. No page is reversed or
+      transliterated into Latin.
+- [ ] Auto on a Korean page with the Korean model installed and the OSD pack
+      present uses PaddleOCR; remove the model and the same page goes to
+      Tesseract. Auto on a Chinese page still uses PP-OCRv6.
+- [ ] Arabic: Copy all and Translate send the text in reading order (a known
+      phrase comes out right, not mirrored), the line boxes still match their
+      glyphs, and the result window renders right to left.
+- [ ] A page mixing Korean and Chinese: explicit `kor+chi_sim` stays on
+      Tesseract instead of one v5 recognizer producing garbage.
+- [ ] Cancel a script download partway and press Download again: the bar
+      resumes from the `.part`, the verified rec+yml replace it, and Delete
+      removes a leftover `.part`. Point `UNISIC_PADDLE_MODEL_BASE` at a mirror
+      with the `v5/<script>/` layout: the download still verifies; a wrong file
+      fails with "does not match the expected file".
+- [ ] With a script model installed, OCR still works on a machine near the
+      memory limit: the refusal names the 320 MiB script need instead of
+      crashing in ORT.
+- [ ] 100%, 125% and 150% scale plus a 1060x700 window: the script rows, their
+      buttons and the delete confirmation are not clipped.
+- [ ] Windows 11: Settings > General > Text recognition shows no script rows
+      and Tesseract still reads OCR (`PaddleOcr::available()` false).
 
 ### Desktop, X11 session (best-effort second target)
 

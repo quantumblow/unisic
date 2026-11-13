@@ -64,6 +64,10 @@ public:
 
 private:
     bool usePaddle(const QString &langs, bool autoScript) const;
+    void startTesseract(const QImage &img, const QString &langs, bool autoScript,
+                        const QString &knownScript, Result cb);
+    void startTesseractBoxes(const QImage &img, const QString &langs, bool autoScript,
+                             const QString &knownScript, BoxResult cb);
 
     PaddleOcr *m_paddle = nullptr;
     QString m_backend = QStringLiteral("auto");
