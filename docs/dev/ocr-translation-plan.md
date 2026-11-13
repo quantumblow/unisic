@@ -497,61 +497,133 @@ hit-testing inside the text), and a word request carries its line as context.
   ON, the new source strings are in the binary, `--version` answers 0.8.9, and
   it starts under an isolated offscreen profile and exits cleanly on SIGTERM.
 
-## M4.6. Put a word or partial translation on the picture (investigated 2026-11-13, not started)
+## M4.6. Word and partial-line translation on the picture (hybrid) - DESIGNED 2026-11-13, NEXT ROUND
 
-After the M4.5 real-machine try: selecting a word translates correctly, but the
-answer only fills the pane. The question is whether a partial selection can also
-appear over the picture, and what that costs.
+Status: design settled, implementation not started. The next session starts here.
 
-**It can: the geometry already exists.** Both engines emit `OcrWord` per glyph
-(PaddleOCR tokens cut at token midpoints, Tesseract at `RIL_SYMBOL`), with
-`rect`, `line` and `spaceBefore`; `OcrResultController::setResult()` rebuilds
-`m_text` from those glyphs but currently throws the per-glyph boxes away. Kept as
-`m_glyphs` (`{start, length, rect, line}` into the same `m_text`), a partial
-selection maps to exact character boxes, and `translatedLineMap()` already turns
-`{text,x,y,width,height,start,length}` entries into covers with sampled colours,
-fitted font, overshoot, RTL and overflow. QML draws `translatedLines` without
-knowing whether an entry is a line or a word, so the picture path needs no new
-delegate; `composeOverlay()` and `lineAt(translated=true)` follow the same list.
-The partial path is one function: `startPartialTranslation()` currently sets
-`translatedLines` empty and `translationPartialText` true.
+Goal: after M4.5 a double-clicked word (or any partial-line selection) translates
+into the pane only. The answer should also appear over the picture: replace the
+selected glyphs in place when the translation is readable there, and otherwise
+show a themed callout anchored to the selection. Whole-line selections keep the
+M3 numbered path and covers unchanged.
 
-**Real-time is a small addition, not a protocol change.** A partial translation
-is one request; while it streams, the existing 60 ms throttle can refresh one
-cover from `m_streamText`, so the word box fills as the answer arrives. Fitting
-the font on every delta can make the text jump; update the text every tick and
-re-fit at the end, or re-fit at a slower fixed cadence.
+### Settled choices
 
-**Two shapes to choose from:**
+- **Hybrid presentation.** In-place glyph cover when the fitted text is readable
+  at the selection; anchored callout otherwise.
+- **Screen-only.** Partial covers and callouts never enter Save image or Copy
+  image; the saved composite keeps whole-line covers only. The window says so.
+- **Covers are single-line only.** A selection touching more than one OCR line
+  uses one callout for the whole answer. Splitting a model answer across line
+  fragments is guesswork and is out of scope.
+- **Streaming shows the callout immediately**, then at Done the answer becomes a
+  cover if it fits; otherwise the callout stays with the final text. No
+  per-delta font resizing.
+- **Still not a page translation.** `translationPartialText` stays true, and the
+  "service did not translate line by line" note must not appear for a partial
+  translation (it currently does; fix it in this round).
 
-- **In-place glyph cover (2-3 days).** Cover exactly the selected glyphs, one
-  cover per line fragment, and draw the translated fragment there. Reuses the
-  M3 map and composite. Costs: store `m_glyphs` and tests (0.5 day), partial
-  map with word grouping and multi-line grouping (0.5-1 day), streaming and fit
-  policy (0.5 day), QML/composite/F8/strings/docs (0.5-1 day). Risks: a long
-  translation in a narrow word box shrinks to the 5 px floor and becomes a dot
-  rather than readable text; a selection inside one multi-character glyph cannot
-  be split exactly; multi-word and multi-line selections return one answer that
-  has to be split across covers or kept as one union cover; saving the picture
-  would bake a word cover into the file unless covers gain a screen-only flag.
-- **Callout anchored to the selection (0.5-1 day).** Draw a small themed popup
-  in the picture pane at the selection rectangle, with the answer and the
-  source fragment. No image pixels change, no fit problem, nothing extra lands
-  in Save/Copy image. This is the common word-lookup shape and the cheapest way
-  to make the answer appear "on the picture area" without pretending the page
-  was rewritten. The M4.5 note would stay true; it only stops saying the answer
-  is pane-only.
+### Data model
 
-**Recommendation:** callout first if the goal is the double-click word lookup,
-because it is cheap and never misrepresents the page. In-place glyph covers are
-feasible and reuse most of M3, but they need a readability decision (grow into
-the line's whitespace, clip with the overflow dot, or fall back to the callout
-when the text does not fit). A hybrid (word-sized cover when it fits, callout
-otherwise) is the best result at roughly 3-4 days. Whatever is chosen, the
-saved picture should keep whole-line covers only unless a screen-only flag is
-added.
+- `OcrResultController::setResult()` keeps a per-glyph list built in the same
+  pass as `m_text`: `{start, length, rect, line, spaceBefore}` indexing `m_text`.
+  Both engines already emit one `OcrWord` per glyph, so no OCR change is needed.
+- `m_partialRange` is the pane selection; `m_partialFragments` is one entry per
+  OCR line the selection touches, `{start, length, rect}`, with `rect` the union
+  of the selected glyphs on that line, padded and overshot like a line cover and
+  capped at the neighbour gutters with the M3 logic.
+- Presentation state: `partialPresentation` (`pane` | `cover` | `callout`), plus
+  `partialCallout` `{source, translation, x, y, width, height}` in IMAGE pixels
+  for QML to place. `translatedLines` carries the cover in cover mode.
 
-Not scheduled: the next round is T6.x. Add this as M4.6 when it is picked up.
+### Presentation decision
+
+At Done, and again when the target changes:
+
+1. No fragment: `pane`, no overlay.
+2. More than one fragment: `callout`, anchored at the first fragment.
+3. One fragment: run `translatedLineMap({fragment}, {answer}, image, &text)` and
+   read the fitted size from its entry. Use `cover` when the size is at least
+   `kMinPartialCoverPixelSize` (10 image px) and the entry is not `overflow`;
+   otherwise `callout`.
+4. While the request streams: `callout` with the partial answer, so the user sees
+   it immediately; the decision above runs at the end. A very fast answer may
+   flash the callout before the cover; acceptable, and the delay can be raised
+   if it looks bad in practice.
+
+### Rendering
+
+- **Cover:** the normal `translatedLines` delegate already draws it. The entry
+  carries `screenOnly: true`, and `composeOverlay()` skips entries with that
+  flag, so Save/Copy image cannot bake a word cover into the page.
+- **Callout:** an Item inside `imagePane`, above the picture and boxes, placed at
+  `holderX + rect.x * renderScale` / `holderY + rect.y * renderScale`, clamped to
+  the pane. Below the fragment, flipped above when there is no room; width at
+  most 320 screen px, wraps, themed surface and border, translation in the
+  primary colour and the source fragment in the secondary colour. Hidden on
+  Original, on a new result, on Cancel and while the privacy notice is open.
+  It follows zoom and pan because it is positioned from `renderScale` and
+  `holderX`/`holderY`.
+- **Hit testing:** the cover is a normal entry with `sourceStart`/`sourceLength`,
+  so `lineAt(translated=true)`, pane mapping and selection stay exact. The
+  callout is read-only and does not take clicks.
+
+### Window notes and strings
+
+Replace the M4.5 pane-only note with `translationPartialText` plus the
+presentation:
+
+- cover: "Translated the selected text on the picture."
+- callout: "The selection is too small for the translation to fit, so it is shown in a callout."
+- both: "Word and partial-line translations are shown on screen only. Save image keeps the page."
+
+Exact wording at implementation, translated in all eight catalogs.
+
+### Tests, F8 and Developer
+
+- `OcrResultTest`: glyph ranges index `m_text`; a whole-word selection makes one
+  `screenOnly` cover when the answer fits; a long answer makes a callout instead;
+  a multi-line partial selection makes one callout; `composeOverlay()` skips
+  `screenOnly`; streaming updates the callout text.
+- F8 `translation partial overlay` step and `devTestTranslationPartialOverlay`
+  button, on top of the synthetic result, with a preview seam that applies a
+  fixed answer without a network. Check the cover and callout decisions.
+- Developer button opens the window with a short answer (cover) and a long answer
+  (callout), so the two presentations can be checked by eye.
+- Eight catalogs, CHANGELOG EN/PL under 0.8.10, and the `src/ocr/` architecture
+  note.
+
+### Files
+
+`src/ocr/OcrResultController.{h,cpp}` (glyphs, fragments, decision, preview
+seam), `qml/OcrResultWindow.qml` (callout, notes, `screenOnly`), `src/AppContext.h`
+(new dev action), `src/diag/SmokeTests.cpp` (F8 and dev), `tests/OcrResultTest.cpp`,
+`i18n/unisic_*.ts`, `resources/CHANGELOG.md`, `docs/dev/architecture.md`, this plan.
+
+### Acceptance
+
+- Double-click a word and Translate: a readable translation appears over that
+  word; a long one appears in a callout anchored to it, both live while streaming.
+- A multi-word selection on one line takes one cover or one callout; a selection
+  crossing a line boundary takes one callout.
+- Whole-line selections and the M4.5 multi-select still use numbered covers.
+- Save image and Copy image contain no word cover or callout; whole-line covers
+  are still saved.
+- Zoom, pan, Original/Translation and a new result leave no stale overlay.
+
+### Estimate
+
+3-4 days: 0.5-1 day glyph list plus tests, 1 day fragment/cover map and the fit
+decision plus the composite flag, 1 day callout QML and streaming, 0.5-1 day
+F8/Developer/strings/docs.
+
+### Start here
+
+Branch `feat/ocr-m4.6` from local `dev` at this commit. Read
+`OcrResultController::setResult()` (the glyph rebuild),
+`startPartialTranslation()` and `translatedLineMap()` first. First commit:
+`m_glyphs` plus a test that every glyph range indexes `m_text`; then the fragment
+map and the fit decision, then the QML callout.
 
 ## M5. The other scripts' recognizers (5-8 days, D5 settled: own round)
 
@@ -639,9 +711,11 @@ ships WITH 0.8.10 as one edit, version bump included. The files that need it the
 4. M4 after M3 (the Test connection button uses the same request path as Translate).
 5. M4.5 after M4: it touches only the result window and the controller, and the
    X11 pass showed both gaps, so do not fold it into M4's settings/privacy work.
-6. M6 tasks ride along with whichever milestone they belong to; the packaging ones
-   (T6.1, T6.2, T6.3) close a round.
-7. M5 last, on its own.
+6. M4.6 next: the hybrid word/partial-line overlay, designed above. It builds on
+   the same result-window/controller boundary and is the next coding round.
+7. T6.x release chores (T6.1, T6.3, T6.4, T6.5, T6.6, T6.7) after M4.6 and before
+   0.8.10; T6.2 is already done.
+8. M5 last, on its own.
 
 Every milestone ends with: build, `ctest` (27 + new tests), F8 on a desktop, a
 rebuilt AppImage, a CHANGELOG entry under the current beta heading (EN/PL), and the
@@ -716,12 +790,11 @@ the compositor or OS named next to it: "verified in a container" is not a tick h
       line split at a sentence boundary still lands in its one cover, a failing chunk
       leaves the finished lines with the failed range named, and "Translating… 2/3" with
       one dot per chunk is visible while it runs.
-- [ ] M4 (landed 2026-11-13; F8 `translation connection`, `translation privacy`,
-      `settings round-trip` and `settings secrets` PASS offscreen, a desktop run is still
+- [x] M4 (landed, verified 2026-11-13 on Ubuntu X11 GNOME; a Wayland run is still
       open): Test connection against a real endpoint, an export without secrets, the
       first-send host notice.
-- [ ] M4.5 (landed 2026-11-13; F8 `translation selection` PASS offscreen, a desktop run
-      is still open): Ctrl+click two non-adjacent lines and Copy selection takes both,
+- [x] M4.5 (landed, verified 2026-11-13 on Ubuntu X11 GNOME; a Wayland run is still
+      open): Ctrl+click two non-adjacent lines and Copy selection takes both,
       double-click a word and Translate sends only that word (shown in the pane, no cover
       over its line), a whole-line selection still paints covers, and Esc/Ctrl+A clear or
       extend the set.
