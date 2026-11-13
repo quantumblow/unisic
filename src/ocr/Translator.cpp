@@ -494,6 +494,14 @@ QString Translator::takeSseDeltas(QByteArray &buffer, bool *finished, QString *e
         const QJsonDocument doc = QJsonDocument::fromJson(payload, &parseError);
         if (parseError.error != QJsonParseError::NoError || !doc.isObject())
             continue;
+        // `finish_reason` is the other end-of-answer marker some servers send
+        // instead of, or before, [DONE].
+        const QJsonArray choices = doc.object().value(QStringLiteral("choices")).toArray();
+        if (finished && !choices.isEmpty()) {
+            const QJsonObject choice = choices.first().toObject();
+            if (choice.value(QStringLiteral("finish_reason")).isString())
+                *finished = true;
+        }
         QString frameError;
         const QString delta = parseStreamDelta(doc.object(), &frameError);
         if (!frameError.isEmpty()) {
@@ -670,6 +678,7 @@ void Translator::translateStreamingTo(const QUrl &url, const QString &model, con
         QByteArray buffer;
         QString text;
         QString error;
+        bool sawDone = false;
     };
     auto state = std::make_shared<StreamState>();
 
@@ -683,7 +692,9 @@ void Translator::translateStreamingTo(const QUrl &url, const QString &model, con
         // error argument, so it gets a local one and the state keeps the last
         // non-empty message.
         QString frameError;
-        const QString deltas = Translator::takeSseDeltas(state->buffer, nullptr, &frameError);
+        bool finished = false;
+        const QString deltas = Translator::takeSseDeltas(state->buffer, &finished, &frameError);
+        state->sawDone = state->sawDone || finished;
         if (!frameError.isEmpty())
             state->error = frameError;
         if (deltas.isEmpty())
@@ -701,7 +712,9 @@ void Translator::translateStreamingTo(const QUrl &url, const QString &model, con
             // A final frame without a trailing newline still counts.
             state->buffer += '\n';
             QString frameError;
-            const QString deltas = Translator::takeSseDeltas(state->buffer, nullptr, &frameError);
+            bool finished = false;
+            const QString deltas = Translator::takeSseDeltas(state->buffer, &finished, &frameError);
+            state->sawDone = state->sawDone || finished;
             if (!frameError.isEmpty())
                 state->error = frameError;
             if (!deltas.isEmpty()) {
@@ -740,9 +753,15 @@ void Translator::translateStreamingTo(const QUrl &url, const QString &model, con
             done({}, Translator::tr("Translation failed: %1").arg(state->error), false);
             return;
         }
+        if (networkError != QNetworkReply::NoError && !state->sawDone) {
+            // The connection died before the answer's own end marker: a partial
+            // answer is not a translation, so let the caller retry the chunk.
+            done({}, Translator::tr("Translation failed: %1").arg(errorString), true);
+            return;
+        }
         if (!state->text.isEmpty()) {
-            // Some endpoints end the stream without [DONE]; the text is still
-            // the whole answer.
+            // Some endpoints end the stream without [DONE] but close cleanly;
+            // the text is still the whole answer.
             done(state->text, {}, false);
             return;
         }
