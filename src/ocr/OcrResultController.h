@@ -226,6 +226,13 @@ private:
     QVector<TranslationItem> m_items;
     QVector<QVector<int>> m_chunks;
     QVector<QString> m_itemTranslations;
+    // A chunk gets one automatic retry on a transport error or a 5xx; a chunk
+    // that still fails is recorded instead of dropping the whole translation.
+    QVector<bool> m_chunkRetried;
+    QVector<bool> m_itemFailed;
+    QVector<int> m_failedLines;
+    QString m_lastChunkError;
+    bool m_wholeTextRetried = false;
     // The in-flight answer and the text the pane shows while it streams. The
     // pane refresh is throttled: a token per event would re-lay out the whole
     // TextEdit dozens of times a second.
@@ -239,6 +246,8 @@ private:
 
     void requestNextLineChunk(quint64 seq);
     void requestWholeText(quint64 seq);
+    void finishLineTranslation();
+    QString failedLinesSummary() const;
     void startTranslation(int start, int length);
     void failTranslation(quint64 seq, const QString &error);
     void refreshStreamingPane();

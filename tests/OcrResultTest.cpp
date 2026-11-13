@@ -113,6 +113,8 @@ private slots:
     void selectionMapsToWholeLines();
     void streamingFillsThePaneAndCancelStopsIt();
     void longLineIsSplitAndRejoined();
+    void retriesAChunkOnceThenSucceeds();
+    void partialTranslationNamesFailedLines();
     void translatedLinesIndexThePane();
     void lineColorsFollowThePicture();
     void longPagesSplitIntoRequests();
@@ -319,6 +321,73 @@ void OcrResultTest::longLineIsSplitAndRejoined()
     // The parts are one line, not two: the pane's joined translation is the
     // same string the cover carries.
     QCOMPARE(result.translation(), cover);
+}
+
+// A transport error or 5xx gets one retry after a short backoff, and the user
+// never sees the first failure.
+void OcrResultTest::retriesAChunkOnceThenSucceeds()
+{
+    MockTranslationEndpoint server(MockTranslationEndpoint::FailOnceNumberedSse);
+    QVERIFY(server.start());
+    Settings settings;
+    settings.setTranslationEndpoint(server.base());
+    settings.setTranslationModel(QStringLiteral("mock"));
+
+    OcrResultController result(&settings);
+    QVector<OcrWord> words;
+    for (int i = 0; i < 2; ++i) {
+        OcrWord word;
+        word.line = i;
+        word.text = QStringLiteral("line %1").arg(i);
+        word.rect = QRect(10, 10 + i * 30, 120, 20);
+        words.append(word);
+    }
+    QImage image(180, 100, QImage::Format_RGB32);
+    image.fill(QColor(250, 250, 245));
+    result.setResult(image, words, QString());
+
+    result.translate();
+    QTRY_VERIFY_WITH_TIMEOUT(!result.translating(), 5000);
+    QCOMPARE(result.translationError(), QString());
+    QCOMPARE(result.translation(), QStringLiteral("Translated part 1\nTranslated part 2"));
+    QCOMPARE(result.translatedLines().size(), 2);
+    QCOMPARE(server.bodies.size(), 2);
+}
+
+// One chunk failing for good must not throw away the chunks that worked: the
+// finished lines stay, and the window names the part that did not translate.
+void OcrResultTest::partialTranslationNamesFailedLines()
+{
+    MockTranslationEndpoint server(MockTranslationEndpoint::FailSecondChunk);
+    QVERIFY(server.start());
+    Settings settings;
+    settings.setTranslationEndpoint(server.base());
+    settings.setTranslationModel(QStringLiteral("mock"));
+
+    OcrResultController result(&settings);
+    QVector<OcrWord> words;
+    for (int i = 0; i < 45; ++i) {
+        OcrWord word;
+        word.line = i;
+        word.text = QStringLiteral("line %1").arg(i);
+        word.rect = QRect(10, 10 + i * 30, 150, 20);
+        words.append(word);
+    }
+    QImage image(180, 1400, QImage::Format_RGB32);
+    image.fill(QColor(250, 250, 245));
+    result.setResult(image, words, QString());
+    QCOMPARE(result.lines().size(), 45);
+
+    result.translate();
+    QTRY_VERIFY_WITH_TIMEOUT(!result.translating(), 8000);
+    // The first 40 lines are translated and shown; lines 41-45 are named.
+    QCOMPARE(result.translatedLines().size(), 40);
+    QVERIFY(!result.translation().isEmpty());
+    QVERIFY2(result.translationError().contains(QStringLiteral("41-45")),
+             qPrintable(result.translationError()));
+    QVERIFY(result.translationError().contains(QStringLiteral("server is down")));
+    // Chunk one plus two attempts at the failing chunk, each a real request.
+    QCOMPARE(server.bodies.size(), 3);
 }
 
 void OcrResultTest::translatedLinesIndexThePane()

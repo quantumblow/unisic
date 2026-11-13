@@ -4,6 +4,7 @@
 #include "Translator.h"
 
 #include <QDir>
+#include <algorithm>
 #include <QFont>
 #include <QFontMetrics>
 #include <QGuiApplication>
@@ -15,6 +16,8 @@
 #include <cmath>
 
 namespace {
+
+constexpr int kChunkRetryDelayMs = 700;
 
 // QML's Text with wrapMode Text.Wrap: break at word boundaries, and anywhere
 // when a word is longer than the line. The fit and the drawing share this
@@ -247,6 +250,11 @@ void OcrResultController::startTranslation(int start, int length)
     m_items.clear();
     m_itemTranslations.clear();
     m_chunkIndex = 0;
+    m_chunkRetried.clear();
+    m_itemFailed.clear();
+    m_failedLines.clear();
+    m_lastChunkError.clear();
+    m_wholeTextRetried = false;
     m_streamText.clear();
     m_streamTimer.stop();
     QStringList itemTexts;
@@ -279,6 +287,8 @@ void OcrResultController::startTranslation(int start, int length)
             m_chunks.append(indices);
         }
         m_itemTranslations = QVector<QString>(m_items.size());
+        m_chunkRetried = QVector<bool>(m_chunks.size(), false);
+        m_itemFailed = QVector<bool>(m_items.size(), false);
         if (!m_chunks.isEmpty()) {
             requestNextLineChunk(seq);
             return;
@@ -292,27 +302,7 @@ void OcrResultController::requestNextLineChunk(quint64 seq)
     if (seq != m_translationSeq)
         return;
     if (m_chunkIndex >= m_chunks.size()) {
-        const QStringList lineTranslations = assembledLineTranslations();
-        QStringList translated;
-        QVariantList mapLines;
-        for (int i = 0; i < lineTranslations.size(); ++i) {
-            if (lineTranslations.at(i).isEmpty())
-                continue; // a chunk that did not translate yet has no cover
-            mapLines.append(m_translateLines.at(i));
-            translated.append(lineTranslations.at(i));
-        }
-        QString text;
-        setTranslatedLines(mapLines.isEmpty()
-                               ? QVariantList{}
-                               : translatedLineMap(mapLines, translated, m_image, &text));
-        m_translation = text;
-        m_translationUnchanged = translationLooksUnchanged(m_sourceText, m_translation);
-        m_translating = false;
-        m_streamText.clear();
-        m_streamTimer.stop();
-        emit translationChanged();
-        if (!m_translation.isEmpty())
-            emit translationReady();
+        finishLineTranslation();
         return;
     }
     const QVector<int> chunk = m_chunks.at(m_chunkIndex);
@@ -332,13 +322,33 @@ void OcrResultController::requestNextLineChunk(quint64 seq)
                 m_streamTimer.start();
         },
         [this, seq, chunk, texts](const QString &body, const QString &error, bool retryable) {
-            Q_UNUSED(retryable);
             if (seq != m_translationSeq)
                 return;
             m_streamText.clear();
             m_streamTimer.stop();
             if (!error.isEmpty()) {
-                failTranslation(seq, error);
+                // One retry with a short backoff on a transport error or 5xx.
+                // A 4xx will fail again, so that chunk is recorded as failed.
+                if (retryable && !m_chunkRetried.value(m_chunkIndex, true)) {
+                    m_chunkRetried[m_chunkIndex] = true;
+                    QTimer::singleShot(kChunkRetryDelayMs, this, [this, seq] {
+                        if (seq == m_translationSeq)
+                            requestNextLineChunk(seq);
+                    });
+                    return;
+                }
+                m_lastChunkError = error;
+                for (const int index : chunk) {
+                    if (index >= 0 && index < m_itemFailed.size())
+                        m_itemFailed[index] = true;
+                    const int line = m_items.at(index).line;
+                    if (!m_failedLines.contains(line))
+                        m_failedLines.append(line);
+                }
+                std::sort(m_failedLines.begin(), m_failedLines.end());
+                ++m_chunkIndex;
+                refreshStreamingPane();
+                requestNextLineChunk(seq);
                 return;
             }
             QString parseError;
@@ -351,6 +361,7 @@ void OcrResultController::requestNextLineChunk(quint64 seq)
                 m_itemTranslations.clear();
                 m_chunks.clear();
                 m_chunkIndex = 0;
+                m_failedLines.clear();
                 requestWholeText(seq);
                 return;
             }
@@ -361,6 +372,69 @@ void OcrResultController::requestNextLineChunk(quint64 seq)
             requestNextLineChunk(seq);
         });
 }
+
+void OcrResultController::finishLineTranslation()
+{
+    const QStringList lineTranslations = assembledLineTranslations();
+    QStringList translated;
+    QVariantList mapLines;
+    for (int i = 0; i < lineTranslations.size(); ++i) {
+        if (lineTranslations.at(i).isEmpty())
+            continue; // a chunk that did not translate has no cover
+        mapLines.append(m_translateLines.at(i));
+        translated.append(lineTranslations.at(i));
+    }
+    QString text;
+    setTranslatedLines(mapLines.isEmpty()
+                           ? QVariantList{}
+                           : translatedLineMap(mapLines, translated, m_image, &text));
+    m_translation = text;
+    m_translationError = m_failedLines.isEmpty() ? QString() : failedLinesSummary();
+    m_translationUnchanged = translationLooksUnchanged(m_sourceText, m_translation);
+    m_translating = false;
+    m_streamText.clear();
+    m_streamTimer.stop();
+    emit translationChanged();
+    if (!m_translation.isEmpty())
+        emit translationReady();
+}
+
+QString OcrResultController::failedLinesSummary() const
+{
+    // Contiguous 0-based line indices become "3", "3-5" or "3-5, 8"; the
+    // window shows 1-based numbers because that is what a reader counts.
+    QStringList ranges;
+    int start = -1;
+    int previous = -1;
+    const auto flush = [&ranges, &start, &previous] {
+        if (start < 0)
+            return;
+        ranges.append(start == previous
+                          ? QString::number(start + 1)
+                          : QStringLiteral("%1-%2").arg(start + 1).arg(previous + 1));
+    };
+    for (const int line : m_failedLines) {
+        if (start < 0) {
+            start = previous = line;
+            continue;
+        }
+        if (line == previous + 1) {
+            previous = line;
+            continue;
+        }
+        flush();
+        start = previous = line;
+    }
+    flush();
+    const QString which = ranges.join(QStringLiteral(", "));
+    const QString detail = m_lastChunkError.isEmpty()
+                               ? tr("the translation service did not answer")
+                               : m_lastChunkError;
+    return m_translationSelectionOnly
+               ? tr("Selected lines %1 did not translate: %2").arg(which, detail)
+               : tr("Lines %1 did not translate: %2").arg(which, detail);
+}
+
 
 void OcrResultController::requestWholeText(quint64 seq)
 {
@@ -378,17 +452,27 @@ void OcrResultController::requestWholeText(quint64 seq)
                 m_streamTimer.start();
         },
         [this, seq](const QString &text, const QString &error, bool retryable) {
-            Q_UNUSED(retryable);
             if (seq != m_translationSeq)
                 return;
             m_streamText.clear();
             m_streamTimer.stop();
-            m_translating = false;
             if (!error.isEmpty()) {
+                // The whole-text request is the last resort, so it gets the
+                // same single retry a chunk gets before the window gives up.
+                if (retryable && !m_wholeTextRetried) {
+                    m_wholeTextRetried = true;
+                    QTimer::singleShot(kChunkRetryDelayMs, this, [this, seq] {
+                        if (seq == m_translationSeq)
+                            requestWholeText(seq);
+                    });
+                    return;
+                }
+                m_translating = false;
                 m_translationError = error;
                 emit translationChanged();
                 return;
             }
+            m_translating = false;
             m_translation = text;
             m_translationError.clear();
             setTranslatedLines({});
@@ -530,6 +614,11 @@ void OcrResultController::setTranslationForPreview(const QStringList &translated
     m_itemTranslations.clear();
     m_chunks.clear();
     m_chunkIndex = 0;
+    m_chunkRetried.clear();
+    m_itemFailed.clear();
+    m_failedLines.clear();
+    m_lastChunkError.clear();
+    m_wholeTextRetried = false;
     m_translateLines = m_lines;
     m_sourceText = m_text;
     m_translationSelectionOnly = false;
@@ -562,6 +651,11 @@ void OcrResultController::setResult(const QImage &image, const QVector<OcrWord> 
     m_items.clear();
     m_itemTranslations.clear();
     m_chunkIndex = 0;
+    m_chunkRetried.clear();
+    m_itemFailed.clear();
+    m_failedLines.clear();
+    m_lastChunkError.clear();
+    m_wholeTextRetried = false;
     m_streamText.clear();
     m_streamTimer.stop();
     m_translationError.clear();

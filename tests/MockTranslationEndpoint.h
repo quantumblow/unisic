@@ -23,6 +23,8 @@ public:
         RejectStream, // 400 to stream:true, a normal body to stream:false
         Always500,    // a retryable server error
         NumberedSse,  // one "N. Translated part N" line per requested item
+        FailOnceNumberedSse, // 500 once, then numbered SSE (retry test)
+        FailSecondChunk,     // numbered SSE for "line 0".., 500 for "line 40"..
     };
 
     explicit MockTranslationEndpoint(Mode mode, QObject *parent = nullptr)
@@ -79,8 +81,37 @@ private:
         socket->disconnectFromHost();
     }
 
+    void sendNumbered(QTcpSocket *socket, const QByteArray &request)
+    {
+        const int bodyStart = int(request.indexOf("\r\n\r\n")) + 4;
+        const QJsonObject payload =
+            QJsonDocument::fromJson(request.mid(bodyStart)).object();
+        const QJsonArray messages = payload.value(QStringLiteral("messages")).toArray();
+        const QString prompt = messages.isEmpty()
+                                   ? QString()
+                                   : messages.last().toObject()
+                                         .value(QStringLiteral("content")).toString();
+        const int items = qMax(1, prompt.count(QRegularExpression(
+                                            QStringLiteral("(?m)^\\d+\\. "))));
+        socket->write("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n"
+                      "Cache-Control: no-cache\r\nConnection: close\r\n\r\n");
+        for (int i = 1; i <= items; ++i) {
+            QJsonObject delta{{QStringLiteral("content"),
+                               QStringLiteral("%1. Translated part %2\n")
+                                   .arg(i)
+                                   .arg(i)}};
+            QJsonObject choice{{QStringLiteral("delta"), delta}};
+            QJsonObject frame{{QStringLiteral("choices"), QJsonArray{choice}}};
+            socket->write("data: " + QJsonDocument(frame).toJson(QJsonDocument::Compact)
+                          + "\n\n");
+        }
+        socket->write("data: [DONE]\n\n");
+        socket->disconnectFromHost();
+    }
+
     void respond(QTcpSocket *socket, const QByteArray &request)
     {
+        ++m_requestCount;
         const bool wantsStream = request.contains("\"stream\":true");
         switch (m_mode) {
         case Sse:
@@ -110,35 +141,24 @@ private:
         case Always500:
             writeJson(socket, 500, R"({"error":{"message":"server is down"}})");
             break;
-        case NumberedSse: {
-            const int bodyStart = int(request.indexOf("\r\n\r\n")) + 4;
-            const QJsonObject payload =
-                QJsonDocument::fromJson(request.mid(bodyStart)).object();
-            const QJsonArray messages = payload.value(QStringLiteral("messages")).toArray();
-            const QString prompt = messages.isEmpty()
-                                       ? QString()
-                                       : messages.last().toObject()
-                                             .value(QStringLiteral("content")).toString();
-            const int items = qMax(1, prompt.count(QRegularExpression(
-                                                QStringLiteral("(?m)^\\d+\\. "))));
-            socket->write("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n"
-                          "Cache-Control: no-cache\r\nConnection: close\r\n\r\n");
-            for (int i = 1; i <= items; ++i) {
-                QJsonObject delta{{QStringLiteral("content"),
-                                   QStringLiteral("%1. Translated part %2\n")
-                                       .arg(i)
-                                       .arg(i)}};
-                QJsonObject choice{{QStringLiteral("delta"), delta}};
-                QJsonObject frame{{QStringLiteral("choices"), QJsonArray{choice}}};
-                socket->write("data: "
-                              + QJsonDocument(frame).toJson(QJsonDocument::Compact) + "\n\n");
-            }
-            socket->write("data: [DONE]\n\n");
-            socket->disconnectFromHost();
+        case NumberedSse:
+            sendNumbered(socket, request);
             break;
-        }
+        case FailOnceNumberedSse:
+            if (m_requestCount == 1)
+                writeJson(socket, 500, R"({"error":{"message":"try again"}})");
+            else
+                sendNumbered(socket, request);
+            break;
+        case FailSecondChunk:
+            if (request.contains("line 40"))
+                writeJson(socket, 500, R"({"error":{"message":"server is down"}})");
+            else
+                sendNumbered(socket, request);
+            break;
         }
     }
 
     Mode m_mode;
+    int m_requestCount = 0;
 };
