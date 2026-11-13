@@ -738,6 +738,14 @@ void OcrResultTest::longPartialAnswerShowsACallout()
     QVERIFY(anchor.width() > 0 && anchor.height() > 0);
     QVERIFY(anchor.width() < box.width() / 2);
     QVERIFY(anchor.intersects(box));
+
+    // A second answer on the same controller has to re-decide. A stale "cover"
+    // from the first answer must not keep a long one off the callout (the F8
+    // check reuses one controller exactly like this).
+    result.setPartialTranslationForPreview(start, 3, QStringLiteral("dwa"));
+    QCOMPARE(result.partialPresentation(), QStringLiteral("cover"));
+    result.setPartialTranslationForPreview(start, 3, answer);
+    QCOMPARE(result.partialPresentation(), QStringLiteral("callout"));
 }
 
 // M4.6: covers are single-line only. A selection crossing a line boundary gets

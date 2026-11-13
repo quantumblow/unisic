@@ -658,6 +658,9 @@ void OcrResultController::applyPartialAnswer(const QString &answer)
 {
     setTranslatedLines({});
     m_partialCallout.clear();
+    // Reset first: a previous answer may have left "cover" behind, and the
+    // one-fragment branch below only ever sets "cover" itself.
+    m_partialPresentation = QStringLiteral("pane");
     m_translation = answer;
     m_translationError.clear();
     m_translationUnchanged = translationLooksUnchanged(m_sourceText, answer);
