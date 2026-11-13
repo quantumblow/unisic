@@ -501,8 +501,9 @@ hit-testing inside the text), and a word request carries its line as context.
 
 Status: implemented 2026-11-13 on `feat/ocr-m4.6`. The controller half (glyphs,
 fragments, cover/callout decision, screen-only composite), the QML callout and
-both notes are in; `ctest` is green. The desktop and AppImage passes below are
-still open and are not claimed as done.
+both notes are in; `ctest` is green, and the AppImage was rebuilt for the
+real-machine pass. The desktop acceptance lines below are still open and are
+not claimed as done.
 
 Goal: after M4.5 a double-clicked word (or any partial-line selection) translates
 into the pane only. The answer should also appear over the picture: replace the
@@ -637,8 +638,15 @@ F8/Developer/strings/docs.
   `translation partial overlay` and `devTestTranslationPartialOverlay` wired,
   eight catalogs filled, CHANGELOG EN/PL under 0.8.10 and the `src/ocr/`
   architecture note updated.
-- Still open for the release pass: F8 on a desktop, the manual acceptance lines
-  below, and the rebuilt AppImage.
+- AppImage rebuilt from `feat/ocr-m4.6` (tip `02f46a1`) for the real-machine
+  pass: 175,241,720 bytes, sha256
+  `e16020639ab5e9040624448d312b89bba1bcc0196cd0301cb378b1264f6aa643`, release
+  flavor (`UNISIC_BUILD_NUMBER=20261113`, no Developer pane or F8), 10 gates
+  ON, the four new M4.6 source strings are in the binary, `--version` answers
+  0.8.9, and it starts under an isolated offscreen profile and exits cleanly
+  on SIGTERM. `dist/SHA256SUMS` regenerated; the file is gitignored.
+- Still open for the release pass: F8 on a desktop and the manual acceptance
+  lines below.
 
 ### Start here (historical)
 
@@ -737,8 +745,8 @@ ships WITH 0.8.10 as one edit, version bump included. The files that need it the
 5. M4.5 after M4: it touches only the result window and the controller, and the
    X11 pass showed both gaps, so do not fold it into M4's settings/privacy work.
 6. M4.6 (landed 2026-11-13): the hybrid word/partial-line overlay, designed
-   above. It built on the same result-window/controller boundary; only the
-   release pass (desktop F8, the accepted manual lines, a rebuilt AppImage) is
+   above. It built on the same result-window/controller boundary; the AppImage
+   is rebuilt, so only the desktop F8 pass and the accepted manual lines are
    still open.
 7. T6.x release chores (T6.1, T6.3, T6.4, T6.5, T6.6, T6.7) after M4.6 and before
    0.8.10; T6.2 is already done.
