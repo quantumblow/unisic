@@ -501,10 +501,11 @@ hit-testing inside the text), and a word request carries its line as context.
 
 Status: implemented 2026-11-13 on `feat/ocr-m4.6`, merged into `dev` at
 `9a107e7`, then refined at `48a0204` (one-line partial note, CJK cover 10%
-below the fit). The controller half (glyphs, fragments, cover/callout decision,
-screen-only composite) and the QML callout are in; `ctest` is green, and the
-AppImage was rebuilt from the refined tip. The desktop acceptance lines below
-are still open and are not claimed as done.
+below the fit) and `601c022` (glyph-level gutter cap). The controller half
+(glyphs, fragments, cover/callout decision, screen-only composite) and the QML
+callout are in; `ctest` is green, and the AppImage was rebuilt from the refined
+tip. The desktop acceptance lines below are still open and are not claimed as
+done.
 
 Goal: after M4.5 a double-clicked word (or any partial-line selection) translates
 into the pane only. The answer should also appear over the picture: replace the
@@ -645,9 +646,10 @@ F8/Developer/strings/docs.
   em box; and a cover is capped at the glyphs just outside the covered range,
   not only at the next line box. Pinned by `cjkCoverSetsItselfSlightlySmaller`,
   `partialCoverStopsAtThePreviousWord` and `lineCoverStopsAtALabelGlyph`.
-- AppImage rebuilt from `dev` (tip `48a0204`, with the one-line note and the
-  CJK cover refinement) for the real-machine pass: 175,237,624 bytes, sha256
-  `29d73f74dc6851c8bece342db7b7567d2c181e8d473e042805de8221b5dfaf08`, release
+- AppImage rebuilt from `dev` (tip `601c022`, with the one-line note, the CJK
+  cover size and the glyph-level gutter cap) for the real-machine pass:
+  175,241,720 bytes, sha256
+  `2c9e1ed121171e4baf38dec3dc2d125ec3d2dc309a9654a5df40d22555f85674`, release
   flavor (`UNISIC_BUILD_NUMBER=20261113`, no Developer pane or F8), 10 gates
   ON, the new M4.6 strings are in the binary, `--version` answers 0.8.9, and it
   starts under an isolated offscreen profile and exits cleanly on SIGTERM.
@@ -844,9 +846,9 @@ the compositor or OS named next to it: "verified in a container" is not a tick h
       Translate paints a readable answer over those glyphs and puts a long one in a
       callout anchored to them; a selection crossing a line boundary uses one callout;
       Save image and Copy image contain no word cover or callout while whole-line covers
-      are still saved; the partial note is one line and a Chinese cover reads at the
-      page's size; zoom, pan, Original/Translation and a new result leave no stale
-      overlay.
+      are still saved; the partial note is one line, a Chinese cover reads at the
+      page's size, and a cover stops before the word or label to its left; zoom, pan,
+      Original/Translation and a new result leave no stale overlay.
 
 ### Desktop, X11 session (best-effort second target)
 
