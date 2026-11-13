@@ -408,6 +408,12 @@ public:
     Q_INVOKABLE void devTestStylePresets();
     Q_INVOKABLE void devTestOcrAutoLang();
     Q_INVOKABLE void devTestOcrResult();
+    // The result window's picture: the composite/fit/hit-test check, and a
+    // window with a synthetic result plus translation so Save/Copy image, Edit
+    // in editor, zoom and the divider can be tried without an OCR model or an
+    // endpoint.
+    Q_INVOKABLE void devTestOcrResultImage();
+    Q_INVOKABLE void devTestOcrResultWindow();
     Q_INVOKABLE void devTestTranslation();
     Q_INVOKABLE void devTestTranslationOverlay();
     Q_INVOKABLE void devTestPaddleOcr();
@@ -795,6 +801,15 @@ public:
     // Print a saved image file (history card) through printImage.
     Q_INVOKABLE void printFromHistory(const QString &filePath);
     void ocrImage(const QImage &img);                // OCR + copy recognized text
+    // The OCR result window's picture actions, on whichever layer it shows:
+    // `translated` false is the untouched capture, true the translation laid on
+    // it. The picture comes from OcrResultController::compositedImage, so it is
+    // at the capture's own resolution even when the window had to scale the
+    // view down - saving must never write the shrunken screen copy.
+    Q_INVOKABLE void saveOcrResultImage(bool translated);
+    Q_INVOKABLE void copyOcrResultImage(bool translated);
+    // Opens the shown layer in a new editor window, like a capture.
+    Q_INVOKABLE void editOcrResultImage(bool translated);
     // OCR the image and deliver per-word boxes on the GUI thread (editor's
     // selectable-text overlay). Empty words + a message on failure/no-OCR.
     void ocrBoxes(const QImage &img, std::function<void(const QVector<OcrWord> &, const QString &)> cb);

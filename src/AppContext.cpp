@@ -4424,6 +4424,73 @@ void AppContext::copyImageFromHistory(const QString &filePath)
     showToast(tr("Image copied"));
 }
 
+void AppContext::saveOcrResultImage(bool translated)
+{
+    const QImage img = m_ocrResult ? m_ocrResult->compositedImage(translated) : QImage();
+    if (img.isNull()) {
+        showToast(tr("There is no picture to save"), true);
+        if (m_ocrResult)
+            m_ocrResult->setStatusText(tr("There is no picture to save"), true);
+        return;
+    }
+    // D4: the same folder, the same filename template and PNG by default as a
+    // normal capture save, so the file lands where the user already looks for
+    // captures. The dialog can still name another format.
+    QString startDir = m_settings->saveDirectory();
+    if (m_settings->dateSubfolders())
+        startDir += QLatin1Char('/')
+                    + QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM"));
+    QDir().mkpath(startDir);
+    const QString chosen = QFileDialog::getSaveFileName(
+        nullptr, tr("Save OCR image"),
+        startDir + QLatin1Char('/') + makeFileName(QStringLiteral("png")),
+        tr("Images (*.png *.jpg *.jpeg *.webp)"));
+    if (chosen.isEmpty())
+        return; // cancelled: the picture stays in the window, nothing to report
+    const QString path = saveImageExact(img, chosen);
+    if (path.isEmpty()) {
+        showToast(tr("Could not save to %1").arg(chosen), true);
+        m_ocrResult->setStatusText(tr("Could not save to %1").arg(chosen), true);
+        return;
+    }
+    // A genuinely new file on disk earns its own History tile, like a converted
+    // capture or an editor save that produced a second file.
+    m_history->addEntry(path, img, QStringLiteral("image"));
+    showToast(tr("Saved %1").arg(QFileInfo(path).fileName()));
+    // The toast lives in the main window, which the result window can cover;
+    // the window confirms in place too.
+    m_ocrResult->setStatusText(tr("Saved %1").arg(QFileInfo(path).fileName()));
+}
+
+void AppContext::copyOcrResultImage(bool translated)
+{
+    const QImage img = m_ocrResult ? m_ocrResult->compositedImage(translated) : QImage();
+    if (img.isNull()) {
+        showToast(tr("There is no picture to copy"), true);
+        if (m_ocrResult)
+            m_ocrResult->setStatusText(tr("There is no picture to copy"), true);
+        return;
+    }
+    copyImageToClipboard(img);
+    showToast(tr("Image copied"));
+    m_ocrResult->setStatusText(tr("Image copied"));
+}
+
+void AppContext::editOcrResultImage(bool translated)
+{
+    const QImage img = m_ocrResult ? m_ocrResult->compositedImage(translated) : QImage();
+    if (img.isNull()) {
+        showToast(tr("There is no picture to edit"), true);
+        if (m_ocrResult)
+            m_ocrResult->setStatusText(tr("There is no picture to edit"), true);
+        return;
+    }
+    // No overwrite path and no history id: this picture is not a file yet, so
+    // the editor's Save writes a new capture under the normal template.
+    openEditor(img);
+    m_ocrResult->setStatusText(tr("Opened in the editor"));
+}
+
 void AppContext::copyAsFromHistory(const QString &filePath, const QString &url,
                                    const QString &format)
 {

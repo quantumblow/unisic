@@ -25,12 +25,17 @@ Working today:
 - Result window: capture at 100% (scaled down only when it cannot fit), selectable
   text pane, clickable line boxes, Copy all, Original/Translation, target-language
   picker, translation laid over the picture line by line with colours sampled from
-  each line, Cancel, error line, Esc to close.
+  each line, Cancel, error line, Esc to close. Since M2: Save image / Copy image /
+  Edit in editor on the shown layer at the capture's own resolution, zoom
+  (buttons, Ctrl+wheel, fit, 100%) and drag-to-pan with exact hit testing, a
+  remembered split divider, Ctrl+wheel text size, an in-window status line, and
+  overflow/RTL handling on the covers.
 - Translation: any OpenAI-compatible `/chat/completions`, numbered-line prompts,
   one request per 40 lines, tolerant parsing, whole-text fallback, unchanged-answer
   detection, per-tier `MemAvailable` guard.
-- Verified: 27/27 `ctest`, F8 steps `ocr result` / `translation` /
-  `translation overlay` / `paddleocr` all PASS with models present, tiers measured
+- Verified: 28/28 `ctest` (M2 added five `OcrResultTest` cases), F8 steps
+  `ocr result` / `ocr result image` / `translation` / `translation overlay` /
+  `paddleocr` all PASS with models present, tiers measured
   (tiny 0.09-0.13 s and ~0.4 GB, small 0.20-0.27 s and ~0.6 GB, medium 0.52-0.68 s
   and ~1.2 GB per 1600x1000 page), tier switch reloads without a restart.
 
@@ -171,40 +176,56 @@ each channel.
 not read as "best result". The changelog and the Settings help both say Small is
 the one to download.
 
-## M2. Result window: save, edit, zoom (3-4 days)
+## M2. Result window: save, edit, zoom (3-4 days) - DONE 2026-11-13
 
-**T2.1** Move the composite to C++: `OcrResultController::compositedImage(bool
-translated)` draws the covers and the fitted text at source resolution. The font
-fitting currently lives in QML (`Text.Fit`, 5 px floor, wrap); factor the fitted
-pixel size into the C++ model and have QML use it, so the saved picture and the
-screen cannot diverge.
+**T2.1 (done)** Move the composite to C++: `OcrResultController::compositedImage(bool translated)`
+draws the covers and the fitted text at source resolution. The font fitting moved out of QML
+(`Text.Fit`, 5 px floor, wrap) into `fittedPixelSize()`: the largest integer pixel size at which
+the text wrapped at the box width still fits its height, stored per cover as `fontSize` in IMAGE
+pixels, so QML scales that one number by its render scale instead of running a second fit. The
+saved picture and the screen therefore cannot pick different sizes.
 
-- Acceptance: a golden-image test on a 4-line capture compares the composite with
-  the QML overlay's geometry (`OcrResultTest`), and the saved PNG is at source
-  resolution even when the window had to scale the capture down.
+- Acceptance met: `OcrResultTest` pins it - a 4-line synthetic capture where every cover's size
+  is the largest that still fits (checked against its own QTextLayout), the composite is exactly
+  the capture's size (including a 3840x2160 one), nothing is drawn outside a cover, and the ink
+  inside each cover is the sampled foreground. Verified live: the saved PNG of the synthetic
+  result is 900x420 while the window was zoomed to 156%.
 
-**T2.2** Save image… and Copy image, for whichever layer is shown (Original or
-Translation). Follow the existing save-dialog pattern in `qml/pages/*`; PNG by
-default, with the same filename template the capture save uses.
+**T2.2 (done)** Save image… and Copy image for whichever layer is shown (Original or Translation).
+Both go through `compositedImage()`, so they are at the capture's own resolution. Save opens the
+native file dialog (D4) in the save folder + date subfolder with the capture filename template and
+`.png` by default; the saved file gets a History tile. The window confirms in place ("Saved …",
+"Image copied") because the app's toasts live in the MAIN window, which the result window can be
+covering.
 
-**T2.3** Edit in editor: hand the composited image to `EditorSession` and open the
-editor, so a translated screenshot can be annotated, cropped and printed like any
-capture. Reuses the existing open-with-image path.
+**T2.3 (done)** Edit in editor hands the composited image to a new `EditorSession` window (no
+overwrite path and no history id: the editor's Save writes a new capture). Verified live: the
+editor opened the 900x420 translated picture and showed `900 x 420 px`.
 
-**T2.4** Zoom and pan in the picture pane: zoom in / 100% / zoom out / fit
-buttons, Ctrl+wheel, drag to pan while zoomed. Line boxes and the text overlay
-transform with the picture, and hit testing stays exact at every zoom level.
+**T2.4 (done)** Zoom and pan in the picture pane: zoom out / 100% (the percentage button) / zoom
+in / fit, Ctrl+wheel anchored at the cursor, plain wheel and drag to pan. Line boxes, covers and
+their text are laid out in device pixels from `renderScale`, so the text is re-rendered (not
+raster-scaled) and `lineAt(imagePoint, translated)` answers from the controller in image
+coordinates - exact at any zoom. Verified live at 156%: a click on a zoomed cover selected the
+right line in the pane; Ctrl+wheel at a corner kept that point under the cursor.
 
-- Acceptance: 100%, 125% and 150% display scale, a 4K capture, boxes aligned, and
-  a click still selects the right line when zoomed to 200%.
+**T2.5 (done)** Split ratio: a draggable divider between the panes (works side by side and
+stacked), stored in `ocr/resultSplit` (0 = auto, derived from the picture at 100%, so a fresh
+window opens exactly as before), reset by double-click, Backspace or the focus ring's arrow keys;
+Ctrl+wheel over the text pane changes its font size (`ocr/resultTextSize`, 0 = theme). Verified
+live across a restart: `resultSplit=0.76` and `resultTextSize=20` came back with the window.
 
-**T2.5** Split ratio: a draggable divider between picture and text pane, with the
-ratio remembered; Ctrl+wheel over the text pane changes its font size.
+**T2.6 (done)** Overlay edges: the horizontal 30% expansion is capped at half the gutter to a
+neighbour box on the same row, so a multi-column page stops grazing the next column; a
+translation that cannot fit at the 5 px floor is clipped there, marked with a corner dot in the
+window AND the saved picture, and the window says the full text is in the pane; an RTL target
+(first strong character Arabic/Hebrew) is right-aligned in its cover by both the window and the
+composite. Verified live on Arabic and Hebrew covers, and in the saved PNG.
 
-**T2.6** Overlay edges: cap the horizontal 30% expansion at the neighbour box so a
-multi-column page stops grazing the next column; when a translation cannot fit at
-the 5 px floor, say so (an ellipsis or a small marker) instead of clipping
-silently; check an RTL target (Arabic/Hebrew) renders right to left in the cover.
+Also in this round: F8 `ocr result image` step + `devTestOcrResultImage`/`devTestOcrResultWindow`
+buttons (the second opens a synthetic result AND translation, so every new path can be tried with
+no model and no endpoint), `OcrResultTest` grew five cases, and the window's chrome got its own
+row for the picture actions and the zoom controls.
 
 ## M3. Translation: selection, streaming, protection, retries (3-5 days)
 
@@ -299,7 +320,10 @@ the Developer pane for every new path (save image, edit in editor, zoom, selecti
 translation, streaming, retry, test connection). The routing half is done
 (`tierSupportsLanguages()`/`tierReadsJapanese()` are pure and pinned by
 `tests/PaddleOcrTest.cpp`); `runMiB`/`availableMiB` are still file-statics, and the
-"selected tier installed" branch of the effective-tier rule needs a fixture model.
+"selected tier installed" branch of the effective-tier rule needs a fixture model. M2
+wired its own paths: F8 `ocr result image`, `devTestOcrResultImage` and
+`devTestOcrResultWindow`, plus five `OcrResultTest` cases; selection translation,
+streaming, retry and test connection still belong to M3/M4.
 
 **T6.7** i18n and website: native review of the Chinese and Polish strings added in
 this feature, and the `unisic-website` sync. The site repo is cloned beside this tree and
@@ -380,7 +404,8 @@ the compositor or OS named next to it: "verified in a container" is not a tick h
 ### Desktop, Wayland (KDE Plasma first, one GNOME pass)
 
 - [ ] F8 in a dev build (`unisic --hotkey smoke-test` or F8): `paddleocr`,
-      `ocr result`, `translation` and `translation overlay` PASS, no new FAIL.
+      `ocr result`, `ocr result image`, `translation` and `translation overlay`
+      PASS, no new FAIL.
 - [ ] Region OCR (`Meta+Shift+T`) on a Chinese page and an English page: the result
       window opens with the untouched capture at 100%, clickable lines, Copy all.
 - [ ] Translate against a local Ollama: line-by-line overlay, colours sampled from a
@@ -392,8 +417,10 @@ the compositor or OS named next to it: "verified in a container" is not a tick h
       AppImage/Flatpak and from the 11 MB download on deb/rpm/Arch; one run, one undo.
 - [ ] 100%, 125% and 150% display scale, plus a 1060x700 window: nothing clipped in the
       OCR rows, the result window or the translation overlay.
-- [ ] M2 once landed: Save image and Copy image on both layers, Edit in editor, zoom to
-      200% on a 4K capture with a click hitting the right line, split ratio, an RTL target.
+- [ ] M2 (landed): Save image and Copy image on both layers (the PNG at the capture's own
+      resolution while the window shows it scaled), Edit in editor, zoom to 200% on a 4K capture
+      with a click hitting the right line, Ctrl+wheel zoom/text size, drag to pan, the split
+      ratio surviving a restart, and an RTL target rendering right to left in its covers.
 - [ ] M3 once landed: selection-only translate, streaming with Cancel mid-stream, a
       failing chunk with the partial result, the progress line.
 - [ ] M4 once landed: Test connection against a real endpoint, an export without secrets,

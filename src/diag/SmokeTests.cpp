@@ -3037,6 +3037,177 @@ void AppContext::devTestTranslationOverlay()
               !result.startsWith(QLatin1String("PASS")));
 }
 
+// ---- the result window's picture (composite, fitted text, hit test) --------
+//
+// Its own synthetic capture, not ocrBoxTestImage(): these checks are about the
+// picture the window saves and the covers it draws, not about OCR.
+static QImage ocrResultPictureImage()
+{
+    QImage image(900, 420, QImage::Format_RGB32);
+    image.fill(QColor(250, 250, 245));
+    QPainter painter(&image);
+    for (int i = 0; i < 4; ++i) {
+        const int y = 60 + i * 90;
+        // Thin strokes, not a filled box: a real line box is mostly page with
+        // ink in it, and the cover colour is sampled from that majority.
+        painter.fillRect(QRect(70, y + 14, 500 - (i % 2) * 90, 8), QColor(22, 22, 22));
+    }
+    painter.end();
+    return image;
+}
+
+static QVariantList ocrResultPictureLines()
+{
+    const QStringList texts{QStringLiteral("Unisic captures"), QStringLiteral("Save the picture"),
+                            QStringLiteral("Copy or edit it"), QStringLiteral("Zoom to 200%")};
+    QVariantList lines;
+    for (int i = 0; i < texts.size(); ++i) {
+        lines.append(QVariantMap{{QStringLiteral("text"), texts.at(i)},
+                                 {QStringLiteral("x"), 68},
+                                 {QStringLiteral("y"), 60 + i * 90},
+                                 {QStringLiteral("width"), 504 - (i % 2) * 90},
+                                 {QStringLiteral("height"), 36},
+                                 {QStringLiteral("start"), 0},
+                                 {QStringLiteral("length"), texts.at(i).size()}});
+    }
+    return lines;
+}
+
+static QString ocrResultImageCheck()
+{
+    const QImage image = ocrResultPictureImage();
+    const QVariantList lines = ocrResultPictureLines();
+    const QStringList translated{QStringLiteral("Unisic robi zrzuty"), QStringLiteral("Zapisz obraz"),
+                                 QStringLiteral("Skopiuj albo edytuj"), QStringLiteral("Powieksz do 200%")};
+    QString joined;
+    const QVariantList overlay =
+        OcrResultController::translatedLineMap(lines, translated, image, &joined);
+    if (overlay.size() != lines.size())
+        return QStringLiteral("FAIL (overlay size)");
+
+    // Every cover carries the size the ONE fitting rule chose, and a click in
+    // the middle of it finds that line.
+    for (int i = 0; i < overlay.size(); ++i) {
+        const QVariantMap entry = overlay.at(i).toMap();
+        const QRect cover(entry.value(QStringLiteral("x")).toInt(),
+                          entry.value(QStringLiteral("y")).toInt(),
+                          entry.value(QStringLiteral("width")).toInt(),
+                          entry.value(QStringLiteral("height")).toInt());
+        const int fontSize = entry.value(QStringLiteral("fontSize")).toInt();
+        if (fontSize < OcrResultController::kMinFitPixelSize
+            || fontSize > qMax(8, cover.height()))
+            return QStringLiteral("FAIL (fitted size)");
+        if (entry.value(QStringLiteral("overflow")).toBool()
+            || entry.value(QStringLiteral("rtl")).toBool())
+            return QStringLiteral("FAIL (cover flags)");
+        if (OcrResultController::lineIndexAt(overlay, cover.center()) != i)
+            return QStringLiteral("FAIL (hit test)");
+    }
+
+    // The picture handed to Save, Copy image and the editor is the capture's
+    // own, with the covers laid on it.
+    const QImage composite = OcrResultController::composeOverlay(image, overlay);
+    if (composite.size() != image.size())
+        return QStringLiteral("FAIL (composite size)");
+    const QRect first(overlay.at(0).toMap().value(QStringLiteral("x")).toInt(),
+                      overlay.at(0).toMap().value(QStringLiteral("y")).toInt(),
+                      overlay.at(0).toMap().value(QStringLiteral("width")).toInt(),
+                      overlay.at(0).toMap().value(QStringLiteral("height")).toInt());
+    const QColor ink(overlay.at(0).toMap().value(QStringLiteral("foreground")).toString());
+    bool inkInside = false;
+    for (int y = first.top(); y <= first.bottom() && !inkInside; ++y) {
+        for (int x = first.left(); x <= first.right(); ++x) {
+            const QRgb pixel = composite.pixel(x, y);
+            if (qRed(pixel) == ink.red() && qGreen(pixel) == ink.green()
+                && qBlue(pixel) == ink.blue()) {
+                inkInside = true;
+                break;
+            }
+        }
+    }
+    if (!inkInside)
+        return QStringLiteral("FAIL (no text in the cover)");
+
+    // A multi-column page: the sideways overshoot stops at the neighbour on the
+    // same row instead of covering its first letter.
+    const QVariantList columns{
+        QVariantMap{{QStringLiteral("text"), QStringLiteral("Left")},
+                    {QStringLiteral("x"), 40}, {QStringLiteral("y"), 40},
+                    {QStringLiteral("width"), 180}, {QStringLiteral("height"), 40}},
+        QVariantMap{{QStringLiteral("text"), QStringLiteral("Right")},
+                    {QStringLiteral("x"), 260}, {QStringLiteral("y"), 40},
+                    {QStringLiteral("width"), 180}, {QStringLiteral("height"), 40}}};
+    QString stub;
+    const QVariantList twoColumns = OcrResultController::translatedLineMap(
+        columns, {QStringLiteral("Lewa kolumna"), QStringLiteral("Prawa kolumna")}, image, &stub);
+    const QVariantMap left = twoColumns.at(0).toMap();
+    const int leftRight = left.value(QStringLiteral("x")).toInt()
+                          + left.value(QStringLiteral("width")).toInt() - 1;
+    if (leftRight >= 260)
+        return QStringLiteral("FAIL (cover reaches the next column)");
+
+    // RTL and overflow are carried for the window and the composite to honour.
+    const QVariantList oneLine{QVariantMap{{QStringLiteral("text"), QStringLiteral("x")},
+                                           {QStringLiteral("x"), 40}, {QStringLiteral("y"), 200},
+                                           {QStringLiteral("width"), 180},
+                                           {QStringLiteral("height"), 40}}};
+    const QVariantList rtl = OcrResultController::translatedLineMap(
+        oneLine, {QStringLiteral("\u0645\u0631\u062d\u0628\u0627")}, image, &stub);
+    if (rtl.isEmpty() || !rtl.at(0).toMap().value(QStringLiteral("rtl")).toBool())
+        return QStringLiteral("FAIL (RTL flag)");
+    const QVariantList narrow{QVariantMap{{QStringLiteral("text"), QStringLiteral("x")},
+                                          {QStringLiteral("x"), 40}, {QStringLiteral("y"), 260},
+                                          {QStringLiteral("width"), 18},
+                                          {QStringLiteral("height"), 10}}};
+    const QVariantList clipped = OcrResultController::translatedLineMap(
+        narrow, {QStringLiteral("A translation that cannot fit an 18 px wide line")},
+        image, &stub);
+    if (clipped.isEmpty() || !clipped.at(0).toMap().value(QStringLiteral("overflow")).toBool())
+        return QStringLiteral("FAIL (overflow flag)");
+
+    return QStringLiteral("PASS (fitted text, composite at source size, hit test, neighbour cap, "
+                          "RTL, overflow)");
+}
+
+void AppContext::devTestOcrResultImage()
+{
+    if (!devBuild())
+        return;
+    const QString result = ocrResultImageCheck();
+    showToast(tr("Dev: OCR result image: %1").arg(result),
+              !result.startsWith(QLatin1String("PASS")));
+}
+
+void AppContext::devTestOcrResultWindow()
+{
+    if (!devBuild())
+        return;
+    // A complete result with a translation, from nothing but a synthetic image:
+    // no OCR model and no endpoint, so the window's Save/Copy image, Edit in
+    // editor, zoom and divider can all be exercised on any machine.
+    const QImage image = ocrResultPictureImage();
+    const QVariantList lines = ocrResultPictureLines();
+    QVector<OcrWord> words;
+    for (int i = 0; i < lines.size(); ++i) {
+        const QVariantMap line = lines.at(i).toMap();
+        OcrWord word;
+        word.line = i;
+        word.text = line.value(QStringLiteral("text")).toString();
+        word.rect = QRect(line.value(QStringLiteral("x")).toInt(),
+                          line.value(QStringLiteral("y")).toInt(),
+                          line.value(QStringLiteral("width")).toInt(),
+                          line.value(QStringLiteral("height")).toInt());
+        words.append(word);
+    }
+    m_ocrResult->setResult(image, words, QString());
+    m_ocrResult->setTranslationForPreview(
+        {QStringLiteral("Unisic robi zrzuty"), QStringLiteral("Zapisz obraz"),
+         QStringLiteral("Skopiuj albo edytuj"), QStringLiteral("Powieksz do 200%")});
+    emit ocrResultReady();
+    showToast(tr("Dev: OCR result window: PASS (%1 lines, translated)")
+                  .arg(m_ocrResult->translatedLines().size()));
+}
+
 void AppContext::devTestPaddleOcr()
 {
     if (!devBuild())
@@ -6515,6 +6686,15 @@ void AppContext::runSmokeTest()
     // Synthetic image, so this step needs no OCR and no panel.
     m_smokeSteps.append([this] {
         smokeLog(QStringLiteral("translation overlay: ") + translationOverlayCheck());
+        smokeNext();
+    });
+
+    // 3f3e2) The result window's picture: the composite Save, Copy image and
+    // Edit in editor hand over is the capture's own resolution, the cover text
+    // uses the one fitted size, a click still finds its line, the overshoot
+    // stops at the next column, and the RTL/overflow flags ride along.
+    m_smokeSteps.append([this] {
+        smokeLog(QStringLiteral("ocr result image: ") + ocrResultImageCheck());
         smokeNext();
     });
 

@@ -15,8 +15,15 @@ Window {
     id: resultWindow
     width: Math.min(1120, Math.floor(Screen.width * 0.86))
     height: Math.min(800, Math.floor(Screen.height * 0.86))
-    minimumWidth: 640
-    minimumHeight: 460
+    // The text-controls row sets the floor: it cannot shrink below its buttons
+    // (the target picker adds ~180 more once translation is configured, which
+    // is why a configured window wants ~980), and a narrower window used to
+    // push the picture row and the zoom row past the card's edge with it.
+    minimumWidth: 720
+    // The chrome above the panes (hint, text controls, picture actions, zoom)
+    // plus two stacked panes at their own minimum: any shorter and the stacked
+    // split cannot give either pane a usable strip.
+    minimumHeight: 560
     visible: false
     title: qsTr("Recognized text")
     color: Theme.background
@@ -32,6 +39,18 @@ Window {
     // a service that merged or split lines leaves this empty and the whole text
     // stays in the pane instead.
     readonly property bool overlayAvailable: App.ocrResult.translatedLines.length > 0
+    // Covers whose translation could not fit even at the 5 px floor. They are
+    // drawn shortened (and marked on the picture); the window says so once
+    // instead of letting the reader wonder what was cut.
+    readonly property int overflowLines: {
+        let count = 0
+        const list = App.ocrResult.translatedLines
+        for (let i = 0; i < list.length; ++i) {
+            if (list[i].overflow)
+                ++count
+        }
+        return count
+    }
 
     // Preset translation targets. The setting stays free text (a language name
     // the model understands); this list exists so the window can switch target
@@ -77,8 +96,12 @@ Window {
         const maxH = Math.floor(resultWindow.screen.height * 0.92)
         resultWindow.width = Math.max(resultWindow.minimumWidth,
                                       Math.min(maxW, Math.round(picW + 440)))
+        // The chrome above the panes: the hint, the text controls, the picture
+        // actions and the zoom row, plus the card's own margins. It grew with
+        // M2, and a window sized for 100% that then shows 80% makes the zoom
+        // controls look like they did something on open.
         resultWindow.height = Math.max(resultWindow.minimumHeight,
-                                       Math.min(maxH, Math.round(picH + 200)))
+                                       Math.min(maxH, Math.round(picH + 300)))
     }
 
     // One place for "a line on the picture selects its range in the pane", so
@@ -88,6 +111,20 @@ Window {
         textEdit.forceActiveFocus()
         const r = textEdit.positionToRectangle(start)
         textFlick.contentY = Math.max(0, r.y - 24)
+    }
+
+    // A click on the picture, resolved through the pane's own hit test (image
+    // coordinates), so Original and Translation select the same way at any zoom.
+    function clickPicture(px, py) {
+        const index = imagePane.lineIndexAt(px, py)
+        if (index < 0)
+            return
+        const entry = resultWindow.showTranslation
+                      ? App.ocrResult.translatedLines[index]
+                      : App.ocrResult.lines[index]
+        if (!entry)
+            return
+        resultWindow.selectPaneRange(entry.start, entry.length)
     }
 
     onVisibleChanged: {
@@ -105,12 +142,18 @@ Window {
         target: App.ocrResult
         function onResultChanged() {
             resultWindow.showTranslation = false
+            // A new capture starts fitted and centred: carrying the previous
+            // page's 200% over to it would open on a corner of the new one.
+            imagePane.showFit()
+            imagePane.hoverIndex = -1
             resultWindow.fitToImage()
         }
         function onTranslationReady() {
             resultWindow.showTranslation = true
+            imagePane.hoverIndex = -1
         }
         function onTranslationChanged() {
+            imagePane.hoverIndex = -1
             if (App.ocrResult.translation.length === 0 && !App.ocrResult.translating)
                 resultWindow.showTranslation = false
         }
@@ -203,13 +246,20 @@ Window {
                     font.pixelSize: Theme.fontS
                     wrapMode: Text.WordWrap
                 }
+                // Confirmation for Copy all, Copy image, Save image and Edit in
+                // editor. It belongs to this window and not to a toast: toasts
+                // live in the main window, which the result window is usually
+                // covering while the user works here. The controller clears the
+                // text after a couple of seconds.
                 Text {
-                    id: copiedLabel
-                    text: qsTr("Copied")
-                    color: Theme.accent
+                    id: statusLabel
+                    text: App.ocrResult.statusText
+                    color: App.ocrResult.statusIsError ? Theme.danger : Theme.accent
                     font.pixelSize: Theme.fontS
                     font.weight: Font.DemiBold
-                    opacity: 0
+                    elide: Text.ElideRight
+                    Layout.preferredWidth: Math.min(implicitWidth, 340)
+                    opacity: text !== "" ? 1 : 0
                     Behavior on opacity { NumberAnimation { duration: 120 } }
                 }
             }
@@ -270,8 +320,7 @@ Window {
                     text: qsTr("Copy selection")
                     onClicked: {
                         textEdit.copy()
-                        copiedLabel.opacity = 1
-                        copiedTimer.restart()
+                        App.ocrResult.setStatusText(qsTr("Copied"), false)
                     }
                 }
                 Row {
@@ -281,14 +330,20 @@ Window {
                         enabled: App.ocrResult.translation.length > 0
                         variant: resultWindow.showTranslation ? "tonal" : "filled"
                         text: qsTr("Original")
-                        onClicked: resultWindow.showTranslation = false
+                        onClicked: {
+                        resultWindow.showTranslation = false
+                        imagePane.hoverIndex = -1
+                    }
                     }
                     UButton {
                         compact: true
                         enabled: App.ocrResult.translation.length > 0
                         variant: resultWindow.showTranslation ? "filled" : "tonal"
                         text: qsTr("Translation")
-                        onClicked: resultWindow.showTranslation = true
+                        onClicked: {
+                        resultWindow.showTranslation = true
+                        imagePane.hoverIndex = -1
+                    }
                     }
                 }
                 UButton {
@@ -299,9 +354,89 @@ Window {
                     onClicked: {
                         App.copyText(resultWindow.showTranslation
                                      ? App.ocrResult.translation : App.ocrResult.text)
-                        copiedLabel.opacity = 1
-                        copiedTimer.restart()
+                        App.ocrResult.setStatusText(qsTr("Copied"), false)
                     }
+                }
+            }
+
+            // Picture actions. They act on the layer on show (Original or
+            // Translation) and always on the capture's own resolution, never on
+            // the scaled-down view the window may be drawing.
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacingM
+                UButton {
+                    compact: true
+                    variant: "tonal"
+                    iconName: "document-save"
+                    text: qsTr("Save image…")
+                    enabled: App.ocrResult.imageSize.width > 0
+                    accessibleDescription: qsTr("Saves the picture on show, at the capture's own size")
+                    onClicked: App.saveOcrResultImage(resultWindow.showTranslation)
+                }
+                UButton {
+                    compact: true
+                    variant: "tonal"
+                    iconName: "edit-copy"
+                    text: qsTr("Copy image")
+                    enabled: App.ocrResult.imageSize.width > 0
+                    accessibleDescription: qsTr("Copies the picture on show to the clipboard")
+                    onClicked: App.copyOcrResultImage(resultWindow.showTranslation)
+                }
+                UButton {
+                    compact: true
+                    variant: "tonal"
+                    iconName: "edit"
+                    text: qsTr("Edit in editor")
+                    enabled: App.ocrResult.imageSize.width > 0
+                    accessibleDescription: qsTr("Opens the picture on show in the editor")
+                    onClicked: App.editOcrResultImage(resultWindow.showTranslation)
+                }
+                Item { Layout.fillWidth: true }
+            }
+
+            // Picture view: the row above acts on the FILE, this one on what the
+            // pane shows. Its own row, right-aligned, so a long translated label
+            // can never squeeze the zoom controls out of the window.
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacingS
+                Item { Layout.fillWidth: true }
+                UIconButton {
+                    iconName: "minus"; iconSize: 14
+                    width: 30; height: 30
+                    tooltip: qsTr("Zoom out")
+                    enabled: imagePane.effectiveZoom > 0.11
+                    onClicked: imagePane.zoomBy(0.8)
+                }
+                UButton {
+                    compact: true
+                    // The label IS the current level, and pressing it goes back
+                    // to 100%: one control for "where am I" and "back to normal".
+                    // A fixed width keeps the buttons beside it still while the
+                    // number changes under the pointer.
+                    Layout.preferredWidth: 64
+                    variant: Math.abs(imagePane.effectiveZoom - 1) < 0.001 ? "filled" : "tonal"
+                    text: Math.round(imagePane.effectiveZoom * 100) + "%"
+                    enabled: App.ocrResult.imageSize.width > 0
+                    accessibleName: qsTr("Zoom level %1 percent")
+                                        .arg(Math.round(imagePane.effectiveZoom * 100))
+                    accessibleDescription: qsTr("Press to show the picture at 100 percent")
+                    onClicked: imagePane.showHundred()
+                }
+                UIconButton {
+                    iconName: "magnify"; iconSize: 14
+                    width: 30; height: 30
+                    tooltip: qsTr("Zoom in")
+                    enabled: imagePane.effectiveZoom < 7.9
+                    onClicked: imagePane.zoomBy(1.25)
+                }
+                UIconButton {
+                    iconName: "transform-scale"; iconSize: 14
+                    width: 30; height: 30
+                    tooltip: qsTr("Fit the picture")
+                    active: imagePane.autoFit
+                    onClicked: imagePane.showFit()
                 }
             }
 
@@ -338,50 +473,180 @@ Window {
                 wrapMode: Text.WordWrap
             }
 
-            GridLayout {
+            // A translation too long for a small line box is shortened on the
+            // picture (the corner dot marks it) and complete in the pane; say
+            // which, so nothing looks silently cut.
+            Text {
+                Layout.fillWidth: true
+                visible: resultWindow.showTranslation && resultWindow.overflowLines > 0
+                text: qsTr("Some lines are too long for their box at the smallest size, so the picture shows them shortened. The full translation is in the text pane.")
+                color: Theme.textSecondary
+                font.pixelSize: Theme.fontS
+                wrapMode: Text.WordWrap
+            }
+
+            // The two panes share one strip: side by side the picture takes
+            // `splitRatio` of the width, stacked the same share of the height,
+            // with a draggable divider between them. The ratio is remembered
+            // (Settings), and 0 means "auto" - the share that shows the capture
+            // at 100%, which is how the window opened before there was a handle.
+            Item {
+                id: panes
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                columns: resultWindow.sideBySide ? 2 : 1
-                rows: resultWindow.sideBySide ? 1 : 2
-                columnSpacing: Theme.spacingM
-                rowSpacing: Theme.spacingM
+
+                readonly property int handleSize: 10
+                readonly property real availableW: Math.max(1, width - handleSize)
+                readonly property real availableH: Math.max(1, height - handleSize)
+                // The picture may not squeeze the text pane, or the other way
+                // round: the clamps are in pixels so 200% zoom cannot eat the
+                // text and a narrow window cannot strand a strip of picture.
+                readonly property real minPicture: resultWindow.sideBySide ? 220 : 130
+                readonly property real minText: resultWindow.sideBySide ? 300 : 130
+                readonly property real loRatio: {
+                    const avail = resultWindow.sideBySide ? availableW : availableH
+                    return Math.max(0.1, Math.min(0.9, minPicture / avail))
+                }
+                readonly property real hiRatio: {
+                    const avail = resultWindow.sideBySide ? availableW : availableH
+                    return Math.max(0.1, Math.min(0.9, 1 - minText / avail))
+                }
+                // A window too small for both minimums has no legal ratio; it
+                // gets an even split rather than a divider outside its bounds.
+                readonly property bool splitFits: hiRatio > loRatio
+                readonly property real splitRatio: {
+                    const lo = splitFits ? loRatio : 0.5
+                    const hi = splitFits ? hiRatio : 0.5
+                    if (App.settings.ocrResultSplit > 0)
+                        return Math.max(lo, Math.min(hi, App.settings.ocrResultSplit))
+                    const img = App.ocrResult.imageSize
+                    if (img.width <= 0 || img.height <= 0)
+                        return (lo + hi) / 2
+                    // Auto: exactly the share that shows the capture at 100%,
+                    // which is how the window opened before the divider existed.
+                    const scale = resultWindow.hundredScale
+                    const want = resultWindow.sideBySide
+                                 ? (img.width * scale) / availableW
+                                 : (img.height * scale) / availableH
+                    return Math.max(lo, Math.min(hi, want))
+                }
+                readonly property real pictureW: resultWindow.sideBySide
+                                                 ? Math.round(availableW * splitRatio)
+                                                 : width
+                readonly property real pictureH: resultWindow.sideBySide
+                                                 ? height
+                                                 : Math.round(availableH * splitRatio)
+                readonly property real textX: resultWindow.sideBySide
+                                              ? pictureW + handleSize : 0
+                readonly property real textY: resultWindow.sideBySide
+                                              ? 0 : pictureH + handleSize
+                readonly property real textW: resultWindow.sideBySide
+                                              ? Math.max(1, width - textX) : width
+                readonly property real textH: resultWindow.sideBySide
+                                              ? height : Math.max(1, height - textY)
+                function setSplit(ratio) {
+                    const lo = splitFits ? loRatio : 0.5
+                    const hi = splitFits ? hiRatio : 0.5
+                    App.settings.ocrResultSplit = Math.max(lo, Math.min(hi, ratio))
+                }
 
                 Rectangle {
                     id: imagePane
-                    // Side by side the picture gets its own width at 100% and
-                    // the text pane takes the rest; stacked, both share the
-                    // window width.
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    Layout.minimumWidth: 220
-                    Layout.minimumHeight: 130
-                    Layout.preferredWidth: Math.round(App.ocrResult.imageSize.width
-                                                      * resultWindow.hundredScale)
-                    Layout.maximumWidth: resultWindow.sideBySide
-                                         ? Math.round(App.ocrResult.imageSize.width
-                                                      * resultWindow.hundredScale)
-                                         : 1000000
+                    x: 0
+                    y: 0
+                    width: panes.pictureW
+                    height: panes.pictureH
                     color: Theme.primary
                     radius: Theme.radiusM
                     clip: true
 
-                    // The picture is drawn at its own size and only shrunk
-                    // (proportionally, never past 100%) when the capture does
-                    // not fit the pane - a full-screen shot, or a window the
-                    // user made smaller.
-                    readonly property real renderScale: {
+                    // ---- view state ----
+                    // 100% is one capture pixel per screen pixel (divided by the
+                    // screen's DPR). `autoFit` shows the whole capture, at 100%
+                    // when it fits and scaled down when it does not, and is what
+                    // the window opens with; the buttons and Ctrl+wheel switch to
+                    // an explicit factor. Line boxes, covers and their text are
+                    // laid out in DEVICE pixels from `renderScale` - the text is
+                    // re-rendered rather than raster-scaled, and a click lands on
+                    // the right line at every level.
+                    property bool autoFit: true
+                    property real zoomFactor: 1
+                    readonly property real fitFactor: {
+                        const img = App.ocrResult.imageSize
+                        if (img.width <= 0 || img.height <= 0 || width <= 0 || height <= 0)
+                            return 1
+                        return Math.min(1, width / (img.width * resultWindow.hundredScale),
+                                           height / (img.height * resultWindow.hundredScale))
+                    }
+                    readonly property real effectiveZoom: autoFit ? fitFactor : zoomFactor
+                    readonly property real renderScale: resultWindow.hundredScale * effectiveZoom
+
+                    // Pan is an offset from the centred position, clamped to the
+                    // overflow, so the picture can never be dragged off the pane
+                    // and sits centred whenever it all fits.
+                    property real panX: 0
+                    property real panY: 0
+                    readonly property real maxPanX: Math.max(0, (imageHolder.width - width) / 2)
+                    readonly property real maxPanY: Math.max(0, (imageHolder.height - height) / 2)
+                    readonly property real holderX: (width - imageHolder.width) / 2
+                                                    + Math.max(-maxPanX, Math.min(maxPanX, panX))
+                    readonly property real holderY: (height - imageHolder.height) / 2
+                                                    + Math.max(-maxPanY, Math.min(maxPanY, panY))
+                    // The line under the pointer, from the same hit test a click
+                    // uses; -1 over the page between the lines.
+                    property int hoverIndex: -1
+
+                    function imagePointAt(px, py) {
+                        return Qt.point((px - holderX) / renderScale,
+                                        (py - holderY) / renderScale)
+                    }
+                    function lineIndexAt(px, py) {
+                        if (App.ocrResult.imageSize.width <= 0 || renderScale <= 0)
+                            return -1
+                        return App.ocrResult.lineAt(imagePointAt(px, py),
+                                                    resultWindow.showTranslation)
+                    }
+                    // Zoom around a pane point, keeping the image pixel under it
+                    // still: that is what makes Ctrl+wheel feel like a map
+                    // rather than a slideshow.
+                    function zoomTo(factor, anchorX, anchorY) {
                         const img = App.ocrResult.imageSize
                         if (img.width <= 0 || img.height <= 0)
-                            return resultWindow.hundredScale
-                        const fit = Math.min(width / img.width, height / img.height)
-                        return Math.min(resultWindow.hundredScale, fit)
+                            return
+                        const oldScale = renderScale
+                        const imgX = (anchorX - holderX) / oldScale
+                        const imgY = (anchorY - holderY) / oldScale
+                        const next = Math.max(0.1, Math.min(8, factor))
+                        autoFit = false
+                        zoomFactor = next
+                        const scale = resultWindow.hundredScale * next
+                        const w = img.width * scale
+                        const h = img.height * scale
+                        const maxX = Math.max(0, (w - width) / 2)
+                        const maxY = Math.max(0, (h - height) / 2)
+                        panX = Math.max(-maxX, Math.min(maxX,
+                                                        anchorX - imgX * scale - (width - w) / 2))
+                        panY = Math.max(-maxY, Math.min(maxY,
+                                                        anchorY - imgY * scale - (height - h) / 2))
+                    }
+                    function zoomBy(step) {
+                        zoomTo(effectiveZoom * step, width / 2, height / 2)
+                    }
+                    function showHundred() {
+                        zoomTo(1, width / 2, height / 2)
+                    }
+                    function showFit() {
+                        autoFit = true
+                        panX = 0
+                        panY = 0
                     }
 
                     Item {
                         id: imageHolder
                         width: App.ocrResult.imageSize.width * imagePane.renderScale
                         height: App.ocrResult.imageSize.height * imagePane.renderScale
-                        anchors.centerIn: parent
+                        x: imagePane.holderX
+                        y: imagePane.holderY
 
                             Image {
                                 id: preview
@@ -410,9 +675,13 @@ Window {
                                     id: lineBox
                                     z: 2
                                     required property var modelData
+                                    required property int index
                                     readonly property bool picked:
                                         textEdit.selectionStart < modelData.start + modelData.length
                                         && textEdit.selectionEnd > modelData.start
+                                    readonly property bool hovered:
+                                        imagePane.hoverIndex === index
+                                        && !resultWindow.showTranslation
                                     visible: preview.status === Image.Ready
                                              && !resultWindow.showTranslation
                                     x: modelData.x * imagePane.renderScale
@@ -421,20 +690,11 @@ Window {
                                     height: Math.max(1, modelData.height * imagePane.renderScale)
                                     radius: 2
                                     color: picked ? Theme.alpha(Theme.accent, 0.32)
-                                         : hoverArea.containsMouse
-                                           ? Theme.alpha(Theme.accent, 0.18)
-                                           : Theme.alpha(Theme.accent, 0.08)
+                                         : hovered ? Theme.alpha(Theme.accent, 0.18)
+                                         : Theme.alpha(Theme.accent, 0.08)
                                     border.width: 1
                                     border.color: picked ? Theme.accent
                                                          : Theme.alpha(Theme.accent, 0.8)
-                                    MouseArea {
-                                        id: hoverArea
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.IBeamCursor
-                                        onClicked: resultWindow.selectPaneRange(modelData.start,
-                                                                                modelData.length)
-                                    }
                                 }
                             }
 
@@ -448,6 +708,7 @@ Window {
                                 model: App.ocrResult.translatedLines
                                 delegate: Item {
                                     required property var modelData
+                                    required property int index
                                     visible: resultWindow.showTranslation
                                              && preview.status === Image.Ready
                                     // The cover rect already carries the
@@ -457,6 +718,7 @@ Window {
                                     readonly property bool picked:
                                         textEdit.selectionStart < modelData.start + modelData.length
                                         && textEdit.selectionEnd > modelData.start
+                                    readonly property bool hovered: imagePane.hoverIndex === index
                                     x: modelData.x * imagePane.renderScale - pad
                                     y: modelData.y * imagePane.renderScale - pad
                                     width: Math.max(1, modelData.width * imagePane.renderScale
@@ -474,17 +736,45 @@ Window {
                                         anchors.fill: parent
                                         text: modelData.text
                                         color: modelData.foreground
-                                        // Text.Fit shrinks from this size until
-                                        // the translation fits the box;
-                                        // minimumPixelSize keeps it from
-                                        // vanishing on a small window.
-                                        font.pixelSize: Math.max(8, height)
-                                        fontSizeMode: Text.Fit
-                                        minimumPixelSize: 5
+                                        // The fitted size comes from C++ in
+                                        // IMAGE pixels, and it is the number the
+                                        // saved picture draws at; the window only
+                                        // scales it. Text.Fit here would be a
+                                        // second, divergent fit - which is what
+                                        // made a saved PNG differ from the screen.
+                                        font.family: Qt.application.font.family
+                                        font.pixelSize: Math.max(1, modelData.fontSize
+                                                                    * imagePane.renderScale)
                                         wrapMode: Text.Wrap
-                                        horizontalAlignment: Text.AlignLeft
+                                        // An RTL translation sits against the
+                                        // right edge of its cover, like an RTL
+                                        // line in the pane. The glyph order is
+                                        // the bidi algorithm's (Text has no
+                                        // layoutDirection property), so the
+                                        // alignment is what an RTL line needs
+                                        // from here.
+                                        horizontalAlignment: modelData.rtl ? Text.AlignRight
+                                                                           : Text.AlignLeft
                                         verticalAlignment: Text.AlignVCenter
                                         clip: true
+                                    }
+                                    // A translation that could not fit even at
+                                    // the 5 px floor is clipped by the cover;
+                                    // the same corner dot the saved picture gets
+                                    // says so instead of hiding it.
+                                    Rectangle {
+                                        visible: modelData.overflow
+                                        anchors.right: parent.right
+                                        anchors.bottom: parent.bottom
+                                        // Off the cover's height, never its own:
+                                        // width from height and height from width
+                                        // is a binding loop.
+                                        anchors.margins: Math.max(1, Math.round(parent.height / 12))
+                                        width: Math.max(3, Math.round(parent.height / 5))
+                                        height: width
+                                        radius: 1
+                                        color: modelData.foreground
+                                        opacity: 0.8
                                     }
                                     Rectangle {
                                         anchors.fill: parent
@@ -493,26 +783,186 @@ Window {
                                         border.width: 1
                                         border.color: picked ? Theme.accent
                                                              : Theme.alpha(Theme.accent, 0.85)
-                                        visible: picked || coverHover.containsMouse
-                                    }
-                                    MouseArea {
-                                        id: coverHover
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.IBeamCursor
-                                        onClicked: resultWindow.selectPaneRange(modelData.start,
-                                                                                modelData.length)
+                                        visible: picked || hovered
                                     }
                                 }
                             }
                         }
+
+                    // One input surface for the picture: hover, click, drag to
+                    // pan and Ctrl+wheel to zoom. It replaces per-line mouse
+                    // areas on purpose - a click is resolved against the image
+                    // coordinates, so it stays exact when the picture is panned
+                    // and zoomed instead of drifting with each delegate's
+                    // transformed hit area.
+                    MouseArea {
+                        id: imageMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        acceptedButtons: Qt.LeftButton
+                        cursorShape: imageMouse.panning ? Qt.ClosedHandCursor
+                                     : imagePane.hoverIndex >= 0 ? Qt.IBeamCursor
+                                     : (imagePane.maxPanX > 0 || imagePane.maxPanY > 0
+                                        ? Qt.OpenHandCursor : Qt.ArrowCursor)
+                        property real pressX: 0
+                        property real pressY: 0
+                        property real startPanX: 0
+                        property real startPanY: 0
+                        property bool panning: false
+
+                        onPressed: (m) => {
+                            pressX = m.x
+                            pressY = m.y
+                            startPanX = imagePane.panX
+                            startPanY = imagePane.panY
+                            panning = false
+                        }
+                        onPositionChanged: (m) => {
+                            if (!pressed) {
+                                imagePane.hoverIndex = imagePane.lineIndexAt(m.x, m.y)
+                                return
+                            }
+                            const dx = m.x - pressX
+                            const dy = m.y - pressY
+                            if (!panning && Math.max(Math.abs(dx), Math.abs(dy)) > 3)
+                                panning = true
+                            if (panning) {
+                                imagePane.panX = Math.max(-imagePane.maxPanX,
+                                                          Math.min(imagePane.maxPanX,
+                                                                   startPanX + dx))
+                                imagePane.panY = Math.max(-imagePane.maxPanY,
+                                                          Math.min(imagePane.maxPanY,
+                                                                   startPanY + dy))
+                            }
+                        }
+                        onReleased: (m) => {
+                            if (!panning)
+                                resultWindow.clickPicture(m.x, m.y)
+                            panning = false
+                        }
+                        onExited: imagePane.hoverIndex = -1
+                        onWheel: (wheel) => {
+                            if (wheel.modifiers & Qt.ControlModifier) {
+                                imagePane.zoomTo(imagePane.effectiveZoom
+                                                 * (wheel.angleDelta.y > 0 ? 1.25 : 0.8),
+                                                 wheel.x, wheel.y)
+                            } else if (imagePane.maxPanY > 0 || imagePane.maxPanX > 0) {
+                                // A plain wheel scrolls the zoomed picture the
+                                // way every viewer does; while it all fits there
+                                // is nothing to scroll.
+                                imagePane.panY = Math.max(-imagePane.maxPanY,
+                                                          Math.min(imagePane.maxPanY,
+                                                                   imagePane.panY
+                                                                   + wheel.angleDelta.y * 0.6))
+                                if (wheel.modifiers & Qt.ShiftModifier)
+                                    imagePane.panX = Math.max(-imagePane.maxPanX,
+                                                              Math.min(imagePane.maxPanX,
+                                                                       imagePane.panX
+                                                                       + wheel.angleDelta.y * 0.6))
+                            }
+                            // The pane owns the wheel: without this the event
+                            // keeps bubbling to whatever is behind it.
+                            wheel.accepted = true
+                        }
+                    }
+                }
+
+                // The divider. Dragging it stores a real ratio; a double-click
+                // (or Backspace when it has focus) goes back to auto. Both
+                // orientations share one component: the drag axis follows the
+                // pane layout, so a narrow window still gets a usable handle.
+                Rectangle {
+                    id: splitHandle
+                    x: resultWindow.sideBySide ? panes.pictureW : 0
+                    y: resultWindow.sideBySide ? 0 : panes.pictureH
+                    width: resultWindow.sideBySide ? panes.handleSize : panes.width
+                    height: resultWindow.sideBySide ? panes.height : panes.handleSize
+                    color: "transparent"
+
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: resultWindow.sideBySide ? 2 : Math.round(parent.width * 0.4)
+                        height: resultWindow.sideBySide ? Math.round(parent.height * 0.4) : 2
+                        radius: 1
+                        color: splitHandle.activeFocus || splitMouse.containsMouse
+                               ? Theme.accent : Theme.divider
+                        Behavior on color { ColorAnimation { duration: Theme.animFast } }
                     }
 
+                    MouseArea {
+                        id: splitMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: resultWindow.sideBySide ? Qt.SplitHCursor : Qt.SplitVCursor
+                        // Double-click resets to the automatic share, which is
+                        // also the way back after a drag went too far.
+                        onDoubleClicked: App.settings.ocrResultSplit = 0
+                        onPressed: (m) => {
+                            splitHandle.forceActiveFocus()
+                            splitHandle.dragTo(m)
+                        }
+                        onPositionChanged: (m) => {
+                            if (pressed)
+                                splitHandle.dragTo(m)
+                        }
+                    }
+
+                    function dragTo(m) {
+                        const p = mapToItem(panes, m.x, m.y)
+                        if (resultWindow.sideBySide)
+                            panes.setSplit(p.x / panes.availableW)
+                        else
+                            panes.setSplit(p.y / panes.availableH)
+                    }
+                    function step(delta) {
+                        panes.setSplit(panes.splitRatio + delta / (resultWindow.sideBySide
+                                                                  ? panes.availableW
+                                                                  : panes.availableH) * 40)
+                    }
+
+                    activeFocusOnTab: true
+                    // Dedicated handlers run before everything else, so a held
+                    // Ctrl/Shift must hand the chord back instead of stealing it.
+                    Keys.onLeftPressed: (e) => {
+                        if (resultWindow.sideBySide && UKeys.claim(e))
+                            step(-12)
+                    }
+                    Keys.onRightPressed: (e) => {
+                        if (resultWindow.sideBySide && UKeys.claim(e))
+                            step(12)
+                    }
+                    Keys.onUpPressed: (e) => {
+                        if (!resultWindow.sideBySide && UKeys.claim(e))
+                            step(-12)
+                    }
+                    Keys.onDownPressed: (e) => {
+                        if (!resultWindow.sideBySide && UKeys.claim(e))
+                            step(12)
+                    }
+                    // Backspace has no dedicated handler, so it arrives on the
+                    // plain one - unaccepted, which is exactly what a declined
+                    // chord needs (a held modifier keeps bubbling).
+                    Keys.onPressed: (e) => {
+                        if (!UKeys.unmodified(e) || e.key !== Qt.Key_Backspace)
+                            return
+                        App.settings.ocrResultSplit = 0
+                        e.accepted = true
+                    }
+                    Accessible.role: Accessible.Slider
+                    Accessible.name: qsTr("Divider between the picture and the text")
+                    Accessible.description: qsTr("Drag it, or use the arrow keys; double-click to reset")
+                    Accessible.focusable: true
+                    Accessible.onIncreaseAction: step(12)
+                    Accessible.onDecreaseAction: step(-12)
+                    UFocusRing { hostRadius: 4 }
+                }
+
                 Rectangle {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    Layout.minimumWidth: 300
-                    Layout.minimumHeight: 130
+                    id: textPane
+                    x: panes.textX
+                    y: panes.textY
+                    width: panes.textW
+                    height: panes.textH
                     color: Theme.secondary
                     radius: Theme.radiusM
 
@@ -525,6 +975,21 @@ Window {
                         clip: true
                         boundsBehavior: Flickable.StopAtBounds
                         ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+                        // Ctrl+wheel over the text changes its size, the way a
+                        // browser does. It sits ON the Flickable so it runs
+                        // before the Flickable's own wheel handling and only
+                        // claims the chord: the plain wheel keeps scrolling.
+                        WheelHandler {
+                            acceptedModifiers: Qt.ControlModifier
+                            onWheel: (wheel) => {
+                                const current = App.settings.ocrResultTextSize > 0
+                                                ? App.settings.ocrResultTextSize : Theme.fontM
+                                App.settings.ocrResultTextSize =
+                                    Math.max(9, Math.min(28, current
+                                                           + (wheel.angleDelta.y > 0 ? 1 : -1)))
+                            }
+                        }
 
                         TextEdit {
                             id: textEdit
@@ -539,18 +1004,17 @@ Window {
                             color: Theme.textPrimary
                             selectionColor: Theme.accent
                             selectedTextColor: Theme.primary
-                            font.pixelSize: Theme.fontM
+                            // 0 follows the theme; Ctrl+wheel stores a real size.
+                            font.pixelSize: App.settings.ocrResultTextSize > 0
+                                            ? App.settings.ocrResultTextSize : Theme.fontM
+                            Accessible.role: Accessible.StaticText
+                            Accessible.name: qsTr("Recognized text")
+                            Accessible.description: qsTr("Selectable text. Ctrl and the mouse wheel change its size.")
                         }
                     }
                 }
             }
         }
-    }
-
-    Timer {
-        id: copiedTimer
-        interval: 1500
-        onTriggered: copiedLabel.opacity = 0
     }
 
     UWindowResizer { active: !App.settings.useSystemDecoration }

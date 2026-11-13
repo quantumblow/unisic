@@ -168,6 +168,12 @@ class Settings : public QObject
     Q_PROPERTY(QString ocrEngine READ ocrEngine WRITE setOcrEngine NOTIFY ocrEngineChanged)
     // PP-OCRv6 model tier: "tiny" | "small" | "medium".
     Q_PROPERTY(QString paddleTier READ paddleTier WRITE setPaddleTier NOTIFY paddleTierChanged)
+    // The OCR result window's layout: the picture's share of the split (0 means
+    // "auto", derived from the picture at 100%), and the text pane's font size
+    // in pixels (0 follows the theme). Both are remembered because a reader who
+    // widened the picture for one page wants it wide for the next one too.
+    Q_PROPERTY(double ocrResultSplit READ ocrResultSplit WRITE setOcrResultSplit NOTIFY ocrResultSplitChanged)
+    Q_PROPERTY(int ocrResultTextSize READ ocrResultTextSize WRITE setOcrResultTextSize NOTIFY ocrResultTextSizeChanged)
     // OpenAI-compatible translation endpoint (base URL or full /chat/completions
     // URL), an optional Bearer key, a model name, and the target language name.
     Q_PROPERTY(QString translationEndpoint READ translationEndpoint WRITE setTranslationEndpoint NOTIFY translationEndpointChanged)
@@ -681,6 +687,8 @@ public:
     // group named "general" (see AGENTS.md).
     U_SETTING(QString, ocrEngine, setOcrEngine, "ocr/engine", QStringLiteral("auto"))
     U_SETTING(QString, paddleTier, setPaddleTier, "ocr/paddleTier", QStringLiteral("small"))
+    U_SETTING(double, ocrResultSplit, setOcrResultSplit, "ocr/resultSplit", 0.0)
+    U_SETTING(int, ocrResultTextSize, setOcrResultTextSize, "ocr/resultTextSize", 0)
     // Translation is off until the user fills an endpoint and a model. The text
     // leaves the machine only when they press Translate, and the key is stored
     // in the config file like the upload credentials (settings export is
@@ -942,6 +950,8 @@ signals:
     void ocrLanguagesChanged();
     void ocrEngineChanged();
     void paddleTierChanged();
+    void ocrResultSplitChanged();
+    void ocrResultTextSizeChanged();
     void translationEndpointChanged();
     void translationApiKeyChanged();
     void translationModelChanged();

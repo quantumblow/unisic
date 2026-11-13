@@ -4,11 +4,41 @@
 #include "Translator.h"
 
 #include <QDir>
+#include <QFont>
+#include <QFontMetrics>
+#include <QGuiApplication>
 #include <QHash>
+#include <QPainter>
 #include <QTemporaryFile>
+#include <QTextLayout>
+#include <QTextOption>
 #include <cmath>
 
 namespace {
+
+// QML's Text with wrapMode Text.Wrap: break at word boundaries, and anywhere
+// when a word is longer than the line. The fit and the drawing share this
+// function, so a saved cover breaks exactly where the window's does.
+void layOutText(QTextLayout &layout, int width, bool rtl)
+{
+    QTextOption option;
+    option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+    option.setAlignment(rtl ? Qt::AlignRight : Qt::AlignLeft);
+    layout.setTextOption(option);
+    layout.beginLayout();
+    for (;;) {
+        QTextLine line = layout.createLine();
+        if (!line.isValid())
+            break;
+        line.setLineWidth(width);
+    }
+    layout.endLayout();
+}
+
+int laidOutHeight(const QTextLayout &layout)
+{
+    return layout.lineCount() * QFontMetrics(layout.font()).lineSpacing();
+}
 
 // A screenshot can carry transparency; a cover that keeps it would show the
 // original text through the translation. Blend onto white, the same paper the
@@ -95,6 +125,26 @@ OcrResultController::OcrResultController(Settings *settings, QObject *parent)
                             &Settings::translationApiKeyChanged, &Settings::translationTargetChanged})
             connect(m_settings, signal, this, &OcrResultController::translationChanged);
     }
+    // The window shows the line and fades it; the timing lives here so every
+    // caller (C++ actions and QML copy buttons) behaves the same.
+    m_statusTimer.setSingleShot(true);
+    m_statusTimer.setInterval(2500);
+    connect(&m_statusTimer, &QTimer::timeout, this, [this] {
+        if (m_statusText.isEmpty())
+            return;
+        m_statusText.clear();
+        m_statusIsError = false;
+        emit statusTextChanged();
+    });
+}
+
+void OcrResultController::setStatusText(const QString &text, bool error)
+{
+    m_statusText = text;
+    m_statusIsError = error;
+    emit statusTextChanged();
+    if (!text.isEmpty())
+        m_statusTimer.start();
 }
 
 OcrResultController::~OcrResultController()
@@ -133,7 +183,7 @@ void OcrResultController::translate()
     m_translating = true;
     m_translationError.clear();
     m_translation.clear();
-    m_translatedLines.clear();
+    setTranslatedLines({});
     m_translationUnchanged = false;
     emit translationChanged();
 
@@ -165,7 +215,7 @@ void OcrResultController::requestNextLineChunk(quint64 seq)
         for (const QStringList &chunk : m_translatedChunks)
             translated += chunk;
         QString text;
-        m_translatedLines = translatedLineMap(m_lines, translated, m_image, &text);
+        setTranslatedLines(translatedLineMap(m_lines, translated, m_image, &text));
         m_translation = text;
         m_translationUnchanged = translationLooksUnchanged(m_text, m_translation);
         m_translating = false;
@@ -215,7 +265,7 @@ void OcrResultController::requestWholeText(quint64 seq)
         }
         m_translation = text;
         m_translationError.clear();
-        m_translatedLines.clear();
+        setTranslatedLines({});
         // The whole-text answer may still be one line per input line (the
         // service ignored the numbering but translated line by line): map it
         // back onto the picture with the same tolerant parser instead of
@@ -227,7 +277,7 @@ void OcrResultController::requestWholeText(quint64 seq)
                 QString joined;
                 const QVariantList map = translatedLineMap(m_lines, rows, m_image, &joined);
                 m_translation = joined;
-                m_translatedLines = map;
+                setTranslatedLines(map);
             }
         }
         m_translationUnchanged = translationLooksUnchanged(m_text, m_translation);
@@ -238,7 +288,7 @@ void OcrResultController::requestWholeText(quint64 seq)
             const QVariantList map =
                 translatedLineMap(m_lines, QStringList{text}, m_image, &joined);
             if (joined == text)
-                m_translatedLines = map;
+                setTranslatedLines(map);
         }
         emit translationChanged();
         if (!m_translation.isEmpty())
@@ -268,6 +318,24 @@ void OcrResultController::cancelTranslation()
     }
 }
 
+void OcrResultController::setTranslationForPreview(const QStringList &translated)
+{
+    if (m_lines.isEmpty() || translated.isEmpty())
+        return;
+    ++m_translationSeq;
+    if (m_translator)
+        m_translator->cancel();
+    m_translating = false;
+    m_translationError.clear();
+    QString joined;
+    setTranslatedLines(translatedLineMap(m_lines, translated, m_image, &joined));
+    m_translation = joined;
+    m_translationUnchanged = translationLooksUnchanged(m_text, m_translation);
+    emit translationChanged();
+    if (!m_translation.isEmpty())
+        emit translationReady();
+}
+
 void OcrResultController::setResult(const QImage &image, const QVector<OcrWord> &words,
                                     const QString &text)
 {
@@ -275,7 +343,7 @@ void OcrResultController::setResult(const QImage &image, const QVector<OcrWord> 
     if (m_translator)
         m_translator->cancel();
     m_translation.clear();
-    m_translatedLines.clear();
+    setTranslatedLines({});
     m_translationUnchanged = false;
     m_chunks.clear();
     m_translatedChunks.clear();
@@ -284,6 +352,7 @@ void OcrResultController::setResult(const QImage &image, const QVector<OcrWord> 
     m_translating = false;
     m_image = image;
     m_lines.clear();
+    m_lineRects.clear();
     if (words.isEmpty()) {
         m_text = text;
     } else {
@@ -310,6 +379,7 @@ void OcrResultController::setResult(const QImage &image, const QVector<OcrWord> 
             line.insert(QStringLiteral("start"), start);
             line.insert(QStringLiteral("length"), lineText.size());
             m_lines.append(line);
+            m_lineRects.append(lineRect);
         };
         for (const OcrWord &w : words) {
             if (w.line != currentLine) {
@@ -461,22 +531,58 @@ QVariantList OcrResultController::translatedLineMap(const QVariantList &lines,
         source = source.convertToFormat(QImage::Format_ARGB32);
     QVariantList map;
     QString joined;
-    for (int i = 0; i < lines.size(); ++i) {
-        const QVariantMap line = lines.at(i).toMap();
-        const QRect rect(line.value(QStringLiteral("x")).toInt(),
-                         line.value(QStringLiteral("y")).toInt(),
-                         line.value(QStringLiteral("width")).toInt(),
-                         line.value(QStringLiteral("height")).toInt());
+    // Convert the input boxes once: the neighbour scan below is per line and
+    // would otherwise convert the whole list of maps for every cover.
+    QVector<QRect> boxes;
+    boxes.reserve(lines.size());
+    for (const QVariant &value : lines) {
+        const QVariantMap line = value.toMap();
+        boxes.append(QRect(line.value(QStringLiteral("x")).toInt(),
+                           line.value(QStringLiteral("y")).toInt(),
+                           line.value(QStringLiteral("width")).toInt(),
+                           line.value(QStringLiteral("height")).toInt()));
+    }
+    for (int i = 0; i < boxes.size(); ++i) {
+        const QRect rect = boxes.at(i);
         const QString value = i < translated.size() ? translated.at(i) : QString();
         if (i)
             joined += QLatin1Char('\n');
         // The OCR box cuts through the outer glyphs (a wider letter pokes past
         // it), so the cover grows a little - more sideways than up and down, so
-        // it reaches the last letter without eating the line above.
+        // it reaches the last letter without eating the line above. On a
+        // multi-column page the sideways growth stops in the middle of the
+        // gutter to a neighbour on the same row: 30% of a tall line is wide
+        // enough to reach into the next column and hide its first letter.
         const int padX = std::clamp(int(std::lround(rect.height() * 0.3)), 3, 32);
         const int padY = 1;
-        const QRect cover = rect.adjusted(-padX, -padY, padX, padY);
+        int leftPad = padX;
+        int rightPad = padX;
+        for (int j = 0; j < boxes.size(); ++j) {
+            if (j == i)
+                continue;
+            const QRect &otherRect = boxes.at(j);
+            // Same visual row only: the box above or below is not a column
+            // neighbour, and its overshoot does not matter here.
+            if (otherRect.top() > rect.bottom() || otherRect.bottom() < rect.top())
+                continue;
+            // At most half the blank gutter, so two covers can never reach
+            // each other: each stops in the middle of the space between the
+            // boxes instead of both growing the full 30% into it.
+            if (otherRect.right() < rect.left()) {
+                const int gap = rect.left() - otherRect.right() - 1;
+                leftPad = std::min(leftPad, std::max(0, gap / 2));
+            } else if (otherRect.left() > rect.right()) {
+                const int gap = otherRect.left() - rect.right() - 1;
+                rightPad = std::min(rightPad, std::max(0, gap / 2));
+            }
+        }
+        const QRect cover = rect.adjusted(-leftPad, -padY, rightPad, padY);
         const LineColors colors = sampleLineColors(source, cover);
+        // The ONE font decision for this cover, in image pixels: the window
+        // scales it and the composite draws at it, so the saved picture cannot
+        // pick a different size than the screen shows.
+        bool fits = true;
+        const int fontSize = fittedPixelSize(value, cover.size(), std::max(8, cover.height()), &fits);
         QVariantMap entry;
         entry.insert(QStringLiteral("text"), value);
         entry.insert(QStringLiteral("start"), int(joined.size()));
@@ -487,10 +593,187 @@ QVariantList OcrResultController::translatedLineMap(const QVariantList &lines,
         entry.insert(QStringLiteral("height"), cover.height());
         entry.insert(QStringLiteral("background"), colors.background.name(QColor::HexRgb));
         entry.insert(QStringLiteral("foreground"), colors.foreground.name(QColor::HexRgb));
+        entry.insert(QStringLiteral("fontSize"), fontSize);
+        entry.insert(QStringLiteral("rtl"), lineIsRtl(value));
+        entry.insert(QStringLiteral("overflow"), !fits);
         map.append(entry);
         joined += value;
     }
     if (text)
         *text = joined;
     return map;
+}
+
+// The fitting rule, in one place. `Text.Fit` used to run this inside QML and
+// the saved picture would have had to run it a second time: the screen and the
+// file could then disagree on the size for the same cover.
+int OcrResultController::fittedPixelSize(const QString &text, const QSize &box, int maxPixelSize,
+                                         bool *fits)
+{
+    const int maxSize = std::max(kMinFitPixelSize, maxPixelSize);
+    if (text.isEmpty()) {
+        if (fits)
+            *fits = true;
+        return maxSize;
+    }
+    if (box.width() <= 0 || box.height() <= 0) {
+        if (fits)
+            *fits = false;
+        return kMinFitPixelSize;
+    }
+    // Downwards, not a binary search: a larger size can, in principle, break a
+    // line differently and come back a row shorter, and the first size that
+    // fits is the one QML's Text.Fit would have chosen too.
+    QFont font = QGuiApplication::font();
+    for (int size = maxSize; size >= kMinFitPixelSize; --size) {
+        font.setPixelSize(size);
+        QTextLayout layout(text, font);
+        layOutText(layout, box.width(), false);
+        if (layout.lineCount() > 0 && laidOutHeight(layout) <= box.height()) {
+            if (fits)
+                *fits = true;
+            return size;
+        }
+    }
+    if (fits)
+        *fits = false;
+    return kMinFitPixelSize;
+}
+
+bool OcrResultController::lineIsRtl(const QString &text)
+{
+    for (const QChar c : text) {
+        switch (c.direction()) {
+        case QChar::DirR:
+        case QChar::DirAL:
+        case QChar::DirRLE:
+        case QChar::DirRLO:
+            return true;
+        case QChar::DirL:
+        case QChar::DirLRE:
+        case QChar::DirLRO:
+            return false;
+        default:
+            // Digits, spaces and punctuation say nothing about the paragraph
+            // direction; the first strong character decides, as in Unicode.
+            break;
+        }
+    }
+    return false;
+}
+
+int OcrResultController::lineIndexAt(const QVariantList &lines, const QPointF &imagePoint)
+{
+    // Backwards: the covers paint in list order, so the last one drawn is the
+    // one the eye (and the pointer) sees where two padded boxes overlap.
+    const QPoint point(int(std::floor(imagePoint.x())), int(std::floor(imagePoint.y())));
+    for (int i = lines.size() - 1; i >= 0; --i) {
+        const QVariantMap line = lines.at(i).toMap();
+        const QRect rect(line.value(QStringLiteral("x")).toInt(),
+                         line.value(QStringLiteral("y")).toInt(),
+                         line.value(QStringLiteral("width")).toInt(),
+                         line.value(QStringLiteral("height")).toInt());
+        if (rect.contains(point))
+            return i;
+    }
+    return -1;
+}
+
+QImage OcrResultController::composeOverlay(const QImage &image, const QVariantList &translatedLines)
+{
+    if (image.isNull() || translatedLines.isEmpty())
+        return image;
+    QImage out = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    QPainter painter(&out);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
+    const QFont baseFont = QGuiApplication::font();
+
+    for (const QVariant &value : translatedLines) {
+        const QVariantMap entry = value.toMap();
+        const QRect cover(entry.value(QStringLiteral("x")).toInt(),
+                          entry.value(QStringLiteral("y")).toInt(),
+                          entry.value(QStringLiteral("width")).toInt(),
+                          entry.value(QStringLiteral("height")).toInt());
+        if (cover.isEmpty())
+            continue;
+        const QColor background(entry.value(QStringLiteral("background")).toString());
+        const QColor foreground(entry.value(QStringLiteral("foreground")).toString());
+        const bool rtl = entry.value(QStringLiteral("rtl")).toBool();
+        const QString text = entry.value(QStringLiteral("text")).toString();
+        const int radius = std::min(3, cover.height() / 4);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(background.isValid() ? background : QColor(255, 255, 255));
+        painter.drawRoundedRect(cover, radius, radius);
+        if (text.isEmpty())
+            continue;
+
+        QFont font = baseFont;
+        font.setPixelSize(std::max(kMinFitPixelSize, entry.value(QStringLiteral("fontSize")).toInt()));
+        QTextLayout layout(text, font);
+        layOutText(layout, cover.width(), rtl);
+        const QFontMetrics metrics(font);
+        const int total = laidOutHeight(layout);
+        const int top = cover.y() + (cover.height() - total) / 2;
+        for (int i = 0; i < layout.lineCount(); ++i) {
+            QTextLine line = layout.lineAt(i);
+            line.setPosition(QPointF(0, i * metrics.lineSpacing()));
+        }
+        painter.save();
+        painter.setClipRect(cover);
+        // QTextLayout::draw takes the text colour from the pen, and the cover
+        // fill above left it at Qt::NoPen: without this the saved picture has
+        // empty covers while the screen shows text.
+        painter.setPen(foreground.isValid() ? foreground : QColor(0, 0, 0));
+        layout.draw(&painter, QPointF(cover.x(), top));
+        painter.restore();
+
+        // A translation that cannot fit even at the 5 px floor is clipped by
+        // the cover anyway; mark the corner instead of pretending it fits.
+        if (entry.value(QStringLiteral("overflow")).toBool()) {
+            const int dot = std::clamp(cover.height() / 5, 3, 8);
+            QColor marker = foreground.isValid() ? foreground : QColor(0, 0, 0);
+            marker.setAlpha(200);
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(marker);
+            painter.drawRoundedRect(QRect(cover.right() - dot - 1, cover.bottom() - dot - 1, dot, dot),
+                                    1, 1);
+        }
+    }
+    painter.end();
+    return out;
+}
+
+QImage OcrResultController::compositedImage(bool translated) const
+{
+    if (m_image.isNull())
+        return {};
+    if (!translated || m_translatedLines.isEmpty())
+        return m_image;
+    return composeOverlay(m_image, m_translatedLines);
+}
+
+int OcrResultController::lineAt(const QPointF &imagePoint, bool translated) const
+{
+    const QVector<QRect> &rects = translated ? m_coverRects : m_lineRects;
+    const QPoint point(int(std::floor(imagePoint.x())), int(std::floor(imagePoint.y())));
+    for (int i = rects.size() - 1; i >= 0; --i) {
+        if (rects.at(i).contains(point))
+            return i;
+    }
+    return -1;
+}
+
+void OcrResultController::setTranslatedLines(const QVariantList &lines)
+{
+    m_translatedLines = lines;
+    m_coverRects.clear();
+    m_coverRects.reserve(lines.size());
+    for (const QVariant &value : lines) {
+        const QVariantMap entry = value.toMap();
+        m_coverRects.append(QRect(entry.value(QStringLiteral("x")).toInt(),
+                                  entry.value(QStringLiteral("y")).toInt(),
+                                  entry.value(QStringLiteral("width")).toInt(),
+                                  entry.value(QStringLiteral("height")).toInt()));
+    }
 }

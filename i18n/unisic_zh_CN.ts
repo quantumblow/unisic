@@ -19,14 +19,14 @@
         <translation>无法将 %1 移到回收站，文件仍在磁盘上</translation>
     </message>
     <message>
-        <location line="+3157"/>
-        <location line="+1883"/>
+        <location line="+3158"/>
+        <location line="+1950"/>
         <location line="+20"/>
         <source>Copied to clipboard</source>
         <translation>已复制到剪贴板</translation>
     </message>
     <message>
-        <location line="-4561"/>
+        <location line="-4629"/>
         <location line="+47"/>
         <source>Nothing to recognize</source>
         <translation>没有可识别的内容</translation>
@@ -83,14 +83,14 @@
         <translation>Dev: 形状编辑：%1</translation>
     </message>
     <message>
-        <location filename="../src/AppContext.cpp" line="+5178"/>
+        <location filename="../src/AppContext.cpp" line="+5246"/>
         <location filename="../src/diag/SmokeTests.cpp" line="+810"/>
-        <location line="+2467"/>
+        <location line="+2638"/>
         <source>Quit</source>
         <translation>退出</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="-2455"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-2626"/>
         <source>Dev: language: %1</source>
         <translation>Dev: 语言：%1</translation>
     </message>
@@ -105,17 +105,17 @@
         <translation>Dev: OCR 文本框：%1（%2 个字形）</translation>
     </message>
     <message>
-        <location line="+290"/>
+        <location line="+461"/>
         <source>Dev: played capture sound &apos;%1&apos;</source>
         <translation>Dev: 已播放截图音效 “%1”</translation>
     </message>
     <message>
-        <location line="-1147"/>
+        <location line="-1318"/>
         <source>Dev: capture on release: %1</source>
         <translation>Dev: 释放时截图：%1</translation>
     </message>
     <message>
-        <location filename="../src/AppContext.cpp" line="-6033"/>
+        <location filename="../src/AppContext.cpp" line="-6101"/>
         <source>Opened a terminal to install the update.</source>
         <translation>已打开终端以安装更新。</translation>
     </message>
@@ -169,12 +169,12 @@
         <translation>录制单个窗口需要窗口选择器，而此桌面不提供该功能，请改为录制屏幕或区域。</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="+1296"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="+1467"/>
         <source>no screen</source>
         <translation>无屏幕</translation>
     </message>
     <message>
-        <location filename="../src/AppContext.cpp" line="+362"/>
+        <location filename="../src/AppContext.cpp" line="+363"/>
         <source>No log file was opened for this run</source>
         <translation>本次运行没有打开日志文件</translation>
     </message>
@@ -204,7 +204,7 @@
         <translation>已找到，OCR 会自动识别每张截图的文字体系。</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="-2573"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-2744"/>
         <source>Dev: custom theme: %1</source>
         <translation>Dev: 自定义主题：%1</translation>
     </message>
@@ -214,7 +214,7 @@
         <translation>Dev: 诊断信息已复制（%1 个字符）</translation>
     </message>
     <message>
-        <location line="+1917"/>
+        <location line="+2088"/>
         <source>Dev: OCR auto language: %1 (installed: %2; %3; map: %4)</source>
         <translation>Dev: OCR 自动语言：%1（已安装：%2；%3；映射：%4）</translation>
     </message>
@@ -325,7 +325,7 @@
         <translation>无</translation>
     </message>
     <message>
-        <location filename="../src/AppContext.cpp" line="+3880"/>
+        <location filename="../src/AppContext.cpp" line="+3947"/>
         <location filename="../src/diag/SmokeTests.cpp" line="+8"/>
         <source>Hotkey taken by another app: %1. Pick a different key in Settings → Hotkeys, or free it in System Settings → Shortcuts.</source>
         <translation>快捷键已被其他应用占用：%1。请在 设置 → 快捷键 中换一个按键，或在 系统设置 → 快捷键 中释放它。</translation>
@@ -341,16 +341,18 @@
         <translation>快捷键：%1 项（共 %2 项）未绑定，已重新注册（详情见日志）</translation>
     </message>
     <message>
-        <location filename="../src/AppContext.cpp" line="-2799"/>
+        <location filename="../src/AppContext.cpp" line="-2866"/>
         <location line="+212"/>
-        <location line="+1517"/>
+        <location line="+1043"/>
+        <location line="+3"/>
+        <location line="+538"/>
         <source>Saved %1</source>
         <translation>已保存 %1</translation>
     </message>
     <message>
-        <location line="-1708"/>
+        <location line="-1775"/>
         <location line="+177"/>
-        <location line="+1125"/>
+        <location line="+1192"/>
         <location line="+17"/>
         <location line="+188"/>
         <location filename="../src/upload/UploadSources.cpp" line="+130"/>
@@ -358,7 +360,7 @@
         <translation>上传失败：%1</translation>
     </message>
     <message>
-        <location line="-1386"/>
+        <location line="-1453"/>
         <source>Could not save to %1. Check the save folder in Settings</source>
         <translation>无法保存到 %1。请检查设置中的保存文件夹</translation>
     </message>
@@ -394,7 +396,7 @@
         <translation>打开录像进行剪辑</translation>
     </message>
     <message>
-        <location line="+1831"/>
+        <location line="+1898"/>
         <location line="+34"/>
         <source>None of the selected captures are saved on disk.</source>
         <translation>所选截图中没有任何一项已保存到磁盘。</translation>
@@ -453,12 +455,12 @@
         <translation>复制上次截图</translation>
     </message>
     <message>
-        <location line="-2734"/>
+        <location line="-2801"/>
         <source>Uploaded, link copied</source>
         <translation>已上传，链接已复制</translation>
     </message>
     <message>
-        <location line="-3300"/>
+        <location line="-3301"/>
         <source>Unisic %1 is available - updating automatically</source>
         <translation>Unisic %1 已发布，正在自动更新</translation>
     </message>
@@ -529,7 +531,7 @@
         <translation>将在 %1 秒后开始录制…</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="-4590"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-4761"/>
         <source>Dev: clipboard paste: %1</source>
         <translation>Dev: 剪贴板粘贴：%1</translation>
     </message>
@@ -759,7 +761,7 @@
         <translation type="vanished">开发者：PaddleOCR：跳过（模型未下载）</translation>
     </message>
     <message>
-        <location line="+19"/>
+        <location line="+190"/>
         <source>Dev: PaddleOCR: FAIL (%1)</source>
         <translation>开发者：PaddleOCR：失败（%1）</translation>
     </message>
@@ -829,7 +831,7 @@
         <translation>Dev: 原生快捷键：%1</translation>
     </message>
     <message>
-        <location line="+1498"/>
+        <location line="+1507"/>
         <source>Dev: scrolling hand-off: %1</source>
         <translation>Dev: 滚动交接：%1</translation>
     </message>
@@ -839,7 +841,7 @@
         <translation>Dev: 滚动拼接：%1</translation>
     </message>
     <message>
-        <location filename="../src/AppContext.cpp" line="+401"/>
+        <location filename="../src/AppContext.cpp" line="+402"/>
         <source>recording</source>
         <translation>录像</translation>
     </message>
@@ -864,7 +866,7 @@
         <translation>主窗口可见</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="-4084"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-4264"/>
         <source>Dev: OCR highlight + redact: FAIL (%1)</source>
         <translation>Dev: OCR 高亮与涂黑：失败（%1）</translation>
     </message>
@@ -884,7 +886,7 @@
         <translation>Dev: 样式预设：%1</translation>
     </message>
     <message>
-        <location line="+187"/>
+        <location line="+358"/>
         <source>Dev: auto-redact pattern: FAIL (%1)</source>
         <translation>Dev: 自动涂黑规则：失败（%1）</translation>
     </message>
@@ -941,6 +943,7 @@
     </message>
     <message>
         <location filename="../src/AppContext.cpp" line="+1099"/>
+        <location line="+1113"/>
         <location filename="../src/diag/SmokeTests.cpp" line="+2"/>
         <source>Images (*.png *.jpg *.jpeg *.webp)</source>
         <translation>图片 (*.png *.jpg *.jpeg *.webp)</translation>
@@ -1053,23 +1056,25 @@
         <translation>Dev: Imgur Client-ID 防护：%1</translation>
     </message>
     <message>
-        <location filename="../src/AppContext.cpp" line="-2"/>
+        <location filename="../src/AppContext.cpp" line="-1115"/>
         <source>Save capture</source>
         <translation>保存截图</translation>
     </message>
     <message>
         <location line="-13"/>
         <location line="+19"/>
+        <location line="+1114"/>
+        <location line="+1"/>
         <source>Could not save to %1</source>
         <translation>无法保存到 %1</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="-3539"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-3710"/>
         <source>Dev: hide while capturing: %1</source>
         <translation>Dev: 截图时隐藏：%1</translation>
     </message>
     <message>
-        <location filename="../src/AppContext.cpp" line="+116"/>
+        <location filename="../src/AppContext.cpp" line="-999"/>
         <source>No capture to copy yet</source>
         <translation>还没有可复制的截图</translation>
     </message>
@@ -1140,11 +1145,13 @@
     </message>
     <message>
         <location line="+4"/>
+        <location line="+51"/>
+        <location line="+1"/>
         <source>Image copied</source>
         <translation>图像已复制</translation>
     </message>
     <message>
-        <location line="+7"/>
+        <location line="+22"/>
         <location line="+922"/>
         <source>Save the capture first to copy its file path</source>
         <translation>请先保存截图，才能复制其文件路径</translation>
@@ -1155,12 +1162,12 @@
         <translation>正在上传 %1…</translation>
     </message>
     <message>
-        <location line="-1010"/>
+        <location line="-1077"/>
         <source>Uploaded</source>
         <translation>已上传</translation>
     </message>
     <message>
-        <location line="+1178"/>
+        <location line="+1245"/>
         <source>Couldn&apos;t open preview</source>
         <translation>无法打开预览</translation>
     </message>
@@ -1186,18 +1193,18 @@
         <translation>请先保存或上传截图，才能将其复制为链接</translation>
     </message>
     <message>
-        <location line="-1947"/>
+        <location line="-2014"/>
         <source>Could not encode the capture</source>
         <translation>无法编码截图</translation>
     </message>
     <message>
-        <location line="-2074"/>
+        <location line="-2075"/>
         <location line="+1"/>
         <source>Selection is too small for scrolling capture</source>
         <translation>选区太小，无法进行滚动截图</translation>
     </message>
     <message>
-        <location line="+748"/>
+        <location line="+749"/>
         <location line="+11"/>
         <source>Found.</source>
         <translation>已找到。</translation>
@@ -1335,7 +1342,17 @@
         <translation>Dev: 安装器更新：失败（%1）</translation>
     </message>
     <message>
-        <location line="+192"/>
+        <location line="+323"/>
+        <source>Dev: OCR result image: %1</source>
+        <translation>Dev: OCR 结果图片: %1</translation>
+    </message>
+    <message>
+        <location line="+30"/>
+        <source>Dev: OCR result window: PASS (%1 lines, translated)</source>
+        <translation>Dev: OCR 结果窗口: PASS (%1 行, 已翻译)</translation>
+    </message>
+    <message>
+        <location line="+10"/>
         <source>Dev: PaddleOCR: SKIP (no model)</source>
         <translation>开发者：PaddleOCR：跳过（没有模型）</translation>
     </message>
@@ -1446,13 +1463,13 @@
     </message>
     <message>
         <location filename="../src/AppContext.cpp" line="-383"/>
-        <location line="+1217"/>
+        <location line="+1284"/>
         <location filename="../src/upload/UploadSources.cpp" line="+10"/>
         <source>Can&apos;t find %1</source>
         <translation>找不到 %1</translation>
     </message>
     <message>
-        <location line="-1210"/>
+        <location line="-1277"/>
         <location line="+53"/>
         <source>Unisic opens files, not folders</source>
         <translation>Unisic 只能打开文件，不能打开文件夹</translation>
@@ -1521,7 +1538,35 @@
         <translation>无法准备外部操作的输入</translation>
     </message>
     <message>
-        <location line="+246"/>
+        <location line="+236"/>
+        <location line="+2"/>
+        <source>There is no picture to save</source>
+        <translation>没有可保存的图片</translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>Save OCR image</source>
+        <translation>保存 OCR 图片</translation>
+    </message>
+    <message>
+        <location line="+24"/>
+        <location line="+2"/>
+        <source>There is no picture to copy</source>
+        <translation>没有可复制的图片</translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <location line="+2"/>
+        <source>There is no picture to edit</source>
+        <translation>没有可编辑的图片</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Opened in the editor</source>
+        <translation>已在编辑器中打开</translation>
+    </message>
+    <message>
+        <location line="+17"/>
         <source>Can&apos;t open %1 to print</source>
         <translation>无法打开 %1 进行打印</translation>
     </message>
@@ -1726,7 +1771,7 @@
         <translation>已从 %1 移除 Unisic 快捷键</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="+1562"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="+1571"/>
         <source>Dev: desktop shortcuts: %1</source>
         <translation>Dev: 桌面快捷键：%1</translation>
     </message>
@@ -1768,12 +1813,12 @@
         <translation>开始/保存即时回放</translation>
     </message>
     <message>
-        <location line="-4182"/>
+        <location line="-4250"/>
         <source>No monitor named %1. Connected: %2</source>
         <translation>没有名为 %1 的显示器。已连接的显示器：%2</translation>
     </message>
     <message>
-        <location line="+621"/>
+        <location line="+622"/>
         <source>Missing from this install. The Tesseract &quot;osd&quot; pack is required for OCR script detection.</source>
         <translation>当前安装缺少该组件。OCR 书写系统检测需要 Tesseract 的 “osd” 语言包。</translation>
     </message>
@@ -1793,7 +1838,7 @@
         <translation>已上传，但 %1 无法缩短链接（%2）。已使用完整链接。</translation>
     </message>
     <message>
-        <location line="+2400"/>
+        <location line="+2467"/>
         <location line="+120"/>
         <source>Stop recording (emergency)</source>
         <translation>停止录制（紧急）</translation>
@@ -1825,7 +1870,7 @@
     </message>
     <message>
         <location line="+51"/>
-        <location filename="../src/diag/SmokeTests.cpp" line="-1591"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-1600"/>
         <source>Capture monitor</source>
         <translation>截取显示器</translation>
     </message>
@@ -4203,7 +4248,7 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
 <context>
     <name>OcrResultController</name>
     <message>
-        <location filename="../src/ocr/OcrResultController.cpp" line="+122"/>
+        <location filename="../src/ocr/OcrResultController.cpp" line="+172"/>
         <source>No text to translate</source>
         <translation>没有可翻译的文本</translation>
     </message>
@@ -4216,12 +4261,13 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
 <context>
     <name>OcrResultWindow</name>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="+21"/>
+        <location filename="../qml/OcrResultWindow.qml" line="+28"/>
+        <location line="+983"/>
         <source>Recognized text</source>
         <translation>识别结果</translation>
     </message>
     <message>
-        <location line="+142"/>
+        <location line="-805"/>
         <source>Minimize</source>
         <translation>最小化</translation>
     </message>
@@ -4251,12 +4297,13 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>点击图片上已翻译的行即可选中它，也可以在面板中选择文本。</translation>
     </message>
     <message>
-        <location line="+8"/>
+        <location line="+80"/>
+        <location line="+34"/>
         <source>Copied</source>
         <translation>已复制</translation>
     </message>
     <message>
-        <location line="+24"/>
+        <location line="-75"/>
         <source>Target language</source>
         <translation>目标语言</translation>
     </message>
@@ -4296,22 +4343,77 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>取消</translation>
     </message>
     <message>
-        <location line="+21"/>
+        <location line="+20"/>
         <source>Original</source>
         <translation>原文</translation>
     </message>
     <message>
-        <location line="+7"/>
+        <location line="+10"/>
         <source>Translation</source>
         <translation>译文</translation>
     </message>
     <message>
-        <location line="+8"/>
+        <location line="+11"/>
         <source>Copy all</source>
         <translation>复制全部</translation>
     </message>
     <message>
-        <location line="+25"/>
+        <location line="+19"/>
+        <source>Save image…</source>
+        <translation>保存图片…</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Saves the picture on show, at the capture&apos;s own size</source>
+        <translation>以截图原始尺寸保存当前显示的图片</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Copy image</source>
+        <translation>复制图片</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Copies the picture on show to the clipboard</source>
+        <translation>将当前显示的图片复制到剪贴板</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Edit in editor</source>
+        <translation>在编辑器中编辑</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Opens the picture on show in the editor</source>
+        <translation>在编辑器中打开当前显示的图片</translation>
+    </message>
+    <message>
+        <location line="+16"/>
+        <source>Zoom out</source>
+        <translation>缩小</translation>
+    </message>
+    <message>
+        <location line="+14"/>
+        <source>Zoom level %1 percent</source>
+        <translation>缩放级别 %1%</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Press to show the picture at 100 percent</source>
+        <translation>点击以按 100% 显示图片</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Zoom in</source>
+        <translation>放大</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Fit the picture</source>
+        <translation>适应图片</translation>
+    </message>
+    <message>
+        <location line="+21"/>
         <source>The service did not translate line by line, so the translation is shown in the pane instead of on the picture.</source>
         <translation>该服务未按行翻译，因此译文显示在面板中，而不是覆盖在图片上。</translation>
     </message>
@@ -4319,6 +4421,26 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <location line="+12"/>
         <source>The service returned the text unchanged. Check the target language and the model.</source>
         <translation>翻译服务返回的文本与原文相同，请检查目标语言和模型。</translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>Some lines are too long for their box at the smallest size, so the picture shows them shortened. The full translation is in the text pane.</source>
+        <translation>部分行在最小字号下仍放不进各自的框，因此图片上显示为截断。完整译文在文本面板中。</translation>
+    </message>
+    <message>
+        <location line="+470"/>
+        <source>Divider between the picture and the text</source>
+        <translation>图片与文本之间的分隔条</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Drag it, or use the arrow keys; double-click to reset</source>
+        <translation>拖动它，或使用方向键；双击可重置</translation>
+    </message>
+    <message>
+        <location line="+59"/>
+        <source>Selectable text. Ctrl and the mouse wheel change its size.</source>
+        <translation>可选择的文本。Ctrl 加鼠标滚轮可调整字号。</translation>
     </message>
 </context>
 <context>
@@ -4525,7 +4647,7 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
 <context>
     <name>PaddleOcr</name>
     <message>
-        <location filename="../src/ocr/PaddleOcr.cpp" line="+416"/>
+        <location filename="../src/ocr/PaddleOcr.cpp" line="+417"/>
         <source>Cannot read OCR model %1: %2</source>
         <translation>无法读取 OCR 模型 %1：%2</translation>
     </message>
@@ -4621,7 +4743,7 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>PaddleOCR 模型尚未下载，请到“设置 &gt; 通用”下载</translation>
     </message>
     <message>
-        <location line="-1220"/>
+        <location line="-1221"/>
         <source>PaddleOCR needs about %1 GB of free memory and %2 GB is free - close something and try again</source>
         <translation>PaddleOCR 需要约 %1 GB 可用内存，当前仅有 %2 GB，请关闭一些程序后重试</translation>
     </message>
@@ -5045,41 +5167,41 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>关闭</translation>
     </message>
     <message>
-        <location line="+78"/>
+        <location line="+81"/>
         <location line="+873"/>
         <source>General</source>
         <translation>通用</translation>
     </message>
     <message>
         <location line="-872"/>
-        <location line="+3037"/>
+        <location line="+3040"/>
         <source>Appearance</source>
         <translation>外观</translation>
     </message>
     <message>
-        <location line="-3038"/>
+        <location line="-3041"/>
         <source>Editor</source>
         <translation>编辑器</translation>
     </message>
     <message>
         <location line="+0"/>
-        <location line="+1714"/>
+        <location line="+1717"/>
         <source>Recording</source>
         <translation>录制</translation>
     </message>
     <message>
-        <location line="-1713"/>
+        <location line="-1716"/>
         <source>Hotkeys</source>
         <translation>快捷键</translation>
     </message>
     <message>
         <location line="+2"/>
-        <location line="+3869"/>
+        <location line="+3872"/>
         <source>Developer</source>
         <translation>开发者</translation>
     </message>
     <message>
-        <location line="-3853"/>
+        <location line="-3856"/>
         <source>System Theme</source>
         <translation>系统主题</translation>
     </message>
@@ -5182,12 +5304,12 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
     </message>
     <message>
         <location line="+159"/>
-        <location line="+3271"/>
+        <location line="+3276"/>
         <source>Language</source>
         <translation>语言</translation>
     </message>
     <message>
-        <location line="-3270"/>
+        <location line="-3275"/>
         <source>Language of the Unisic interface.</source>
         <translation>Unisic 界面的语言。</translation>
     </message>
@@ -5203,7 +5325,7 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
     </message>
     <message>
         <location line="-882"/>
-        <location line="+2728"/>
+        <location line="+2731"/>
         <source>Notifications</source>
         <translation>通知</translation>
     </message>
@@ -6021,7 +6143,7 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>像素放大镜</translation>
     </message>
     <message>
-        <location line="+10"/>
+        <location line="+12"/>
         <source>Auto-redact pattern</source>
         <translation>自动遮挡图案</translation>
     </message>
@@ -6051,7 +6173,7 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>模拟更新</translation>
     </message>
     <message>
-        <location line="-2134"/>
+        <location line="-2136"/>
         <source>Editor defaults</source>
         <translation>编辑器默认值</translation>
     </message>
@@ -6197,12 +6319,12 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>GIF 最长时长</translation>
     </message>
     <message>
-        <location line="-1722"/>
+        <location line="-1725"/>
         <source>Capture</source>
         <translation>截图</translation>
     </message>
     <message>
-        <location line="-46"/>
+        <location line="-49"/>
         <source>Included</source>
         <translation>内置</translation>
     </message>
@@ -6217,7 +6339,7 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>未下载</translation>
     </message>
     <message>
-        <location line="+7"/>
+        <location line="+10"/>
         <source>%1: %2, in use</source>
         <translation>%1：%2，正在使用</translation>
     </message>
@@ -6274,7 +6396,7 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>极小号（6 MB，内置）</translation>
     </message>
     <message>
-        <location line="+43"/>
+        <location line="+46"/>
         <source>The selected model is not downloaded yet, so Tiny (included) is in use for now.</source>
         <translation>所选档位尚未下载，目前使用内置的极小号。</translation>
     </message>
@@ -6768,7 +6890,7 @@ Applies to the next capture.</source>
         <translation>录制前倒计时</translation>
     </message>
     <message>
-        <location line="-1526"/>
+        <location line="-1529"/>
         <source>More about %1</source>
         <translation>关于 %1 的更多信息</translation>
     </message>
@@ -6778,7 +6900,7 @@ Applies to the next capture.</source>
         <translation>设置面板</translation>
     </message>
     <message>
-        <location line="+626"/>
+        <location line="+629"/>
         <source>Detects the script and recognizes with the matching language pack.</source>
         <translation>检测书写系统，并用匹配的语言包进行识别。</translation>
     </message>
@@ -6798,7 +6920,7 @@ Applies to the next capture.</source>
         <translation>打开更新日志</translation>
     </message>
     <message>
-        <location line="-1424"/>
+        <location line="-1430"/>
         <source>Flatpak installs are updated by Flatpak - Unisic does not check on its own.</source>
         <translation>Flatpak 安装的版本由 Flatpak 更新，Unisic 不会自行检查。</translation>
     </message>
@@ -6808,7 +6930,7 @@ Applies to the next capture.</source>
         <translation>这份副本来自 AUR，由你的 AUR 助手更新，因此 Unisic 不会自行检查。</translation>
     </message>
     <message>
-        <location line="+3455"/>
+        <location line="+3461"/>
         <source>A zoomed pixel grid follows the cursor with the hovered pixel highlighted, plus its position and colour - so a selection edge lands on exactly the pixel you mean. Scroll on the overlay to zoom it in and out; scroll all the way out to hide the loupe. Purely visual and never captured into the image.</source>
         <translation>放大的像素网格会跟随光标，高亮当前悬停的像素，并显示其位置和颜色，这样选区边缘就能准确落在你想要的那个像素上。在覆盖层上滚动可以放大或缩小网格，一直缩小到底则隐藏放大镜。它只用于显示，绝不会被截取进图像。</translation>
     </message>
@@ -6908,12 +7030,12 @@ Applies to the next capture.</source>
         <translation>统计</translation>
     </message>
     <message>
-        <location line="-382"/>
+        <location line="-385"/>
         <source>Tiny is included with Unisic, so PaddleOCR works without a model download; it reads Chinese and Latin text but not Japanese, and it is the least accurate. Small is the recommended download: it also reads Japanese, and it takes about a second per page on a 4-core CPU. Medium is the most accurate and the largest, and holds about 1 GB of memory while it is loaded. Downloaded tiers are checked against their pinned SHA-256 and run offline. Until a downloaded tier is present, Tiny (included) does the work and this list says which one is in use.</source>
         <translation>极小号已内置在 Unisic 中，因此 PaddleOCR 无需下载模型即可使用；它可识别中文和拉丁文字，但不支持日文，精度也最低。推荐下载小号：它同时支持日文，在 4 核 CPU 上每页约需一秒。中号最准确、体积也最大，加载后约占用 1 GB 内存。下载的档位会按固定的 SHA-256 校验，并完全离线运行。在下载其他档位之前，由内置的极小号负责识别，这个列表会显示正在使用的是哪个档位。</translation>
     </message>
     <message>
-        <location line="+384"/>
+        <location line="+387"/>
         <source>Screenshots taken</source>
         <translation>截图数量</translation>
     </message>
@@ -7254,7 +7376,7 @@ Applies to the next capture.</source>
         <translation>全局快捷键</translation>
     </message>
     <message>
-        <location line="-3638"/>
+        <location line="-3644"/>
         <source>Delete the background removal files?</source>
         <translation>删除背景移除文件？</translation>
     </message>
@@ -7270,7 +7392,7 @@ Applies to the next capture.</source>
         <translation>删除</translation>
     </message>
     <message>
-        <location line="+906"/>
+        <location line="+909"/>
         <source>Support Unisic</source>
         <translation>支持 Unisic</translation>
     </message>
@@ -7285,7 +7407,7 @@ Applies to the next capture.</source>
         <translation>在 Ko-fi 上捐赠</translation>
     </message>
     <message>
-        <location line="+697"/>
+        <location line="+700"/>
         <source>Shorten the link</source>
         <translation>缩短链接</translation>
     </message>
@@ -7382,8 +7504,8 @@ Applies to the next capture.</source>
         <translation>ONNX Runtime：未安装，将随模型一起下载</translation>
     </message>
     <message>
-        <location line="-1211"/>
-        <location line="+1214"/>
+        <location line="-1214"/>
+        <location line="+1217"/>
         <source>ONNX Runtime: not installed - install the onnxruntime package from your distribution</source>
         <translation>ONNX Runtime：未安装，请从发行版安装 onnxruntime 软件包</translation>
     </message>
@@ -7404,7 +7526,7 @@ Applies to the next capture.</source>
         <translation>下载（%1）</translation>
     </message>
     <message>
-        <location line="-2252"/>
+        <location line="-2258"/>
         <source>Delete the PaddleOCR models?</source>
         <translation>删除 PaddleOCR 模型？</translation>
     </message>
@@ -7420,7 +7542,7 @@ Applies to the next capture.</source>
         sudo chown -R $USER %1</translation>
     </message>
     <message>
-        <location line="+974"/>
+        <location line="+977"/>
         <source>Text recognition (OCR)</source>
         <translation>文字识别（OCR）</translation>
     </message>
@@ -7468,19 +7590,19 @@ Applies to the next capture.</source>
         <translation type="vanished">小号是推荐的默认选择：一个模型即可识别中文（简体和繁体）、日文以及 48 种拉丁语系语言，在 4 核 CPU 上每页约需一秒。极小号适合较慢的机器，但不支持日文；中号最准确，下载也最大，加载后约占用 1 GB 内存。模型只需下载一次，会按固定的 SHA-256 校验，然后完全离线运行。</translation>
     </message>
     <message>
-        <location line="-956"/>
+        <location line="-959"/>
         <source>Tiny (6 MB)</source>
         <translation>极小号（6 MB）</translation>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+960"/>
+        <location line="+963"/>
         <source>Small (31 MB)</source>
         <translation>小号（31 MB）</translation>
     </message>
     <message>
-        <location line="-959"/>
-        <location line="+959"/>
+        <location line="-962"/>
+        <location line="+962"/>
         <source>Medium (139 MB)</source>
         <translation>中号（139 MB）</translation>
     </message>
@@ -7498,7 +7620,7 @@ Applies to the next capture.</source>
         <translation type="vanished">PaddleOCR 模型：未下载</translation>
     </message>
     <message>
-        <location line="+71"/>
+        <location line="+74"/>
         <location line="+1176"/>
         <source>Cancel</source>
         <translation>取消</translation>
@@ -8154,7 +8276,7 @@ Applies to the next capture.</source>
         <translation>QR 预览</translation>
     </message>
     <message>
-        <location line="+52"/>
+        <location line="+54"/>
         <source>OCR highlight + redact</source>
         <translation>OCR 高亮与遮蔽</translation>
     </message>
@@ -8199,7 +8321,7 @@ Applies to the next capture.</source>
         <translation>切换开机启动</translation>
     </message>
     <message>
-        <location line="-223"/>
+        <location line="-225"/>
         <source>Running…</source>
         <translation>运行中…</translation>
     </message>
@@ -8311,12 +8433,12 @@ Applies to the next capture.</source>
     </message>
     <message>
         <location line="-2922"/>
-        <location line="+3127"/>
+        <location line="+3129"/>
         <source>Translation</source>
         <translation>译文</translation>
     </message>
     <message>
-        <location line="-3125"/>
+        <location line="-3127"/>
         <source>Translation endpoint</source>
         <translation>翻译端点</translation>
     </message>
@@ -8902,6 +9024,16 @@ Applies to the next capture.</source>
         <location line="+1"/>
         <source>OCR result</source>
         <translation>OCR 结果</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>OCR result image</source>
+        <translation>OCR 结果图片</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>OCR result window</source>
+        <translation>OCR 结果窗口</translation>
     </message>
     <message>
         <location line="+2"/>

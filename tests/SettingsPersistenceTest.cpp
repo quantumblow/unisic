@@ -34,6 +34,9 @@ class SettingsPersistenceTest : public QObject
         switch (p.userType()) {
         case QMetaType::Bool: return !cur.toBool();
         case QMetaType::Int:  return cur.toInt() + 7;
+        // A real number, not the string fallback: a double setting written as a
+        // QString is exactly the silent type change this test exists to catch.
+        case QMetaType::Double: return cur.toDouble() + 0.25;
         // One element on purpose: INI stores a one-item list as a bare string,
         // the case most likely to come back as the wrong type.
         case QMetaType::QStringList: return QStringList{QStringLiteral("qtest_") + QString::fromLatin1(p.name())};
