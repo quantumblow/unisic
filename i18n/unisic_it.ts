@@ -4502,34 +4502,34 @@ Le catture con stella (preferite) nella selezione vengono mantenute - rimuovi pr
 <context>
     <name>OcrResultController</name>
     <message>
-        <location filename="../src/ocr/OcrResultController.cpp" line="238"/>
-        <location filename="../src/ocr/OcrResultController.cpp" line="512"/>
+        <location filename="../src/ocr/OcrResultController.cpp" line="258"/>
+        <location filename="../src/ocr/OcrResultController.cpp" line="532"/>
         <source>No text to translate</source>
         <translation>Nessun testo da tradurre</translation>
     </message>
     <message>
-        <location filename="../src/ocr/OcrResultController.cpp" line="243"/>
-        <location filename="../src/ocr/OcrResultController.cpp" line="517"/>
+        <location filename="../src/ocr/OcrResultController.cpp" line="263"/>
+        <location filename="../src/ocr/OcrResultController.cpp" line="537"/>
         <source>Set the translation endpoint and model in Settings &gt; General</source>
         <translation>Imposta endpoint e modello di traduzione in Impostazioni &gt; Generale</translation>
     </message>
     <message>
-        <location filename="../src/ocr/OcrResultController.cpp" line="889"/>
+        <location filename="../src/ocr/OcrResultController.cpp" line="912"/>
         <source>The translation service returned an empty result</source>
         <translation>Il servizio di traduzione ha restituito un risultato vuoto</translation>
     </message>
     <message>
-        <location filename="../src/ocr/OcrResultController.cpp" line="930"/>
+        <location filename="../src/ocr/OcrResultController.cpp" line="953"/>
         <source>the translation service did not answer</source>
         <translation>il servizio di traduzione non ha risposto</translation>
     </message>
     <message>
-        <location filename="../src/ocr/OcrResultController.cpp" line="933"/>
+        <location filename="../src/ocr/OcrResultController.cpp" line="956"/>
         <source>Selected lines %1 did not translate: %2</source>
         <translation>Le righe selezionate %1 non sono state tradotte: %2</translation>
     </message>
     <message>
-        <location filename="../src/ocr/OcrResultController.cpp" line="934"/>
+        <location filename="../src/ocr/OcrResultController.cpp" line="957"/>
         <source>Lines %1 did not translate: %2</source>
         <translation>Le righe %1 non sono state tradotte: %2</translation>
     </message>
@@ -4538,7 +4538,7 @@ Le catture con stella (preferite) nella selezione vengono mantenute - rimuovi pr
     <name>OcrResultWindow</name>
     <message>
         <location filename="../qml/OcrResultWindow.qml" line="28"/>
-        <location filename="../qml/OcrResultWindow.qml" line="1428"/>
+        <location filename="../qml/OcrResultWindow.qml" line="1419"/>
         <source>Recognized text</source>
         <translation>Testo riconosciuto</translation>
     </message>
@@ -4617,53 +4617,50 @@ Le catture con stella (preferite) nella selezione vengono mantenute - rimuovi pr
     </message>
     <message>
         <location filename="../qml/OcrResultWindow.qml" line="507"/>
-        <location filename="../qml/OcrResultWindow.qml" line="1231"/>
+        <location filename="../qml/OcrResultWindow.qml" line="1222"/>
         <source>Translating…</source>
         <translation>Traduzione…</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="706"/>
         <source>The selection is too small for the translation to fit, so it is shown in a callout.</source>
-        <translation>La selezione è troppo piccola per contenere la traduzione, quindi viene mostrata in un fumetto.</translation>
+        <translation type="vanished">La selezione è troppo piccola per contenere la traduzione, quindi viene mostrata in un fumetto.</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="707"/>
         <source>Translated the selected text on the picture.</source>
-        <translation>La traduzione della selezione è mostrata sull&apos;immagine.</translation>
+        <translation type="vanished">La traduzione della selezione è mostrata sull&apos;immagine.</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="719"/>
         <source>Word and partial-line translations are shown on screen only. Save image keeps the page.</source>
-        <translation>Le traduzioni di parole e parti di riga sono visibili solo sullo schermo. Salva immagine conserva la pagina.</translation>
+        <translation type="vanished">Le traduzioni di parole e parti di riga sono visibili solo sullo schermo. Salva immagine conserva la pagina.</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="1526"/>
-        <location filename="../qml/OcrResultWindow.qml" line="1530"/>
+        <location filename="../qml/OcrResultWindow.qml" line="1517"/>
+        <location filename="../qml/OcrResultWindow.qml" line="1521"/>
         <source>Send this text to %1?</source>
         <translation>Inviare questo testo a %1?</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="1527"/>
+        <location filename="../qml/OcrResultWindow.qml" line="1518"/>
         <source>The text of this screenshot will be sent to a translation service on another computer.</source>
         <translation>Il testo di questo screenshot verrà inviato a un servizio di traduzione su un altro computer.</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="1538"/>
+        <location filename="../qml/OcrResultWindow.qml" line="1529"/>
         <source>Unisic will send the recognized text from this screenshot to %1, a translation service on another computer, so it leaves this machine. The screenshot itself is not sent.</source>
         <translation>Unisic invierà il testo riconosciuto da questo screenshot a %1, un servizio di traduzione su un altro computer, quindi lascerà questa macchina. Lo screenshot in sé non viene inviato.</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="1545"/>
+        <location filename="../qml/OcrResultWindow.qml" line="1536"/>
         <source>This is asked once for this host. Another endpoint asks again.</source>
         <translation>Viene chiesto una volta per host. Un altro endpoint lo chiederà di nuovo.</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="1554"/>
+        <location filename="../qml/OcrResultWindow.qml" line="1545"/>
         <source>Don&apos;t send</source>
         <translation>Non inviare</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="1563"/>
+        <location filename="../qml/OcrResultWindow.qml" line="1554"/>
         <source>Translate</source>
         <translation>Traduci</translation>
     </message>
@@ -4778,51 +4775,61 @@ Le catture con stella (preferite) nella selezione vengono mantenute - rimuovi pr
         <translation>Sono tradotte solo le righe selezionate. Premi Traduci tutto per inviare il resto.</translation>
     </message>
     <message>
+        <location filename="../qml/OcrResultWindow.qml" line="707"/>
+        <source>Too small to fit in place, so the answer is in a callout; Save image keeps the page.</source>
+        <translation>Non c&apos;è spazio per una traduzione sul posto, quindi è in un fumetto; Salva immagine conserva la pagina.</translation>
+    </message>
+    <message>
+        <location filename="../qml/OcrResultWindow.qml" line="708"/>
+        <source>Translated the selection in place on the picture; Save image keeps the page.</source>
+        <translation>La selezione è tradotta sul posto sull&apos;immagine; Salva immagine conserva la pagina.</translation>
+    </message>
+    <message>
         <source>Translated the selected text. A word or part of a line stays in the pane and is not laid over the picture.</source>
         <translation type="vanished">Il testo selezionato è stato tradotto. Una parola o parte di una riga resta nel pannello e non viene sovrapposta all&apos;immagine.</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="730"/>
+        <location filename="../qml/OcrResultWindow.qml" line="721"/>
         <source>Some lines were too long for one request, so they were split at sentence boundaries before translating.</source>
         <translation>Alcune righe erano troppo lunghe per una sola richiesta, quindi sono state divise ai confini delle frasi prima della traduzione.</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="742"/>
+        <location filename="../qml/OcrResultWindow.qml" line="733"/>
         <source>The service returned the text unchanged. Check the target language and the model.</source>
         <translation>Il servizio ha restituito il testo invariato. Controlla la lingua di destinazione e il modello.</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="754"/>
+        <location filename="../qml/OcrResultWindow.qml" line="745"/>
         <source>Some lines are too long for their box at the smallest size, so the picture shows them shortened. The full translation is in the text pane.</source>
         <translation>Alcune righe non entrano nel loro riquadro alla dimensione minima, quindi l&apos;immagine le mostra accorciate. La traduzione completa è nel pannello di testo.</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="967"/>
+        <location filename="../qml/OcrResultWindow.qml" line="958"/>
         <source>Recognized line on the picture</source>
         <translation>Riga riconosciuta nell&apos;immagine</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="1014"/>
+        <location filename="../qml/OcrResultWindow.qml" line="1005"/>
         <source>Translated line on the picture</source>
         <translation>Riga tradotta nell&apos;immagine</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="1331"/>
+        <location filename="../qml/OcrResultWindow.qml" line="1322"/>
         <source>Divider between the picture and the text</source>
         <translation>Separatore tra l&apos;immagine e il testo</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="1332"/>
+        <location filename="../qml/OcrResultWindow.qml" line="1323"/>
         <source>Drag it, or use the arrow keys; double-click to reset</source>
         <translation>Trascinalo o usa i tasti freccia; doppio clic per ripristinare</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="1429"/>
+        <location filename="../qml/OcrResultWindow.qml" line="1420"/>
         <source>Selectable text. Ctrl and the mouse wheel change its size.</source>
         <translation>Testo selezionabile. Ctrl e la rotella del mouse ne cambiano la dimensione.</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="1481"/>
+        <location filename="../qml/OcrResultWindow.qml" line="1472"/>
         <source>%1 of %2 chunks</source>
         <translation>%1 di %2 blocchi</translation>
     </message>

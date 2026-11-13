@@ -634,10 +634,14 @@ F8/Developer/strings/docs.
   and the holder offset, and reports the cover/callout and screen-only notes;
   the "service did not translate line by line" note no longer fires for a
   partial answer.
-- `ctest` 28/28 binaries; `OcrResultTest` 29 cases (6 new M4.6 cases), F8
+- `ctest` 28/28 binaries; `OcrResultTest` 30 cases (7 new M4.6 cases), F8
   `translation partial overlay` and `devTestTranslationPartialOverlay` wired,
   eight catalogs filled, CHANGELOG EN/PL under 0.8.10 and the `src/ocr/`
   architecture note updated.
+- Acceptance refinements after the desktop pass: the partial note is ONE
+  elided line (two stacked notes under the controls were easy to miss), and a
+  CJK cover is set 10% below the largest fitted size because those glyphs fill
+  the em box. Pinned by `cjkCoverSetsItselfSlightlySmaller`.
 - AppImage rebuilt from `feat/ocr-m4.6` (tip `02f46a1`) for the real-machine
   pass: 175,241,720 bytes, sha256
   `e16020639ab5e9040624448d312b89bba1bcc0196cd0301cb378b1264f6aa643`, release

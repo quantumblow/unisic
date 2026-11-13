@@ -4504,34 +4504,34 @@ Oznaczone (ulubione) przechwycenia są zachowywane, zarówno wpis, jak i plik.</
 <context>
     <name>OcrResultController</name>
     <message>
-        <location filename="../src/ocr/OcrResultController.cpp" line="238"/>
-        <location filename="../src/ocr/OcrResultController.cpp" line="512"/>
+        <location filename="../src/ocr/OcrResultController.cpp" line="258"/>
+        <location filename="../src/ocr/OcrResultController.cpp" line="532"/>
         <source>No text to translate</source>
         <translation>Brak tekstu do tłumaczenia</translation>
     </message>
     <message>
-        <location filename="../src/ocr/OcrResultController.cpp" line="243"/>
-        <location filename="../src/ocr/OcrResultController.cpp" line="517"/>
+        <location filename="../src/ocr/OcrResultController.cpp" line="263"/>
+        <location filename="../src/ocr/OcrResultController.cpp" line="537"/>
         <source>Set the translation endpoint and model in Settings &gt; General</source>
         <translation>Ustaw punkt końcowy tłumaczenia i model w Ustawienia &gt; Ogólne</translation>
     </message>
     <message>
-        <location filename="../src/ocr/OcrResultController.cpp" line="889"/>
+        <location filename="../src/ocr/OcrResultController.cpp" line="912"/>
         <source>The translation service returned an empty result</source>
         <translation>Usługa tłumaczenia zwróciła pusty wynik</translation>
     </message>
     <message>
-        <location filename="../src/ocr/OcrResultController.cpp" line="930"/>
+        <location filename="../src/ocr/OcrResultController.cpp" line="953"/>
         <source>the translation service did not answer</source>
         <translation>usługa tłumaczenia nie odpowiedziała</translation>
     </message>
     <message>
-        <location filename="../src/ocr/OcrResultController.cpp" line="933"/>
+        <location filename="../src/ocr/OcrResultController.cpp" line="956"/>
         <source>Selected lines %1 did not translate: %2</source>
         <translation>Wybrane wiersze %1 nie zostały przetłumaczone: %2</translation>
     </message>
     <message>
-        <location filename="../src/ocr/OcrResultController.cpp" line="934"/>
+        <location filename="../src/ocr/OcrResultController.cpp" line="957"/>
         <source>Lines %1 did not translate: %2</source>
         <translation>Wiersze %1 nie zostały przetłumaczone: %2</translation>
     </message>
@@ -4540,7 +4540,7 @@ Oznaczone (ulubione) przechwycenia są zachowywane, zarówno wpis, jak i plik.</
     <name>OcrResultWindow</name>
     <message>
         <location filename="../qml/OcrResultWindow.qml" line="28"/>
-        <location filename="../qml/OcrResultWindow.qml" line="1428"/>
+        <location filename="../qml/OcrResultWindow.qml" line="1419"/>
         <source>Recognized text</source>
         <translation>Rozpoznany tekst</translation>
     </message>
@@ -4619,53 +4619,50 @@ Oznaczone (ulubione) przechwycenia są zachowywane, zarówno wpis, jak i plik.</
     </message>
     <message>
         <location filename="../qml/OcrResultWindow.qml" line="507"/>
-        <location filename="../qml/OcrResultWindow.qml" line="1231"/>
+        <location filename="../qml/OcrResultWindow.qml" line="1222"/>
         <source>Translating…</source>
         <translation>Tłumaczenie…</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="706"/>
         <source>The selection is too small for the translation to fit, so it is shown in a callout.</source>
-        <translation>Zaznaczenie jest za małe, by tłumaczenie się w nim zmieściło, więc pokazano je w dymku.</translation>
+        <translation type="vanished">Zaznaczenie jest za małe, by tłumaczenie się w nim zmieściło, więc pokazano je w dymku.</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="707"/>
         <source>Translated the selected text on the picture.</source>
-        <translation>Przetłumaczono zaznaczony tekst na obrazie.</translation>
+        <translation type="vanished">Przetłumaczono zaznaczony tekst na obrazie.</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="719"/>
         <source>Word and partial-line translations are shown on screen only. Save image keeps the page.</source>
-        <translation>Tłumaczenia słów i fragmentów wierszy są widoczne tylko na ekranie. Zapis obrazu zachowuje stronę.</translation>
+        <translation type="vanished">Tłumaczenia słów i fragmentów wierszy są widoczne tylko na ekranie. Zapis obrazu zachowuje stronę.</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="1526"/>
-        <location filename="../qml/OcrResultWindow.qml" line="1530"/>
+        <location filename="../qml/OcrResultWindow.qml" line="1517"/>
+        <location filename="../qml/OcrResultWindow.qml" line="1521"/>
         <source>Send this text to %1?</source>
         <translation>Wysłać ten tekst do %1?</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="1527"/>
+        <location filename="../qml/OcrResultWindow.qml" line="1518"/>
         <source>The text of this screenshot will be sent to a translation service on another computer.</source>
         <translation>Tekst tego zrzutu zostanie wysłany do usługi tłumaczeniowej na innym komputerze.</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="1538"/>
+        <location filename="../qml/OcrResultWindow.qml" line="1529"/>
         <source>Unisic will send the recognized text from this screenshot to %1, a translation service on another computer, so it leaves this machine. The screenshot itself is not sent.</source>
         <translation>Unisic wyśle rozpoznany tekst z tego zrzutu do %1, usługi tłumaczeniowej na innym komputerze, więc opuści on ten komputer. Sam zrzut nie jest wysyłany.</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="1545"/>
+        <location filename="../qml/OcrResultWindow.qml" line="1536"/>
         <source>This is asked once for this host. Another endpoint asks again.</source>
         <translation>Pytamy o to raz dla tego hosta. Inny punkt końcowy zapyta ponownie.</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="1554"/>
+        <location filename="../qml/OcrResultWindow.qml" line="1545"/>
         <source>Don&apos;t send</source>
         <translation>Nie wysyłaj</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="1563"/>
+        <location filename="../qml/OcrResultWindow.qml" line="1554"/>
         <source>Translate</source>
         <translation>Przetłumacz</translation>
     </message>
@@ -4780,51 +4777,61 @@ Oznaczone (ulubione) przechwycenia są zachowywane, zarówno wpis, jak i plik.</
         <translation>Przetłumaczono tylko zaznaczone wiersze. Naciśnij Przetłumacz wszystko, aby wysłać resztę.</translation>
     </message>
     <message>
+        <location filename="../qml/OcrResultWindow.qml" line="707"/>
+        <source>Too small to fit in place, so the answer is in a callout; Save image keeps the page.</source>
+        <translation>Za mało miejsca, by zmieścić tłumaczenie w miejscu, więc jest w dymku; zapis obrazu zachowuje stronę.</translation>
+    </message>
+    <message>
+        <location filename="../qml/OcrResultWindow.qml" line="708"/>
+        <source>Translated the selection in place on the picture; Save image keeps the page.</source>
+        <translation>Przetłumaczono zaznaczenie w miejscu na obrazie; zapis obrazu zachowuje stronę.</translation>
+    </message>
+    <message>
         <source>Translated the selected text. A word or part of a line stays in the pane and is not laid over the picture.</source>
         <translation type="vanished">Przetłumaczono zaznaczony tekst. Słowo albo część wiersza zostaje w panelu i nie jest nakładane na obraz.</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="730"/>
+        <location filename="../qml/OcrResultWindow.qml" line="721"/>
         <source>Some lines were too long for one request, so they were split at sentence boundaries before translating.</source>
         <translation>Niektóre wiersze były za długie na jedno żądanie, więc podzielono je na granicach zdań przed tłumaczeniem.</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="742"/>
+        <location filename="../qml/OcrResultWindow.qml" line="733"/>
         <source>The service returned the text unchanged. Check the target language and the model.</source>
         <translation>Usługa zwróciła tekst bez zmian. Sprawdź język docelowy i model.</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="754"/>
+        <location filename="../qml/OcrResultWindow.qml" line="745"/>
         <source>Some lines are too long for their box at the smallest size, so the picture shows them shortened. The full translation is in the text pane.</source>
         <translation>Część wierszy nie mieści się w swoim polu przy najmniejszym rozmiarze, więc obraz pokazuje je skrócone. Pełne tłumaczenie jest w panelu tekstu.</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="967"/>
+        <location filename="../qml/OcrResultWindow.qml" line="958"/>
         <source>Recognized line on the picture</source>
         <translation>Rozpoznany wiersz na obrazie</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="1014"/>
+        <location filename="../qml/OcrResultWindow.qml" line="1005"/>
         <source>Translated line on the picture</source>
         <translation>Przetłumaczony wiersz na obrazie</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="1331"/>
+        <location filename="../qml/OcrResultWindow.qml" line="1322"/>
         <source>Divider between the picture and the text</source>
         <translation>Separator między obrazem a tekstem</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="1332"/>
+        <location filename="../qml/OcrResultWindow.qml" line="1323"/>
         <source>Drag it, or use the arrow keys; double-click to reset</source>
         <translation>Przeciągnij go lub użyj klawiszy strzałek; dwuklik przywraca ustawienie automatyczne</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="1429"/>
+        <location filename="../qml/OcrResultWindow.qml" line="1420"/>
         <source>Selectable text. Ctrl and the mouse wheel change its size.</source>
         <translation>Tekst do zaznaczania. Ctrl i kółko myszy zmieniają jego rozmiar.</translation>
     </message>
     <message>
-        <location filename="../qml/OcrResultWindow.qml" line="1481"/>
+        <location filename="../qml/OcrResultWindow.qml" line="1472"/>
         <source>%1 of %2 chunks</source>
         <translation>%1 z %2 fragmentów</translation>
     </message>

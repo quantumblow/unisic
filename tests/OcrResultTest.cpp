@@ -1,4 +1,5 @@
 #include <QtTest>
+#include <cmath>
 #include <QColor>
 #include <QFont>
 #include <QFontMetrics>
@@ -162,6 +163,7 @@ private slots:
     void longPagesSplitIntoRequests();
     void spotsAnUnchangedAnswer();
     void overlayFontSizeFitsTheBox();
+    void cjkCoverSetsItselfSlightlySmaller();
     void compositeKeepsSourceResolution();
     void compositeDrawsOnlyInsideCovers();
     void clickFindsTheLineAtEveryScale();
@@ -1144,6 +1146,34 @@ void OcrResultTest::overlayFontSizeFitsTheBox()
     QCOMPARE(fits, false);
     QCOMPARE(OcrResultController::fittedPixelSize(QString(), QSize(10, 10), 20, &fits), 20);
     QCOMPARE(fits, true);
+}
+
+// A CJK glyph fills nearly the whole em box, so a cover at the largest size
+// that fits reads larger than the page it replaces. Such a cover is set 10%
+// below that size; a Latin cover keeps the exact fit. The composite reads the
+// same fontSize, so the saved picture and the screen stay in step.
+void OcrResultTest::cjkCoverSetsItselfSlightlySmaller()
+{
+    QImage image(340, 90, QImage::Format_RGB32);
+    image.fill(QColor(250, 250, 245));
+    const QRect box(10, 10, 300, 30);
+    QString joined;
+    const QVariantMap latin = OcrResultController::translatedLineMap(
+        {lineEntry(QStringLiteral("Hello"), box)}, {QStringLiteral("Hi")}, image, &joined)
+                                  .first().toMap();
+    const QVariantMap cjk = OcrResultController::translatedLineMap(
+        {lineEntry(QStringLiteral("你好"), box)}, {QStringLiteral("你好世界")}, image, &joined)
+                                .first().toMap();
+    QVERIFY(!latin.value(QStringLiteral("overflow")).toBool());
+    QVERIFY(!cjk.value(QStringLiteral("overflow")).toBool());
+    const int latinSize = latin.value(QStringLiteral("fontSize")).toInt();
+    const int cjkSize = cjk.value(QStringLiteral("fontSize")).toInt();
+    QVERIFY2(cjkSize < latinSize, qPrintable(QStringLiteral("CJK %1 is not below Latin %2")
+                                                 .arg(cjkSize).arg(latinSize)));
+    QCOMPARE(cjkSize, qMax(OcrResultController::kMinFitPixelSize,
+                           int(std::lround(latinSize * 0.9))));
+    QVERIFY(textFits(QStringLiteral("你好世界"), entryRect(cjk).size(), cjkSize, false));
+    QVERIFY(latinSize <= qMax(8, entryRect(latin).height()));
 }
 
 // The window scales a capture down when it does not fit, but the picture handed

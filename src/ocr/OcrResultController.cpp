@@ -130,6 +130,26 @@ QString textOfLines(const QVariantList &lines)
     return texts.join(QLatin1Char('\n'));
 }
 
+// A CJK glyph fills nearly the whole em box, while a Latin one only its cap
+// height, so a cover fitted to the line box reads noticeably larger than the
+// text it replaces. Such covers are set 10% below the largest size that fits;
+// the saved composite reads the same `fontSize`, so both stay in step.
+constexpr double kCjkCoverSizeScale = 0.9;
+
+bool hasCjkGlyphs(const QString &text)
+{
+    for (const QChar c : text) {
+        const ushort u = c.unicode();
+        // CJK radicals, kana and unified ideographs; Hangul syllables;
+        // compatibility ideographs. Surrogates (Ext B and beyond) are rare in
+        // a cover and fall back to the normal fit.
+        if ((u >= 0x2E80 && u <= 0x9FFF) || (u >= 0xAC00 && u <= 0xD7AF)
+            || (u >= 0xF900 && u <= 0xFAFF))
+            return true;
+    }
+    return false;
+}
+
 // The overshoot a cover grows over its box, stopped halfway into the gutter
 // with a neighbour on the same row (M3): the OCR box cuts through the outer
 // glyphs, so the cover reaches them without eating the line above or the first
@@ -1409,9 +1429,15 @@ QVariantList OcrResultController::translatedLineMap(const QVariantList &lines,
         const LineColors colors = sampleLineColors(source, cover);
         // The ONE font decision for this cover, in image pixels: the window
         // scales it and the composite draws at it, so the saved picture cannot
-        // pick a different size than the screen shows.
+        // pick a different size than the screen shows. A CJK answer is set a
+        // little below the largest size that fits, because those glyphs fill
+        // the em box and otherwise read larger than the page they replace.
         bool fits = true;
-        const int fontSize = fittedPixelSize(value, cover.size(), std::max(8, cover.height()), &fits);
+        int fontSize = fittedPixelSize(value, cover.size(), std::max(8, cover.height()),
+                                       &fits);
+        if (fits && hasCjkGlyphs(value))
+            fontSize = std::max(kMinFitPixelSize,
+                                int(std::lround(fontSize * kCjkCoverSizeScale)));
         QVariantMap entry;
         entry.insert(QStringLiteral("text"), value);
         entry.insert(QStringLiteral("start"), int(joined.size()));

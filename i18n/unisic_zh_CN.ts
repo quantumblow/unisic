@@ -4308,7 +4308,7 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
 <context>
     <name>OcrResultController</name>
     <message>
-        <location filename="../src/ocr/OcrResultController.cpp" line="+238"/>
+        <location filename="../src/ocr/OcrResultController.cpp" line="+258"/>
         <location line="+274"/>
         <source>No text to translate</source>
         <translation>没有可翻译的文本</translation>
@@ -4320,7 +4320,7 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>请在“设置 &gt; 通用”中设置翻译端点和模型</translation>
     </message>
     <message>
-        <location line="+372"/>
+        <location line="+375"/>
         <source>The translation service returned an empty result</source>
         <translation>翻译服务返回了空结果</translation>
     </message>
@@ -4344,12 +4344,12 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
     <name>OcrResultWindow</name>
     <message>
         <location filename="../qml/OcrResultWindow.qml" line="+28"/>
-        <location line="+1400"/>
+        <location line="+1391"/>
         <source>Recognized text</source>
         <translation>识别结果</translation>
     </message>
     <message>
-        <location line="-1021"/>
+        <location line="-1012"/>
         <source>Minimize</source>
         <translation>最小化</translation>
     </message>
@@ -4423,27 +4423,24 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
     </message>
     <message>
         <location line="-30"/>
-        <location line="+724"/>
+        <location line="+715"/>
         <source>Translating…</source>
         <translation>正在翻译…</translation>
     </message>
     <message>
-        <location line="-525"/>
         <source>The selection is too small for the translation to fit, so it is shown in a callout.</source>
-        <translation>选区太小，放不下译文，因此显示在标注框中。</translation>
+        <translation type="vanished">选区太小，放不下译文，因此显示在标注框中。</translation>
     </message>
     <message>
-        <location line="+1"/>
         <source>Translated the selected text on the picture.</source>
-        <translation>已在图片上显示所选文本的译文。</translation>
+        <translation type="vanished">已在图片上显示所选文本的译文。</translation>
     </message>
     <message>
-        <location line="+12"/>
         <source>Word and partial-line translations are shown on screen only. Save image keeps the page.</source>
-        <translation>单词和部分行的译文仅在屏幕上显示。保存图片时保留原页面。</translation>
+        <translation type="vanished">单词和部分行的译文仅在屏幕上显示。保存图片时保留原页面。</translation>
     </message>
     <message>
-        <location line="+807"/>
+        <location line="+295"/>
         <location line="+4"/>
         <source>Send this text to %1?</source>
         <translation>将此文本发送到 %1？</translation>
@@ -4474,7 +4471,7 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>翻译</translation>
     </message>
     <message>
-        <location line="-1047"/>
+        <location line="-1038"/>
         <source>Translate the recognized text</source>
         <translation>翻译识别出的文本</translation>
     </message>
@@ -4584,11 +4581,21 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>只翻译了所选行。按“全部翻译”发送其余内容。</translation>
     </message>
     <message>
+        <location line="+15"/>
+        <source>Too small to fit in place, so the answer is in a callout; Save image keeps the page.</source>
+        <translation>选区太小，无法原地显示译文，因此显示在标注框中；保存图片时保留原页面。</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Translated the selection in place on the picture; Save image keeps the page.</source>
+        <translation>已在图片上原地显示所选文本的译文；保存图片时保留原页面。</translation>
+    </message>
+    <message>
         <source>Translated the selected text. A word or part of a line stays in the pane and is not laid over the picture.</source>
         <translation type="vanished">已翻译选中的文本。单词或行的一部分只显示在面板中，不会覆盖到图片上。</translation>
     </message>
     <message>
-        <location line="+38"/>
+        <location line="+13"/>
         <source>Some lines were too long for one request, so they were split at sentence boundaries before translating.</source>
         <translation>有些行对单个请求来说太长，因此翻译前已在句子边界处拆分。</translation>
     </message>

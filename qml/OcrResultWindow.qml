@@ -695,31 +695,22 @@ Window {
                 wrapMode: Text.WordWrap
             }
 
-            // M4.6: a word or part of a line is shown on the picture when it is
-            // readable there, and in a callout when it is not. Say which, so the
-            // answer is never mistaken for a whole-line translation.
+            // M4.6: where a word or part of a line went, and that it never
+            // reaches the saved picture. ONE line on purpose: two stacked
+            // notes were easy to miss under the controls. Elided rather than
+            // wrapped, with the full wording left to a screen reader.
             Text {
                 Layout.fillWidth: true
                 visible: resultWindow.showTranslation && App.ocrResult.translationPartialText
                          && App.ocrResult.partialPresentation !== "pane"
                 text: App.ocrResult.partialPresentation === "callout"
-                      ? qsTr("The selection is too small for the translation to fit, so it is shown in a callout.")
-                      : qsTr("Translated the selected text on the picture.")
+                      ? qsTr("Too small to fit in place, so the answer is in a callout; Save image keeps the page.")
+                      : qsTr("Translated the selection in place on the picture; Save image keeps the page.")
                 color: Theme.textSecondary
                 font.pixelSize: Theme.fontS
-                wrapMode: Text.WordWrap
-            }
-            // A word cover or a callout is a reading aid, not part of the page:
-            // Save image and Copy image keep the untouched capture, and the
-            // window says so instead of letting the file surprise the reader.
-            Text {
-                Layout.fillWidth: true
-                visible: resultWindow.showTranslation && App.ocrResult.translationPartialText
-                         && App.ocrResult.partialPresentation !== "pane"
-                text: qsTr("Word and partial-line translations are shown on screen only. Save image keeps the page.")
-                color: Theme.textSecondary
-                font.pixelSize: Theme.fontS
-                wrapMode: Text.WordWrap
+                wrapMode: Text.NoWrap
+                elide: Text.ElideRight
+                Accessible.description: text
             }
 
             // Long lines are split before they are sent; say so, so a line
