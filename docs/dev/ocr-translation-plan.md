@@ -842,8 +842,12 @@ this tree in `unisic-appimage-env:latest` with `UNISIC_BUILD_NUMBER=20261113`:
 `1ae1e2ae44b567a4cd2eed110ac8a1e925e06cb2a3b6eb23d192219a4436b0d9`, all 10
 gates ON, `--version` answers 0.8.9, `Other scripts (PP-OCRv5)` is in the
 binary, and it starts under Xvfb + `dbus-run-session` and exits cleanly on
-SIGTERM. `dist/SHA256SUMS` was regenerated; `dist/` is gitignored. The real
-desktop pass below is still unticked; this paragraph is not a substitute for it.
+SIGTERM. `dist/SHA256SUMS` was regenerated; `dist/` is gitignored. The complete
+local backup is outside git at `/workspace/weights/unisic-mirror` (the eight v5
+scripts, v6 small/medium/tiny, BiRefNet and the ONNX Runtime tarball, with
+`SHA256SUMS`); serving that directory and pointing `UNISIC_PADDLE_MODEL_BASE` at
+its root is the mirror procedure. The real desktop pass below is still unticked;
+this paragraph is not a substitute for it.
 
 ## M6. Packaging and quality (3-4 days, spread over the rounds)
 
