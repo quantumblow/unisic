@@ -1492,7 +1492,8 @@ Item {
                                 width: 300
                                 visible: App.translationTestStatus !== ""
                                 text: App.translationTestStatus
-                                color: App.translationTestOk ? Theme.textSecondary : Theme.danger
+                                color: App.translationTestRunning || App.translationTestOk
+                                       ? Theme.textSecondary : Theme.danger
                                 font.pixelSize: Theme.fontS
                                 wrapMode: Text.WordWrap
                                 Accessible.role: Accessible.StaticText

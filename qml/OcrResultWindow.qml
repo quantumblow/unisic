@@ -35,9 +35,9 @@ Window {
     // so neither pane squeezes the picture into a strip.
     readonly property bool sideBySide: width >= 820
     property bool showTranslation: false
-    // Set while the picture drives the pane's native selection, so a
-    // cursorPositionChanged from our own select() call does not clear the
-    // line-box multi-selection (a real drag in the pane does clear it).
+    // Set while the picture drives the pane's native selection or the layer
+    // switches text under it, so an automatic selection change does not clear
+    // the line-box multi-selection (a real drag in the pane does clear it).
     property bool syncingPaneSelection: false
     // Translation over the picture needs one translation per recognized line;
     // a service that merged or split lines leaves this empty and the whole text
@@ -163,7 +163,21 @@ Window {
                 return
             App.ocrResult.extendLineSelection(sourceIndex)
             const lines = App.ocrResult.selectedLines
-            if (lines.length > 0) {
+            if (lines.length > 0 && resultWindow.showTranslation) {
+                // The pane shows translations here, so select the covers of the
+                // chosen source lines, not their source offsets.
+                let from = -1
+                let to = -1
+                const covers = App.ocrResult.translatedLines
+                for (let i = 0; i < covers.length; ++i) {
+                    if (lines.indexOf(resultWindow.sourceLineOfCover(covers[i])) < 0)
+                        continue
+                    from = from < 0 ? covers[i].start : Math.min(from, covers[i].start)
+                    to = Math.max(to, covers[i].start + covers[i].length)
+                }
+                if (from >= 0)
+                    resultWindow.selectPaneRange(from, to - from)
+            } else if (lines.length > 0) {
                 const first = App.ocrResult.lines[lines[0]]
                 const last = App.ocrResult.lines[lines[lines.length - 1]]
                 resultWindow.selectPaneRange(first.start,
@@ -242,6 +256,29 @@ Window {
         return count
     }
 
+    // Copy selection follows the layer on show, like Copy all: on Translation
+    // it takes each chosen line's cover text (falling back to the source line
+    // when that line has no cover), in document order.
+    function selectedTextForLayer() {
+        const selected = App.ocrResult.selectedLines
+        if (!resultWindow.showTranslation)
+            return App.ocrResult.selectionText()
+        const byLine = {}
+        const covers = App.ocrResult.translatedLines
+        for (let i = 0; i < covers.length; ++i) {
+            const line = resultWindow.sourceLineOfCover(covers[i])
+            if (line >= 0)
+                byLine[line] = covers[i].text
+        }
+        const out = []
+        for (let i = 0; i < selected.length; ++i) {
+            const line = selected[i]
+            out.push(byLine[line] !== undefined ? byLine[line]
+                                                : App.ocrResult.lines[line].text)
+        }
+        return out.join("\n")
+    }
+
     function translateFromPane() {
         // Resolve the selection against the layer the user is looking at,
         // before switching to Translation: the offsets belong to that text.
@@ -260,6 +297,13 @@ Window {
     onVisibleChanged: {
         if (visible)
             textEdit.forceActiveFocus()
+    }
+    // Original/Translation replaces the pane's whole text; the offsets stay, so
+    // selectedText can change by itself and must not be mistaken for a pane
+    // drag. The guard covers the synchronous selectedTextChanged.
+    onShowTranslationChanged: {
+        resultWindow.syncingPaneSelection = true
+        Qt.callLater(function() { resultWindow.syncingPaneSelection = false })
     }
     onClosing: App.ocrResult.cancelTranslation()
 
@@ -493,7 +537,7 @@ Window {
                     text: qsTr("Copy selection")
                     onClicked: {
                         if (App.ocrResult.selectedLines.length > 0)
-                            App.copyText(App.ocrResult.selectionText())
+                            App.copyText(resultWindow.selectedTextForLayer())
                         else
                             textEdit.copy()
                         App.ocrResult.setStatusText(qsTr("Copied"), false)
