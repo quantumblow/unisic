@@ -65,15 +65,12 @@ download, and keep small / medium as explicit downloads for better accuracy. tin
 is 6.3 MB (det 1.8 MB, rec 4.5 MB, dictionary 27 KB) and cannot read Japanese, so
 the routing has to know which tier is in use.
 
-**D1, needs your call before T1.1:** the bytes live in git and are embedded through
-the qrc (recommended), or every packaging recipe fetches them at build time.
-
-- Embedding costs ~6 MB in the repository and ~6 MB in every binary, and gives
-  every channel (AppImage, deb, rpm, Arch, Flatpak, Nix, tarball) the files for
-  free, offline, with no manifest change.
-- Fetching keeps the repository small but adds a network step to configure, which
-  breaks the Nix sandbox (needs a fixed-output derivation), offline tarball builds,
-  and every recipe gets its own copy of the URL and hash to keep in step.
+**D1 settled (2026-11-13): the bytes live in git and are embedded through the
+qrc.** Every channel (AppImage, deb, rpm, Arch, Flatpak, Nix, tarball) then gets the
+files for free, offline, with no manifest change; the cost is ~6 MB in the
+repository and ~6 MB in every binary. Fetching them at build time was rejected: it
+adds a network step to configure (a fixed-output derivation for the Nix sandbox,
+one URL and hash per recipe) and breaks offline tarball builds.
 
 **T1.1** Add the three pinned files (plus the Apache-2.0 notice and PaddleOCR's
 copyright) and verify them at configure time with `file(SHA256 ...)`, failing
@@ -90,7 +87,9 @@ memory (`CreateSessionFromArray`), so no ORT change is needed.
   returns text, and `hasDownloads()` still says "nothing downloaded".
 
 **T1.3** One "effective tier" rule, in one place: the selected tier when it is
-installed, otherwise the bundled tiny, otherwise no PP-OCRv6 at all.
+installed, otherwise the bundled tiny, otherwise no PP-OCRv6 at all. D3 is settled:
+`auto` does use the bundled tiny for Latin and Chinese, so an install with no
+download starts on PP-OCRv6 instead of Tesseract.
 
 - The Settings picker keeps showing the user's choice; the status line says which
   tier actually runs (for example "Tiny (included) is in use; download Small for
@@ -203,19 +202,33 @@ file without them must not wipe the ones already configured.
 non-localhost endpoint, say once which host the text goes to and remember the
 answer. Local addresses (127.0.0.1, localhost, ::1) never ask.
 
-**T4.4, decision D2:** keychain storage. It would mean a new mandatory dependency
-(libsecret) in six packaging recipes, against the no-optional-dependencies rule;
-the recommendation is to keep the key in the owner-only config file, document it,
-and rely on T4.2 so exports stop carrying it. Needs your decision, not a code
-change by default.
+**T4.4, D2 settled (2026-11-13): no keychain.** The key stays in the owner-only
+config file, documented as such; T4.2 is what keeps it out of exports. A keychain
+would mean libsecret as a new mandatory dependency in six packaging recipes, which
+the no-optional-dependencies rule does not allow for one string.
 
-## M5. PP-OCRv5 scripts (5-8 days, separate round)
+## M5. The other scripts' recognizers (5-8 days, D5 settled: own round)
 
 Korean, Arabic, Cyrillic, Thai, Indic and Greek currently fall back to Tesseract.
-Adding PP-OCRv5's per-script recognition models means a second model family
-alongside PP-OCRv6 (downloads, pins, routing in `supportsLanguages()`, a Settings
-section for the extra scripts, tests and docs). Large enough to deserve its own
-round; do it after M2 and M3 so the result window and translation paths are settled.
+They cannot move to PP-OCRv6, because a recognizer can only output the classes its
+dictionary defines, and PP-OCRv6's dictionary has none of them: the shipped
+`ppocrv6_dict.txt` carries 15,565 Han, 491 Latin, 180 kana and 76 Greek letters
+(math, not a Greek pack), and **zero** Hangul, Cyrillic, Arabic, Thai or Devanagari
+entries. Those scripts exist as the PP-OCRv5 multilingual recognizers
+(`korean_PP-OCRv5_mobile_rec`, `cyrillic_...`, `arabic_...`, `devanagari_...`, and
+the 106-language set behind them), each with its own dictionary.
+
+So M5 is not "downgrade to v5": it is "add the per-script recognizers that only v5
+publishes". The detection half stays PP-OCRv6's (DB detection is script-agnostic),
+which keeps one pipeline, one runtime and the same boxes. Work: pin the per-script
+rec+dict files (URL, size, SHA-256), extend the model download UI with a scripts
+section, route in `supportsLanguages()`, and cover it in F8 and the Developer pane.
+The SnowShotOCR mirror used for the v6 tiers has no multilingual files (it carries
+only ch_PP-OCRv5 det/rec), so M5 needs its own pinned sources, most likely the
+official PaddleOCR release assets.
+
+Large enough to deserve its own round; do it after M2 and M3 so the result window
+and translation paths are settled.
 
 ## M6. Packaging and quality (3-4 days, spread over the rounds)
 
@@ -262,17 +275,18 @@ Every milestone ends with: build, `ctest` (27 + new tests), F8 on a desktop, a
 rebuilt AppImage, a CHANGELOG entry under the current beta heading (EN/PL), and the
 counts/lists that changed corrected in the same commit.
 
-## Decisions to settle
+## Decisions (settled 2026-11-13)
 
-- **D1** tiny bytes in git + qrc (recommended) versus fetched at build time.
-- **D2** keychain (new hard dependency) versus the owner-only config file
-  (recommended) plus T4.2.
-- **D3** with tiny bundled, `ocrEngine=auto` starts using PP-OCRv6 for Latin and
-  Chinese on every install. Confirm that is the wanted default (Japanese stays on
-  Tesseract until small/medium is downloaded).
-- **D4** saved composite: PNG only, default directory and filename template.
-- **D5** PP-OCRv5 scripts in this cycle or as their own round (recommended: own
-  round).
+- **D1** tiny bytes go into git and are embedded through the qrc; no per-recipe
+  download. See M1.
+- **D2** no keychain. The key stays in the owner-only config file and T4.2 keeps
+  it out of exports.
+- **D3** yes: with tiny bundled, `ocrEngine=auto` uses PP-OCRv6 for Latin and
+  Chinese on every install. Japanese stays on Tesseract until small or medium is
+  downloaded, because tiny cannot read it.
+- **D4** the saved composite is PNG, in the same directory and with the same
+  filename template as a normal capture save.
+- **D5** the other scripts' recognizers get their own round (M5), not this cycle.
 
 ## Verification commands
 
