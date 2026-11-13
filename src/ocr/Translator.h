@@ -1,4 +1,5 @@
 #pragma once
+#include <QJsonObject>
 #include <QObject>
 #include <QPointer>
 #include <QString>
@@ -19,7 +20,14 @@ class Translator : public QObject
     Q_OBJECT
 
 public:
-    using Done = std::function<void(const QString &translation, const QString &error)>;
+    // `retryable` is true for a transport error or a 5xx (and for the timeout /
+    // rate-limit statuses), false for a request or answer the service refused:
+    // retrying those would only send the same text twice.
+    using Done = std::function<void(const QString &translation, const QString &error,
+                                    bool retryable)>;
+    // One piece of an answer as it streams in. Called on the GUI thread, in
+    // order, and never after Done.
+    using Delta = std::function<void(const QString &partial)>;
     explicit Translator(Settings *settings = nullptr, QObject *parent = nullptr);
     ~Translator() override;
 
@@ -42,10 +50,28 @@ public:
     // `expected` numbered lines or nothing, with `error` explaining a count or
     // numbering mismatch. Empty and blank lines are dropped before counting.
     static QStringList parseNumberedLines(const QString &text, int expected, QString *error);
+    // Whatever prefix of the answer already maps onto lines 1..expected, for
+    // the live pane while a numbered chunk streams. Never counts as a finished
+    // answer: the strict parser above decides that.
+    static QStringList parseNumberedLinesPartial(const QString &text, int expected);
+
+    // The text a `stream: true` response frame adds (choices[0].delta.content,
+    // or a message/text shape some compatible servers send instead), or an
+    // empty string for a frame that only carries usage/finish_reason. `error`
+    // carries a service error object.
+    static QString parseStreamDelta(const QJsonObject &chunk, QString *error);
+    // Consumes the complete `data:` lines in `buffer` (leaving any trailing,
+    // still-incomplete line for the next read) and returns their deltas joined.
+    // Non-SSE bodies are left untouched for the buffered fallback to parse.
+    static QString takeSseDeltas(QByteArray &buffer, bool *finished, QString *error);
 
     // A request with an explicit system prompt.
     void translateWith(const QString &system, const QString &text, Done done);
     void translate(const QString &text, const QString &target, Done done);
+    // Tries `stream: true` and falls back to the buffered request when the
+    // endpoint rejects streaming or ignores it (a 200 JSON body with no SSE
+    // frames). `delta` sees the answer arrive; `done` fires exactly once.
+    void translateStreaming(const QString &system, const QString &text, Delta delta, Done done);
     void cancel();
 
 private:
@@ -55,3 +81,4 @@ private:
     QPointer<QNetworkReply> m_reply;
     quint64 m_seq = 0;
 };
+

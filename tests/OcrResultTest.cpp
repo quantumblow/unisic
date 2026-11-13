@@ -6,11 +6,14 @@
 #include <QImage>
 #include <QPainter>
 #include <QSignalSpy>
+#include <QStandardPaths>
 #include <QTextLayout>
 #include <QTextOption>
 #include <QVariantList>
 #include <QVariantMap>
 
+#include "MockTranslationEndpoint.h"
+#include "Settings.h"
 #include "ocr/OcrResultController.h"
 
 namespace {
@@ -104,9 +107,11 @@ class OcrResultTest : public QObject
     Q_OBJECT
 
 private slots:
+    void initTestCase();
     void rangesMatchTheText();
     void payloadWithoutGeometry();
     void selectionMapsToWholeLines();
+    void streamingFillsThePaneAndCancelStopsIt();
     void translatedLinesIndexThePane();
     void lineColorsFollowThePicture();
     void longPagesSplitIntoRequests();
@@ -118,6 +123,13 @@ private slots:
     void coverStopsAtTheNeighbourColumn();
     void rtlTranslationAlignsRight();
 };
+
+void OcrResultTest::initTestCase()
+{
+    // Settings is what the controller asks for the endpoint; keep its writes
+    // inside the QtTest sandbox.
+    QStandardPaths::setTestModeEnabled(true);
+}
 
 void OcrResultTest::rangesMatchTheText()
 {
@@ -215,6 +227,53 @@ void OcrResultTest::selectionMapsToWholeLines()
     QCOMPARE(map.at(1).toMap().value(QStringLiteral("sourceStart")).toInt(), 4);
     QCOMPARE(map.at(1).toMap().value(QStringLiteral("sourceLength")).toInt(), 3);
     QCOMPARE(map.at(2).toMap().value(QStringLiteral("sourceStart")).toInt(), 8);
+}
+
+// Streaming goes through the controller, not just the parser: the pane has to
+// fill while the request is still open, and Cancel has to drop the partial
+// answer instead of leaving half a page behind.
+void OcrResultTest::streamingFillsThePaneAndCancelStopsIt()
+{
+    MockTranslationEndpoint server(MockTranslationEndpoint::SlowSse);
+    QVERIFY(server.start());
+    Settings settings;
+    settings.setTranslationEndpoint(server.base());
+    settings.setTranslationModel(QStringLiteral("mock"));
+    settings.setTranslationTarget(QStringLiteral("Polish"));
+
+    OcrResultController result(&settings);
+    QVector<OcrWord> words;
+    const QStringList texts{QStringLiteral("One"), QStringLiteral("Two"),
+                            QStringLiteral("Three")};
+    for (int i = 0; i < texts.size(); ++i) {
+        OcrWord word;
+        word.line = i;
+        word.text = texts.at(i);
+        word.rect = QRect(10, 10 + i * 30, 100, 20);
+        words.append(word);
+    }
+    QImage image(160, 120, QImage::Format_RGB32);
+    image.fill(QColor(250, 250, 245));
+    result.setResult(image, words, QString());
+    QCOMPARE(result.translationLineCount(), 0);
+
+    result.translate();
+    QVERIFY(result.translating());
+    QCOMPARE(result.translationLineCount(), 3);
+    QVERIFY(!result.translationSelectionOnly());
+    QVERIFY(result.translation().isEmpty());
+
+    // The first SSE frame is already on screen while the answer is still open.
+    QTRY_VERIFY_WITH_TIMEOUT(result.translating() && !result.translation().isEmpty(),
+                             3000);
+    result.cancelTranslation();
+    QVERIFY(!result.translating());
+    QVERIFY(result.translation().isEmpty());
+    QVERIFY(result.translatedLines().isEmpty());
+    // No late delta or done callback may revive the cancelled answer.
+    QTest::qWait(300);
+    QVERIFY(result.translation().isEmpty());
+    QVERIFY(!result.translating());
 }
 
 void OcrResultTest::translatedLinesIndexThePane()

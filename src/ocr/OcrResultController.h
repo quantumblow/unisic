@@ -208,18 +208,35 @@ private:
     QString m_statusText;
     bool m_statusIsError = false;
     QTimer m_statusTimer;
+    // One line can be split into several request items (T3.3), so a chunk is a
+    // list of item indices rather than a list of lines. `m_itemTranslations`
+    // is parallel to m_items; assembling per line is what puts the parts back
+    // together before the cover map is built.
+    struct TranslationItem {
+        int line = 0;
+        QString text;
+    };
+    QVector<TranslationItem> m_items;
+    QVector<QVector<int>> m_chunks;
+    QVector<QString> m_itemTranslations;
+    // The in-flight answer and the text the pane shows while it streams. The
+    // pane refresh is throttled: a token per event would re-lay out the whole
+    // TextEdit dozens of times a second.
+    QString m_streamText;
+    QTimer m_streamTimer;
     // A line-by-line translation runs one numbered request per chunk; the
     // generation bumps on cancel or a new result and makes every late callback
     // a no-op.
     quint64 m_translationSeq = 0;
-    QVector<QStringList> m_chunks;
-    QVector<QStringList> m_translatedChunks;
     int m_chunkIndex = 0;
 
     void requestNextLineChunk(quint64 seq);
     void requestWholeText(quint64 seq);
     void startTranslation(int start, int length);
     void failTranslation(quint64 seq, const QString &error);
+    void refreshStreamingPane();
+    QStringList assembledLineTranslations() const;
+    QString streamingPaneText() const;
     // One place that assigns m_translatedLines, so the cover hit-test rects
     // can never describe a different list than the one the window draws.
     void setTranslatedLines(const QVariantList &lines);

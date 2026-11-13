@@ -61,31 +61,21 @@ QString Translator::numberedRequest(const QStringList &lines)
     return numbered.join(QLatin1Char('\n'));
 }
 
-QStringList Translator::parseNumberedLines(const QString &text, int expected, QString *error)
-{
-    if (error)
-        error->clear();
-    const auto fail = [error] {
-        if (error)
-            *error = tr("The translation service did not keep the line numbering");
-        return QStringList{};
-    };
-    if (expected <= 0)
-        return fail();
-    // "1. text", "1) text", "[1] text", "**1.** text" and a bare "1 text" are
-    // all accepted; anything else means the model rewrote the layout.
-    static const QRegularExpression marker(
-        QStringLiteral("^(\\d{1,3})\\s*[*]*\\s*[.)\\]\\-:：、]?\\s*(.*)$"));
-    const auto stripMarks = [](QString value) {
-        value = value.trimmed();
-        while (value.startsWith(QLatin1String("**")))
-            value = value.mid(2).trimmed();
-        while (value.endsWith(QLatin1String("**")) && value.size() > 2)
-            value = value.left(value.size() - 2).trimmed();
-        return value;
-    };
+namespace {
 
-    // Answer lines in order, without blanks, code fences or leading bullets.
+QString stripMarks(QString value)
+{
+    value = value.trimmed();
+    while (value.startsWith(QLatin1String("**")))
+        value = value.mid(2).trimmed();
+    while (value.endsWith(QLatin1String("**")) && value.size() > 2)
+        value = value.left(value.size() - 2).trimmed();
+    return value;
+}
+
+// Answer lines in order, without blanks, code fences or leading bullets.
+QStringList answerRows(const QString &text)
+{
     QStringList rows;
     for (const QString &raw : text.split(QLatin1Char('\n'))) {
         QString row = raw.trimmed();
@@ -100,19 +90,41 @@ QStringList Translator::parseNumberedLines(const QString &text, int expected, QS
         if (!row.isEmpty())
             rows.append(row);
     }
+    return rows;
+}
+
+// The number a row starts with, or -1 when it does not start with one. "1.",
+// "1)", "[1]", "**1.**" and a bare "1 text" are all accepted; anything else
+// means the model rewrote the layout.
+int rowNumber(const QString &row, QString *rest)
+{
+    static const QRegularExpression marker(
+        QStringLiteral("^(\\d{1,3})\\s*[*]*\\s*[.)\\]\\-:：、]?\\s*(.*)$"));
+    const int skip = row.startsWith(QLatin1Char('[')) ? 1 : 0;
+    const QRegularExpressionMatch match = marker.match(row.mid(skip));
+    if (!match.hasMatch())
+        return -1;
+    if (rest)
+        *rest = match.captured(2);
+    return match.captured(1).toInt();
+}
+
+} // namespace
+
+QStringList Translator::parseNumberedLines(const QString &text, int expected, QString *error)
+{
+    if (error)
+        error->clear();
+    const auto fail = [error] {
+        if (error)
+            *error = tr("The translation service did not keep the line numbering");
+        return QStringList{};
+    };
+    if (expected <= 0)
+        return fail();
+    const QStringList rows = answerRows(text);
     if (rows.isEmpty())
         return fail();
-
-    // The number a row starts with, or -1 when it does not start with one.
-    const auto rowNumber = [](const QString &row, QString *rest) {
-        const int skip = row.startsWith(QLatin1Char('[')) ? 1 : 0;
-        const QRegularExpressionMatch match = marker.match(row.mid(skip));
-        if (!match.hasMatch())
-            return -1;
-        if (rest)
-            *rest = match.captured(2);
-        return match.captured(1).toInt();
-    };
 
     // Numbered block: start at the line that carries "1" (a sentence before it
     // is a preamble, not a translation), then walk the sequence. An unnumbered
@@ -168,6 +180,58 @@ QStringList Translator::parseNumberedLines(const QString &text, int expected, QS
     return fail();
 }
 
+QStringList Translator::parseNumberedLinesPartial(const QString &text, int expected)
+{
+    if (expected <= 0)
+        return {};
+    const QStringList rows = answerRows(text);
+    if (rows.isEmpty())
+        return {};
+
+    // The same numbered walk as the strict parser, but stopping wherever the
+    // answer currently ends instead of demanding all expected lines. A partial
+    // last line is still the best text the pane can show for that line.
+    int first = -1;
+    for (int i = 0; i < rows.size(); ++i) {
+        if (rowNumber(rows.at(i), nullptr) == 1) {
+            first = i;
+            break;
+        }
+    }
+    QStringList out;
+    if (first >= 0) {
+        for (int i = first; i < rows.size() && out.size() < expected; ++i) {
+            QString rest;
+            const int number = rowNumber(rows.at(i), &rest);
+            if (number == out.size() + 1) {
+                out.append(stripMarks(rest));
+                continue;
+            }
+            if (number < 0) {
+                if (out.isEmpty())
+                    continue;
+                out.last() += QLatin1Char(' ') + stripMarks(rows.at(i));
+                continue;
+            }
+            break; // out of sequence: the model rewrote the layout
+        }
+        if (!out.isEmpty())
+            return out;
+    }
+
+    // No usable numbering (yet): one value per row, stripping a leading number
+    // that looks like a line number so the live pane never shows "1." alone.
+    for (const QString &row : rows) {
+        if (out.size() >= expected)
+            break;
+        QString rest;
+        const int number = rowNumber(row, &rest);
+        const bool looksNumbered = number >= 0 && number <= expected + 2;
+        out.append(stripMarks(looksNumbered ? rest : row));
+    }
+    return out;
+}
+
 QString Translator::parseResponse(const QByteArray &body, QString *error)
 {
     if (error)
@@ -209,6 +273,79 @@ QString Translator::parseResponse(const QByteArray &body, QString *error)
     return text;
 }
 
+QString Translator::parseStreamDelta(const QJsonObject &chunk, QString *error)
+{
+    if (error)
+        error->clear();
+    const QJsonValue errorValue = chunk.value(QStringLiteral("error"));
+    if (!errorValue.isUndefined() && !errorValue.isNull()) {
+        QString message = errorValue.toObject().value(QStringLiteral("message")).toString();
+        if (message.isEmpty())
+            message = errorValue.toString();
+        if (error)
+            *error = message.isEmpty() ? tr("The translation service returned an error") : message;
+        return {};
+    }
+    const QJsonArray choices = chunk.value(QStringLiteral("choices")).toArray();
+    if (choices.isEmpty())
+        return {};
+    const QJsonObject choice = choices.first().toObject();
+    // The OpenAI streaming shape, then the full-message shape some compatible
+    // servers send per frame instead, then the legacy completions shape.
+    QString text = choice.value(QStringLiteral("delta")).toObject()
+                       .value(QStringLiteral("content")).toString();
+    if (text.isEmpty())
+        text = choice.value(QStringLiteral("message")).toObject()
+                   .value(QStringLiteral("content")).toString();
+    if (text.isEmpty())
+        text = choice.value(QStringLiteral("text")).toString();
+    return text;
+}
+
+QString Translator::takeSseDeltas(QByteArray &buffer, bool *finished, QString *error)
+{
+    if (finished)
+        *finished = false;
+    if (error)
+        error->clear();
+    QString out;
+    int newline = -1;
+    while ((newline = buffer.indexOf('\n')) >= 0) {
+        QByteArray line = buffer.left(newline);
+        buffer.remove(0, newline + 1);
+        if (line.endsWith('\r'))
+            line.chop(1);
+        const QByteArray trimmed = line.trimmed();
+        if (trimmed.isEmpty() || trimmed.startsWith(':') || trimmed.startsWith("event:"))
+            continue;
+        QByteArray payload;
+        if (trimmed.startsWith("data:"))
+            payload = trimmed.mid(5).trimmed();
+        else if (trimmed.startsWith('{'))
+            payload = trimmed; // NDJSON-style stream without the `data:` prefix
+        else
+            continue;
+        if (payload == "[DONE]") {
+            if (finished)
+                *finished = true;
+            continue;
+        }
+        QJsonParseError parseError;
+        const QJsonDocument doc = QJsonDocument::fromJson(payload, &parseError);
+        if (parseError.error != QJsonParseError::NoError || !doc.isObject())
+            continue;
+        QString frameError;
+        const QString delta = parseStreamDelta(doc.object(), &frameError);
+        if (!frameError.isEmpty()) {
+            if (error)
+                *error = frameError;
+            continue;
+        }
+        out += delta;
+    }
+    return out;
+}
+
 bool Translator::configured() const
 {
     if (!m_settings)
@@ -235,6 +372,43 @@ void Translator::cancel()
     }
 }
 
+namespace {
+
+QJsonObject chatPayload(const QString &model, const QString &system, const QString &text,
+                        bool stream)
+{
+    const QJsonObject systemMessage{{QStringLiteral("role"), QStringLiteral("system")},
+                                    {QStringLiteral("content"), system}};
+    const QJsonObject user{{QStringLiteral("role"), QStringLiteral("user")},
+                           {QStringLiteral("content"), text}};
+    return QJsonObject{{QStringLiteral("model"), model},
+                       {QStringLiteral("messages"), QJsonArray{systemMessage, user}},
+                       {QStringLiteral("temperature"), 0},
+                       {QStringLiteral("stream"), stream}};
+}
+
+QNetworkRequest chatRequest(const QUrl &url, const QString &key, bool stream)
+{
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    request.setRawHeader("Accept", stream ? "text/event-stream" : "application/json");
+    request.setHeader(QNetworkRequest::UserAgentHeader,
+                      QStringLiteral("Unisic/" UNISIC_VERSION " (screenshot tool)"));
+    if (!key.isEmpty())
+        request.setRawHeader("Authorization", "Bearer " + key.toUtf8());
+    // A local model can be slow; a cloud service that has not answered or sent
+    // a byte in 90 seconds is more likely stuck than thinking.
+    request.setTransferTimeout(90000);
+    return request;
+}
+
+bool retryableStatus(int status)
+{
+    return status >= 500 || status == 408 || status == 429;
+}
+
+} // namespace
+
 void Translator::translate(const QString &text, const QString &target, Done done)
 {
     translateWith(systemPrompt(target), text, std::move(done));
@@ -243,7 +417,7 @@ void Translator::translate(const QString &text, const QString &target, Done done
 void Translator::translateWith(const QString &system, const QString &text, Done done)
 {
     if (!m_settings || !configured()) {
-        done({}, Translator::tr("Set the translation endpoint and model in Settings > General"));
+        done({}, Translator::tr("Set the translation endpoint and model in Settings > General"), false);
         return;
     }
     const QUrl url = endpointUrl(m_settings->translationEndpoint());
@@ -252,27 +426,9 @@ void Translator::translateWith(const QString &system, const QString &text, Done 
     cancel();
     const quint64 seq = ++m_seq;
 
-    const QJsonObject systemMessage{{QStringLiteral("role"), QStringLiteral("system")},
-                                    {QStringLiteral("content"), system}};
-    const QJsonObject user{{QStringLiteral("role"), QStringLiteral("user")},
-                           {QStringLiteral("content"), text}};
-    const QJsonObject payload{{QStringLiteral("model"), model},
-                              {QStringLiteral("messages"), QJsonArray{systemMessage, user}},
-                              {QStringLiteral("temperature"), 0},
-                              {QStringLiteral("stream"), false}};
-
-    QNetworkRequest request(url);
-    request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-    request.setRawHeader("Accept", "application/json");
-    request.setHeader(QNetworkRequest::UserAgentHeader,
-                      QStringLiteral("Unisic/" UNISIC_VERSION " (screenshot tool)"));
-    if (!key.isEmpty())
-        request.setRawHeader("Authorization", "Bearer " + key.toUtf8());
-    // A local model can be slow; a cloud service that has not answered in 90
-    // seconds is more likely stuck than thinking.
-    request.setTransferTimeout(90000);
-
-    QNetworkReply *reply = nam()->post(request, QJsonDocument(payload).toJson(QJsonDocument::Compact));
+    const QNetworkRequest request = chatRequest(url, key, false);
+    QNetworkReply *reply = nam()->post(
+        request, QJsonDocument(chatPayload(model, system, text, false)).toJson(QJsonDocument::Compact));
     m_reply = reply;
     connect(reply, &QNetworkReply::finished, this, [this, reply, done, seq] {
         if (seq != m_seq) {
@@ -282,23 +438,137 @@ void Translator::translateWith(const QString &system, const QString &text, Done 
         m_reply = nullptr;
         const QByteArray body = reply->readAll();
         const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const auto networkError = reply->error();
+        const QString errorString = reply->errorString();
+        reply->deleteLater();
         QString serviceError;
         const QString translation = parseResponse(body, &serviceError);
-        reply->deleteLater();
         if (status >= 400) {
             if (serviceError.isEmpty())
-                serviceError = reply->errorString();
-            done({}, Translator::tr("Translation failed: %1").arg(serviceError));
+                serviceError = errorString;
+            done({}, Translator::tr("Translation failed: %1").arg(serviceError),
+                 retryableStatus(status));
             return;
         }
-        if (reply->error() != QNetworkReply::NoError) {
-            done({}, Translator::tr("Translation failed: %1").arg(reply->errorString()));
+        if (networkError != QNetworkReply::NoError) {
+            done({}, Translator::tr("Translation failed: %1").arg(errorString), true);
             return;
         }
         if (!serviceError.isEmpty()) {
-            done({}, Translator::tr("Translation failed: %1").arg(serviceError));
+            done({}, Translator::tr("Translation failed: %1").arg(serviceError), false);
             return;
         }
-        done(translation, {});
+        done(translation, {}, false);
     });
 }
+
+void Translator::translateStreaming(const QString &system, const QString &text, Delta delta,
+                                    Done done)
+{
+    if (!m_settings || !configured()) {
+        done({}, Translator::tr("Set the translation endpoint and model in Settings > General"), false);
+        return;
+    }
+    const QUrl url = endpointUrl(m_settings->translationEndpoint());
+    const QString model = m_settings->translationModel().trimmed();
+    const QString key = m_settings->translationApiKey().trimmed();
+    cancel();
+    const quint64 seq = ++m_seq;
+
+    const QNetworkRequest request = chatRequest(url, key, true);
+    QNetworkReply *reply = nam()->post(
+        request, QJsonDocument(chatPayload(model, system, text, true)).toJson(QJsonDocument::Compact));
+    m_reply = reply;
+
+    // Everything the reply has sent so far. `raw` is kept whole for the
+    // buffered fallback (an endpoint that ignored `stream` and answered with
+    // one JSON body), while `buffer` is consumed line by line for SSE frames.
+    struct StreamState {
+        QByteArray raw;
+        QByteArray buffer;
+        QString text;
+        QString error;
+    };
+    auto state = std::make_shared<StreamState>();
+
+    connect(reply, &QNetworkReply::readyRead, this, [this, reply, delta, state, seq] {
+        if (seq != m_seq)
+            return;
+        const QByteArray data = reply->readAll();
+        state->raw += data;
+        state->buffer += data;
+        const QString deltas = Translator::takeSseDeltas(state->buffer, nullptr, &state->error);
+        if (deltas.isEmpty())
+            return;
+        state->text += deltas;
+        if (delta)
+            delta(deltas);
+    });
+    connect(reply, &QNetworkReply::finished, this,
+            [this, reply, done, delta, state, seq, system, text] {
+        if (seq != m_seq)
+            return;
+        m_reply = nullptr;
+        if (!state->buffer.isEmpty()) {
+            // A final frame without a trailing newline still counts.
+            state->buffer += '\n';
+            const QString deltas =
+                Translator::takeSseDeltas(state->buffer, nullptr, &state->error);
+                if (!deltas.isEmpty()) {
+                state->text += deltas;
+                if (delta)
+                    delta(deltas);
+            }
+        }
+        const QByteArray body = state->raw + reply->readAll();
+        const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const auto networkError = reply->error();
+        const QString errorString = reply->errorString();
+        reply->deleteLater();
+        if (status >= 400) {
+            // A few servers answer 400/404/405/415/422 to `stream: true` and
+            // work without it. Nothing has been shown yet, so retry buffered
+            // instead of making the user find out which dialect the service
+            // speaks. (The body may have been read as an NDJSON error frame,
+            // so this comes before the frame-error branch below.)
+            const bool streamRejected = state->text.isEmpty()
+                                        && (status == 400 || status == 404 || status == 405
+                                            || status == 415 || status == 422);
+            if (streamRejected) {
+                translateWith(system, text, done);
+                return;
+            }
+            QString serviceError;
+            parseResponse(body, &serviceError);
+            if (serviceError.isEmpty())
+                serviceError = errorString;
+            done({}, Translator::tr("Translation failed: %1").arg(serviceError),
+                 retryableStatus(status));
+            return;
+        }
+        if (!state->error.isEmpty()) {
+            done({}, Translator::tr("Translation failed: %1").arg(state->error), false);
+            return;
+        }
+        if (!state->text.isEmpty()) {
+            // Some endpoints end the stream without [DONE]; the text is still
+            // the whole answer.
+            done(state->text, {}, false);
+            return;
+        }
+        if (networkError != QNetworkReply::NoError && body.trimmed().isEmpty()) {
+            done({}, Translator::tr("Translation failed: %1").arg(errorString), true);
+            return;
+        }
+        // No SSE frames at all: an endpoint that ignored `stream` and sent a
+        // normal chat-completions body.
+        QString serviceError;
+        const QString translation = parseResponse(body, &serviceError);
+        if (!serviceError.isEmpty()) {
+            done({}, Translator::tr("Translation failed: %1").arg(serviceError), false);
+            return;
+        }
+        done(translation, {}, false);
+    });
+}
+

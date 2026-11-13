@@ -148,6 +148,13 @@ OcrResultController::OcrResultController(Settings *settings, QObject *parent)
         m_statusIsError = false;
         emit statusTextChanged();
     });
+    // Streaming tokens arrive far faster than a TextEdit can re-lay itself out.
+    // The Deltas accumulate in m_streamText; this timer moves them into the
+    // pane at most every 60 ms.
+    m_streamTimer.setSingleShot(true);
+    m_streamTimer.setInterval(60);
+    connect(&m_streamTimer, &QTimer::timeout, this,
+            &OcrResultController::refreshStreamingPane);
 }
 
 void OcrResultController::setStatusText(const QString &text, bool error)
@@ -236,17 +243,32 @@ void OcrResultController::startTranslation(int start, int length)
 
     const quint64 seq = ++m_translationSeq;
     m_chunks.clear();
-    m_translatedChunks.clear();
+    m_items.clear();
+    m_itemTranslations.clear();
     m_chunkIndex = 0;
+    m_streamText.clear();
+    m_streamTimer.stop();
     if (m_translateLines.size() > 1) {
         // Numbered requests, one per chunk, so every translation comes back
         // with the line box it belongs to. A model that merges or splits lines
         // gives a count mismatch and the whole-text request takes over.
         QStringList texts;
         texts.reserve(m_translateLines.size());
-        for (const QVariant &value : m_translateLines)
-            texts.append(value.toMap().value(QStringLiteral("text")).toString());
-        m_chunks = chunkLines(texts);
+        for (int i = 0; i < m_translateLines.size(); ++i) {
+            const QString lineText =
+                m_translateLines.at(i).toMap().value(QStringLiteral("text")).toString();
+            texts.append(lineText);
+            m_items.append(TranslationItem{i, lineText});
+        }
+        int itemIndex = 0;
+        for (const QStringList &chunk : chunkLines(texts)) {
+            QVector<int> indices;
+            indices.reserve(chunk.size());
+            for (int i = 0; i < chunk.size(); ++i)
+                indices.append(itemIndex++);
+            m_chunks.append(indices);
+        }
+        m_itemTranslations = QVector<QString>(m_items.size());
         requestNextLineChunk(seq);
         return;
     }
@@ -258,40 +280,72 @@ void OcrResultController::requestNextLineChunk(quint64 seq)
     if (seq != m_translationSeq)
         return;
     if (m_chunkIndex >= m_chunks.size()) {
+        const QStringList lineTranslations = assembledLineTranslations();
         QStringList translated;
-        for (const QStringList &chunk : m_translatedChunks)
-            translated += chunk;
+        QVariantList mapLines;
+        for (int i = 0; i < lineTranslations.size(); ++i) {
+            if (lineTranslations.at(i).isEmpty())
+                continue; // a chunk that did not translate yet has no cover
+            mapLines.append(m_translateLines.at(i));
+            translated.append(lineTranslations.at(i));
+        }
         QString text;
-        setTranslatedLines(translatedLineMap(m_translateLines, translated, m_image, &text));
+        setTranslatedLines(mapLines.isEmpty()
+                               ? QVariantList{}
+                               : translatedLineMap(mapLines, translated, m_image, &text));
         m_translation = text;
         m_translationUnchanged = translationLooksUnchanged(m_sourceText, m_translation);
         m_translating = false;
+        m_streamText.clear();
+        m_streamTimer.stop();
         emit translationChanged();
         if (!m_translation.isEmpty())
             emit translationReady();
         return;
     }
-    const QStringList chunk = m_chunks.at(m_chunkIndex);
-    m_translator->translateWith(
-        Translator::numberedPrompt(translationTarget()), Translator::numberedRequest(chunk),
-        [this, seq, chunk](const QString &body, const QString &error) {
+    const QVector<int> chunk = m_chunks.at(m_chunkIndex);
+    QStringList texts;
+    texts.reserve(chunk.size());
+    for (const int index : chunk)
+        texts.append(m_items.at(index).text);
+    m_streamText.clear();
+    m_streamTimer.stop();
+    m_translator->translateStreaming(
+        Translator::numberedPrompt(translationTarget()), Translator::numberedRequest(texts),
+        [this, seq](const QString &partial) {
             if (seq != m_translationSeq)
                 return;
+            m_streamText += partial;
+            if (!m_streamTimer.isActive())
+                m_streamTimer.start();
+        },
+        [this, seq, chunk, texts](const QString &body, const QString &error, bool retryable) {
+            Q_UNUSED(retryable);
+            if (seq != m_translationSeq)
+                return;
+            m_streamText.clear();
+            m_streamTimer.stop();
             if (!error.isEmpty()) {
                 failTranslation(seq, error);
                 return;
             }
             QString parseError;
-            const QStringList parsed = Translator::parseNumberedLines(body, chunk.size(), &parseError);
-            if (parsed.size() != chunk.size()) {
+            const QStringList parsed =
+                Translator::parseNumberedLines(body, texts.size(), &parseError);
+            if (parsed.size() != texts.size()) {
                 // The service answered, but not line by line: the translation is
                 // still worth showing, just in the pane instead of on the picture.
-                m_translatedChunks.clear();
+                m_items.clear();
+                m_itemTranslations.clear();
+                m_chunks.clear();
+                m_chunkIndex = 0;
                 requestWholeText(seq);
                 return;
             }
-            m_translatedChunks.append(parsed);
+            for (int i = 0; i < chunk.size() && i < parsed.size(); ++i)
+                m_itemTranslations[chunk.at(i)] = parsed.at(i);
             ++m_chunkIndex;
+            refreshStreamingPane();
             requestNextLineChunk(seq);
         });
 }
@@ -300,47 +354,121 @@ void OcrResultController::requestWholeText(quint64 seq)
 {
     if (seq != m_translationSeq)
         return;
-    m_translator->translate(m_sourceText, translationTarget(),
-                            [this, seq](const QString &text, const QString &error) {
-        if (seq != m_translationSeq)
-            return;
-        m_translating = false;
-        if (!error.isEmpty()) {
-            m_translationError = error;
-            emit translationChanged();
-            return;
-        }
-        m_translation = text;
-        m_translationError.clear();
-        setTranslatedLines({});
-        // The whole-text answer may still be one line per input line (the
-        // service ignored the numbering but translated line by line): map it
-        // back onto the picture with the same tolerant parser instead of
-        // leaving the covers empty.
-        if (m_translateLines.size() > 1) {
-            const QStringList rows =
-                Translator::parseNumberedLines(text, int(m_translateLines.size()), nullptr);
-            if (rows.size() == m_translateLines.size()) {
-                QString joined;
-                const QVariantList map = translatedLineMap(m_translateLines, rows, m_image, &joined);
-                m_translation = joined;
-                setTranslatedLines(map);
+    m_streamText.clear();
+    m_streamTimer.stop();
+    m_translator->translateStreaming(
+        Translator::systemPrompt(translationTarget()), m_sourceText,
+        [this, seq](const QString &partial) {
+            if (seq != m_translationSeq)
+                return;
+            m_streamText += partial;
+            if (!m_streamTimer.isActive())
+                m_streamTimer.start();
+        },
+        [this, seq](const QString &text, const QString &error, bool retryable) {
+            Q_UNUSED(retryable);
+            if (seq != m_translationSeq)
+                return;
+            m_streamText.clear();
+            m_streamTimer.stop();
+            m_translating = false;
+            if (!error.isEmpty()) {
+                m_translationError = error;
+                emit translationChanged();
+                return;
             }
+            m_translation = text;
+            m_translationError.clear();
+            setTranslatedLines({});
+            // The whole-text answer may still be one line per input line (the
+            // service ignored the numbering but translated line by line): map it
+            // back onto the picture with the same tolerant parser instead of
+            // leaving the covers empty.
+            if (m_translateLines.size() > 1) {
+                const QStringList rows =
+                    Translator::parseNumberedLines(text, int(m_translateLines.size()), nullptr);
+                if (rows.size() == m_translateLines.size()) {
+                    QString joined;
+                    const QVariantList map =
+                        translatedLineMap(m_translateLines, rows, m_image, &joined);
+                    m_translation = joined;
+                    setTranslatedLines(map);
+                }
+            }
+            m_translationUnchanged = translationLooksUnchanged(m_sourceText, m_translation);
+            if (m_translateLines.size() == 1) {
+                // One line box: the whole translation is that line's translation,
+                // so the overlay works without a numbered round trip.
+                QString joined;
+                const QVariantList map =
+                    translatedLineMap(m_translateLines, QStringList{text}, m_image, &joined);
+                if (joined == text)
+                    setTranslatedLines(map);
+            }
+            emit translationChanged();
+            if (!m_translation.isEmpty())
+                emit translationReady();
+        });
+}
+
+QStringList OcrResultController::assembledLineTranslations() const
+{
+    QStringList out;
+    out.reserve(m_translateLines.size());
+    int next = 0;
+    for (int line = 0; line < m_translateLines.size(); ++line) {
+        QStringList parts;
+        while (next < m_items.size() && m_items.at(next).line == line) {
+            if (next < m_itemTranslations.size() && !m_itemTranslations.at(next).isEmpty())
+                parts.append(m_itemTranslations.at(next));
+            ++next;
         }
-        m_translationUnchanged = translationLooksUnchanged(m_sourceText, m_translation);
-        if (m_translateLines.size() == 1) {
-            // One line box: the whole translation is that line's translation,
-            // so the overlay works without a numbered round trip.
-            QString joined;
-            const QVariantList map =
-                translatedLineMap(m_translateLines, QStringList{text}, m_image, &joined);
-            if (joined == text)
-                setTranslatedLines(map);
+        out.append(parts.join(QLatin1Char(' ')));
+    }
+    return out;
+}
+
+QString OcrResultController::streamingPaneText() const
+{
+    if (m_items.isEmpty())
+        return m_streamText.trimmed();
+    QStringList itemTexts;
+    itemTexts.reserve(m_itemTranslations.size());
+    for (const QString &value : m_itemTranslations)
+        itemTexts.append(value);
+    // The chunk in flight has no committed answer yet, but the parser can map
+    // the part that has already arrived, so the pane fills line by line.
+    if (m_chunkIndex < m_chunks.size() && !m_streamText.isEmpty()) {
+        const QVector<int> &chunk = m_chunks.at(m_chunkIndex);
+        const QStringList partial =
+            Translator::parseNumberedLinesPartial(m_streamText, chunk.size());
+        for (int i = 0; i < partial.size() && i < chunk.size(); ++i)
+            itemTexts[chunk.at(i)] = partial.at(i);
+    }
+    QStringList lines;
+    int next = 0;
+    for (int line = 0; line < m_translateLines.size(); ++line) {
+        QStringList parts;
+        while (next < m_items.size() && m_items.at(next).line == line) {
+            if (next < itemTexts.size() && !itemTexts.at(next).isEmpty())
+                parts.append(itemTexts.at(next));
+            ++next;
         }
-        emit translationChanged();
-        if (!m_translation.isEmpty())
-            emit translationReady();
-    });
+        if (!parts.isEmpty())
+            lines.append(parts.join(QLatin1Char(' ')));
+    }
+    return lines.join(QLatin1Char('\n'));
+}
+
+void OcrResultController::refreshStreamingPane()
+{
+    if (!m_translating)
+        return;
+    const QString text = streamingPaneText();
+    if (text == m_translation)
+        return;
+    m_translation = text;
+    emit translationChanged();
 }
 
 void OcrResultController::failTranslation(quint64 seq, const QString &error)
@@ -348,6 +476,10 @@ void OcrResultController::failTranslation(quint64 seq, const QString &error)
     if (seq != m_translationSeq)
         return;
     m_translating = false;
+    m_streamText.clear();
+    m_streamTimer.stop();
+    m_translation.clear();
+    setTranslatedLines({});
     m_translationError = error;
     emit translationChanged();
 }
@@ -359,8 +491,14 @@ void OcrResultController::cancelTranslation()
     ++m_translationSeq;
     if (m_translator)
         m_translator->cancel();
+    m_streamTimer.stop();
     if (m_translating) {
         m_translating = false;
+        m_streamText.clear();
+        // A partial answer is not a translation: drop it instead of leaving
+        // half a page on screen after Cancel.
+        m_translation.clear();
+        setTranslatedLines({});
         emit translationChanged();
     }
 }
@@ -374,6 +512,12 @@ void OcrResultController::setTranslationForPreview(const QStringList &translated
         m_translator->cancel();
     m_translating = false;
     m_translationError.clear();
+    m_streamTimer.stop();
+    m_streamText.clear();
+    m_items.clear();
+    m_itemTranslations.clear();
+    m_chunks.clear();
+    m_chunkIndex = 0;
     m_translateLines = m_lines;
     m_sourceText = m_text;
     m_translationSelectionOnly = false;
@@ -401,8 +545,11 @@ void OcrResultController::setResult(const QImage &image, const QVector<OcrWord> 
     m_translationSelectionOnly = false;
     m_translationLineCount = 0;
     m_chunks.clear();
-    m_translatedChunks.clear();
+    m_items.clear();
+    m_itemTranslations.clear();
     m_chunkIndex = 0;
+    m_streamText.clear();
+    m_streamTimer.stop();
     m_translationError.clear();
     m_translating = false;
     m_image = image;
