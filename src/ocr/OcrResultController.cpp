@@ -22,11 +22,12 @@ constexpr int kChunkRetryDelayMs = 700;
 // QML's Text with wrapMode Text.Wrap: break at word boundaries, and anywhere
 // when a word is longer than the line. The fit and the drawing share this
 // function, so a saved cover breaks exactly where the window's does.
-void layOutText(QTextLayout &layout, int width, bool rtl)
+void layOutText(QTextLayout &layout, int width, bool rtl, bool center = false)
 {
     QTextOption option;
     option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
-    option.setAlignment(rtl ? Qt::AlignRight : Qt::AlignLeft);
+    option.setAlignment(center ? Qt::AlignHCenter
+                               : (rtl ? Qt::AlignRight : Qt::AlignLeft));
     layout.setTextOption(option);
     layout.beginLayout();
     for (;;) {
@@ -41,6 +42,25 @@ void layOutText(QTextLayout &layout, int width, bool rtl)
 int laidOutHeight(const QTextLayout &layout)
 {
     return layout.lineCount() * QFontMetrics(layout.font()).lineSpacing();
+}
+
+// A one-line answer that leaves a visible gap on the trailing side is centred
+// in its cover instead of hugging the left edge (or the right edge for RTL):
+// a short Chinese line under a long English one then reads as a replacement
+// of that line, not as a fragment pushed against the margin. A wrapped or
+// nearly full line keeps its reading alignment.
+constexpr double kCoverCenterFillRatio = 0.9;
+
+bool shouldCenterCoverText(const QString &text, int width, int pixelSize)
+{
+    if (width <= 0 || pixelSize <= 0 || text.isEmpty()
+        || text.contains(QLatin1Char('\n')) || text.contains(QLatin1Char('\r')))
+        return false;
+    QFont font = QGuiApplication::font();
+    font.setPixelSize(pixelSize);
+    const QFontMetrics metrics(font);
+    const int natural = metrics.horizontalAdvance(text);
+    return natural > 0 && natural < int(std::lround(width * kCoverCenterFillRatio));
 }
 
 // A screenshot can carry transparency; a cover that keeps it would show the
@@ -1522,7 +1542,14 @@ QVariantList OcrResultController::translatedLineMap(const QVariantList &lines,
         entry.insert(QStringLiteral("background"), colors.background.name(QColor::HexRgb));
         entry.insert(QStringLiteral("foreground"), colors.foreground.name(QColor::HexRgb));
         entry.insert(QStringLiteral("fontSize"), fontSize);
-        entry.insert(QStringLiteral("rtl"), lineIsRtl(value));
+        const bool rtl = lineIsRtl(value);
+        const bool center = shouldCenterCoverText(value, cover.width(), fontSize);
+        entry.insert(QStringLiteral("rtl"), rtl);
+        // The one alignment decision, read by both the window and the
+        // composite so a saved cover cannot centre where the screen does not.
+        entry.insert(QStringLiteral("align"),
+                     center ? QStringLiteral("center")
+                            : (rtl ? QStringLiteral("right") : QStringLiteral("left")));
         entry.insert(QStringLiteral("overflow"), !fits);
         map.append(entry);
         joined += value;
@@ -1659,6 +1686,8 @@ QImage OcrResultController::composeOverlay(const QImage &image, const QVariantLi
         const QColor background(entry.value(QStringLiteral("background")).toString());
         const QColor foreground(entry.value(QStringLiteral("foreground")).toString());
         const bool rtl = entry.value(QStringLiteral("rtl")).toBool();
+        const bool center =
+            entry.value(QStringLiteral("align")).toString() == QLatin1String("center");
         const QString text = entry.value(QStringLiteral("text")).toString();
         const int radius = std::min(3, cover.height() / 4);
         painter.setPen(Qt::NoPen);
@@ -1670,7 +1699,7 @@ QImage OcrResultController::composeOverlay(const QImage &image, const QVariantLi
         QFont font = baseFont;
         font.setPixelSize(std::max(kMinFitPixelSize, entry.value(QStringLiteral("fontSize")).toInt()));
         QTextLayout layout(text, font);
-        layOutText(layout, cover.width(), rtl);
+        layOutText(layout, cover.width(), rtl, center);
         const QFontMetrics metrics(font);
         const int total = laidOutHeight(layout);
         const int top = cover.y() + (cover.height() - total) / 2;

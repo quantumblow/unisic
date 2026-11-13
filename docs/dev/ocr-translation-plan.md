@@ -637,7 +637,7 @@ F8/Developer/strings/docs.
   and the holder offset, and reports the cover/callout and screen-only notes;
   the "service did not translate line by line" note no longer fires for a
   partial answer.
-- `ctest` 28/28 binaries; `OcrResultTest` 32 cases (9 new M4.6 cases), F8
+- `ctest` 28/28 binaries; `OcrResultTest` 33 cases (10 new M4.6 cases), F8
   `translation partial overlay` and `devTestTranslationPartialOverlay` wired,
   eight catalogs filled, CHANGELOG EN/PL under 0.8.10 and the `src/ocr/`
   architecture note updated.
@@ -645,10 +645,13 @@ F8/Developer/strings/docs.
   elided line (two stacked notes under the controls were easy to miss); a CJK
   cover is set 10% below the largest fitted size because those glyphs fill the
   em box; a cover's lead edge stops at 2 px so the box starts on the source
-  text instead of a full sideways overshoot; and the trailing edge is capped
-  at the glyphs just outside the covered range, not only at the next line box.
-  Pinned by `cjkCoverSetsItselfSlightlySmaller`,
-  `partialCoverStopsAtThePreviousWord` and `lineCoverStopsAtALabelGlyph`.
+  text instead of a full sideways overshoot; the trailing edge is capped
+  at the glyphs just outside the covered range, not only at the next line box;
+  and a short one-line answer is centred in its cover (`align`), so a Chinese
+  line under a long English one reads as a replacement, not a left-pushed
+  fragment. Pinned by `cjkCoverSetsItselfSlightlySmaller`,
+  `partialCoverStopsAtThePreviousWord`, `lineCoverStopsAtALabelGlyph` and
+  `shortCoverTextCentersItself`.
 - AppImage rebuilt from `dev` (tip `0622ad3`, with the one-line note, the CJK
   cover size, the glyph-level gutter cap and the lead-edge alignment) for the
   real-machine pass: 175,241,720 bytes, sha256

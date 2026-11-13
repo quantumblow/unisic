@@ -1031,15 +1031,23 @@ Window {
                                         font.pixelSize: Math.max(1, modelData.fontSize
                                                                     * imagePane.renderScale)
                                         wrapMode: Text.Wrap
-                                        // An RTL translation sits against the
-                                        // right edge of its cover, like an RTL
-                                        // line in the pane. The glyph order is
-                                        // the bidi algorithm's (Text has no
-                                        // layoutDirection property), so the
-                                        // alignment is what an RTL line needs
-                                        // from here.
-                                        horizontalAlignment: modelData.rtl ? Text.AlignRight
-                                                                           : Text.AlignLeft
+                                        // The alignment is C++'s one decision
+                                        // (align), shared with the saved
+                                        // picture: a short one-line answer is
+                                        // centred in its cover, a wrapped or
+                                        // nearly full one keeps the reading
+                                        // alignment (left, or right for RTL).
+                                        // The glyph order still comes from the
+                                        // bidi algorithm and `rtl`.
+                                        horizontalAlignment: modelData.align === "center"
+                                                             ? Text.AlignHCenter
+                                                             : modelData.align === "right"
+                                                               ? Text.AlignRight
+                                                               : modelData.align === "left"
+                                                                 ? Text.AlignLeft
+                                                                 : (modelData.rtl
+                                                                    ? Text.AlignRight
+                                                                    : Text.AlignLeft)
                                         verticalAlignment: Text.AlignVCenter
                                         clip: true
                                     }

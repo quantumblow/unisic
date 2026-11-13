@@ -164,6 +164,7 @@ private slots:
     void spotsAnUnchangedAnswer();
     void overlayFontSizeFitsTheBox();
     void cjkCoverSetsItselfSlightlySmaller();
+    void shortCoverTextCentersItself();
     void partialCoverStopsAtThePreviousWord();
     void lineCoverStopsAtALabelGlyph();
     void compositeKeepsSourceResolution();
@@ -1249,6 +1250,64 @@ void OcrResultTest::lineCoverStopsAtALabelGlyph()
     // there; half of the 5 px gutter stops the cover at 58.
     QCOMPARE(cover.left(), 58);
     QVERIFY(cover.left() > 54);
+}
+
+// A short one-line answer leaves a gap in its cover, so it is centred rather
+// than pushed against one edge. A wrapped answer keeps the reading alignment.
+// The composite reads the same align field, so a saved cover cannot differ.
+void OcrResultTest::shortCoverTextCentersItself()
+{
+    QImage image(420, 80, QImage::Format_RGB32);
+    image.fill(QColor(250, 250, 245));
+    const QVariantList line{lineEntry(QStringLiteral("Hello"), QRect(10, 10, 300, 30))};
+    QString joined;
+    const QVariantMap shortCover = OcrResultController::translatedLineMap(
+        line, {QStringLiteral("Hi")}, image, &joined).first().toMap();
+    QCOMPARE(shortCover.value(QStringLiteral("align")).toString(), QStringLiteral("center"));
+
+    const QVariantMap longCover = OcrResultController::translatedLineMap(
+        line,
+        {QStringLiteral("A translation long enough to wrap over several lines in this box")},
+        image, &joined).first().toMap();
+    QCOMPARE(longCover.value(QStringLiteral("align")).toString(), QStringLiteral("left"));
+
+    const QVariantMap rtlCover = OcrResultController::translatedLineMap(
+        line, {QStringLiteral("\u0645\u0631\u062d\u0628\u0627")}, image, &joined)
+                                     .first().toMap();
+    QCOMPARE(rtlCover.value(QStringLiteral("rtl")).toBool(), true);
+    QCOMPARE(rtlCover.value(QStringLiteral("align")).toString(), QStringLiteral("center"));
+
+    // A manual centred cover: the ink must sit around the middle, not at x 0.
+    QVariantMap centered{{QStringLiteral("x"), 0},
+                         {QStringLiteral("y"), 0},
+                         {QStringLiteral("width"), 200},
+                         {QStringLiteral("height"), 40},
+                         {QStringLiteral("background"), QStringLiteral("#ffffff")},
+                         {QStringLiteral("foreground"), QStringLiteral("#000000")},
+                         {QStringLiteral("text"), QStringLiteral("X")},
+                         {QStringLiteral("fontSize"), 20},
+                         {QStringLiteral("rtl"), false},
+                         {QStringLiteral("align"), QStringLiteral("center")},
+                         {QStringLiteral("overflow"), false}};
+    QImage blank(200, 40, QImage::Format_RGB32);
+    blank.fill(QColor(255, 255, 255));
+    const QImage composite = OcrResultController::composeOverlay(blank, {centered});
+    int left = -1;
+    int right = -1;
+    for (int y = 0; y < composite.height(); ++y) {
+        for (int x = 0; x < composite.width(); ++x) {
+            if (qGray(composite.pixel(x, y)) < 128) {
+                if (left < 0)
+                    left = x;
+                right = x;
+            }
+        }
+    }
+    QVERIFY(left >= 0 && right > left);
+    const int center = (left + right) / 2;
+    QVERIFY2(center > 80 && center < 120,
+             qPrintable(QStringLiteral("centred ink at %1 (bar %2..%3)")
+                            .arg(center).arg(left).arg(right)));
 }
 
 // The window scales a capture down when it does not fit, but the picture handed
