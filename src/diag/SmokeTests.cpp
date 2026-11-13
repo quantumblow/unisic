@@ -4639,7 +4639,7 @@ QString AppContext::settingsRoundTripCheck()
     // Export -> parse -> verify every writable Settings property serialized ->
     // import the file back. Importing the just-exported effective config is a
     // no-op for values while exercising the whole read path.
-    // QTemporaryFile: unique name + 0600 — a full export embeds destination
+    // QTemporaryFile: unique name + 0600 - a full export embeds destination
     // secrets (API keys), which must not sit world-readable in shared /tmp.
     QTemporaryFile tmp(QDir::tempPath() + QStringLiteral("/unisic-smoketest-XXXXXX.json"));
     if (!tmp.open())

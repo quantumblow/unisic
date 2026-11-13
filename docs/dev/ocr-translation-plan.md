@@ -545,8 +545,11 @@ translation, streaming, retry, test connection). The routing half is done
 wired its own paths: F8 `ocr result image`, `devTestOcrResultImage` and
 `devTestOcrResultWindow`, plus five `OcrResultTest` cases. M3 wired selection
 translation, streaming, retry and partial results: F8 `translation stream`,
-`devTestTranslationStream`, and the new `TranslatorTest`/`OcrResultTest` cases; the
-Settings Test connection path still belongs to M4.
+`devTestTranslationStream`, and the new `TranslatorTest`/`OcrResultTest` cases. M4
+wired Test connection, the first-send privacy notice and the export-secrets rule:
+F8 `translation connection`, `translation privacy`, `settings secrets` and the
+Developer equivalents. M4.5 wired the line-box set and the exact-text path: F8
+`translation selection` and `devTestTranslationSelection`.
 
 **T6.7** i18n and website: native review of the Chinese and Polish strings added in
 this feature, and the `unisic-website` sync. The site repo is cloned beside this tree and
@@ -646,21 +649,26 @@ the compositor or OS named next to it: "verified in a container" is not a tick h
       resolution while the window shows it scaled), Edit in editor, zoom to 200% on a 4K capture
       with a click hitting the right line, Ctrl+wheel zoom/text size, drag to pan, the split
       ratio surviving a restart, and an RTL target rendering right to left in its covers.
-- [ ] M3 (landed): select lines in the pane and Translate selection translates only
-      them (the button says so), the answer streams in line by line and Cancel stops
-      it mid-stream, a long line split at a sentence boundary still lands in its one
-      cover, a failing chunk leaves the finished lines with the failed range named,
-      and "Translating… 2/3" with one dot per chunk is visible while it runs.
-- [ ] M4 once landed: Test connection against a real endpoint, an export without secrets,
-      the first-send host notice.
-- [ ] M4.5 once landed: Ctrl+click two non-adjacent lines and Copy selection takes both,
+- [x] M3 (landed, verified 2026-11-13 on Ubuntu X11; a Wayland run is still open):
+      select lines in the pane and Translate selection translates only them (the button
+      says so), the answer streams in line by line and Cancel stops it mid-stream, a long
+      line split at a sentence boundary still lands in its one cover, a failing chunk
+      leaves the finished lines with the failed range named, and "Translating… 2/3" with
+      one dot per chunk is visible while it runs.
+- [ ] M4 (landed 2026-11-13; F8 `translation connection`, `translation privacy`,
+      `settings round-trip` and `settings secrets` PASS offscreen, a desktop run is still
+      open): Test connection against a real endpoint, an export without secrets, the
+      first-send host notice.
+- [ ] M4.5 (landed 2026-11-13; F8 `translation selection` PASS offscreen, a desktop run
+      is still open): Ctrl+click two non-adjacent lines and Copy selection takes both,
       double-click a word and Translate sends only that word (shown in the pane, no cover
       over its line), a whole-line selection still paints covers, and Esc/Ctrl+A clear or
       extend the set.
 
 ### Desktop, X11 session (best-effort second target)
 
-- [ ] Region OCR and the translation overlay behave as on Wayland.
+- [x] Region OCR and the translation overlay behave as on Wayland (verified
+      2026-11-13 on Ubuntu X11, including the M3 selection/streaming flow).
 - [ ] No OCR row is greyed out that was not greyed out on Wayland.
 
 ### Windows 11, real machine (T6.3, nobody has run it yet)

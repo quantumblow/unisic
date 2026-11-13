@@ -268,6 +268,10 @@ Window {
     Shortcut {
         sequence: "Esc"
         onActivated: {
+            if (privacyNotice.visible) {
+                privacyNotice.close()
+                return
+            }
             if (App.ocrResult.selectedLines.length > 0)
                 App.ocrResult.clearLineSelection()
             else
@@ -1355,7 +1359,13 @@ Window {
         width: Math.min(460, parent ? parent.width - 2 * Theme.spacingXL : 460)
         padding: Theme.spacingXL
         Overlay.modal: Rectangle { color: Theme.modalScrim }
-        onClosed: App.ocrResult.cancelPrivacyNotice()
+        onClosed: {
+            App.ocrResult.cancelPrivacyNotice()
+            // The window switched to Translation before asking; with nothing
+            // sent, show the page again instead of a blank pane.
+            if (App.ocrResult.translation.length === 0 && !App.ocrResult.translating)
+                resultWindow.showTranslation = false
+        }
         background: Rectangle {
             radius: Theme.radiusL
             color: Theme.surface
