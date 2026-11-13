@@ -34,7 +34,11 @@ Working today:
   by line with Cancel mid-stream, a line too long for one request is split at a
   sentence boundary and rejoined into its one cover, a failed chunk gets one retry
   and then leaves the finished lines with the failed range named, and the button
-  plus one dot per chunk show "Translating… 2/3".
+  plus one dot per chunk show "Translating… 2/3". Known gap found in the
+  2026-11-13 X11 pass: the text pane is one native `TextEdit` selection, so Copy
+  cannot take several non-adjacent ranges, and Translate widens any selection to
+  the whole OCR line, so double-clicking a word translates its line. M4.5 is
+  that refinement.
 - Translation: any OpenAI-compatible `/chat/completions`, numbered-line prompts,
   SSE streaming with a buffered fallback, a request token budget (and long lines
   split at sentence boundaries), tolerant parsing, whole-text fallback,
@@ -344,6 +348,61 @@ config file, documented as such; T4.2 is what keeps it out of exports. A keychai
 would mean libsecret as a new mandatory dependency in six packaging recipes, which
 the no-optional-dependencies rule does not allow for one string.
 
+## M4.5. Result window: multi-select and word translation (2-3 days, after M4)
+
+Deferred from the 2026-11-13 Ubuntu X11 pass. Both gaps come from the same
+design as M3, not from a defect in it: the text pane is one native `TextEdit`
+selection, and `translateRange()` deliberately widens a character selection to
+the recognized lines so the numbered request can put a translation on each
+cover. This round adds the two missing interactions without changing the M3
+line-overlay contract.
+
+**T4.5.1 (open) Multi-select for Copy and Translate**
+
+- Ctrl+click a line box on the picture toggles that line in the selection set;
+  Shift+click extends from the anchor; a plain click resets to one line. The
+  pane draws the union of the chosen ranges as tinted bands while `TextEdit`
+  keeps its one native selection, so the set is a controller/QML model, not a
+  QTextEdit feature.
+- Copy selection copies the chosen ranges in document order, one per line; Copy
+  all is unchanged. Translate selection sends those lines, and when every chosen
+  range is a whole line the existing numbered request and covers are used.
+- Keyboard: Ctrl+A selects all lines, Esc clears the set; the picture boxes and
+  the pane bands share one state. Accessibility: each box reports selected or
+  not selected.
+- Acceptance: Ctrl+click two non-adjacent lines and Copy selection yields
+  exactly those two texts in order; Translate selection covers exactly those two
+  lines; the set survives a zoom, a pan and Original/Translation switching.
+
+**T4.5.2 (open) Word and partial-text translation**
+
+- Classify the selection before sending. Whole lines keep the numbered path and
+  the picture covers. Anything shorter (a double-clicked word, part of a line)
+  sends exactly that text, with the source line as context in the prompt, and
+  shows the answer in the pane only. A partial line must not paint a cover: a
+  word's translation would otherwise replace the whole line and misrepresent
+  the page.
+- The window says which mode ran ("Translated the selected text" for the pane,
+  the existing overlay note for whole lines).
+- Acceptance: double-click a word and Translate sends only that word plus its
+  line as context, and the pane shows that word's translation; a whole-line
+  multi-line selection still paints covers; a range that crosses a line boundary
+  does not expand to the rest of either line.
+
+**T4.5.3 (open) Tests, F8, strings**
+
+- `OcrResultTest`: range classification (whole line vs partial), multi-range
+  order and merge, and the exact-text request/prompt.
+- F8 `translation selection` step + `devTestTranslationSelection` button, on top
+  of the existing synthetic result.
+- Eight catalogs and a CHANGELOG EN/PL entry under the current beta heading.
+
+Two choices to settle at the start of the round: whether Ctrl+click also works
+inside the text pane (it means custom hit-testing, not a native selection) and
+whether a word request should carry its line as context or translate the word
+alone. The plan above proposes line-box Ctrl+click and context-assisted word
+translation.
+
 ## M5. The other scripts' recognizers (5-8 days, D5 settled: own round)
 
 Korean, Arabic, Cyrillic, Thai, Indic and Greek currently fall back to Tesseract.
@@ -425,9 +484,11 @@ ships WITH 0.8.10 as one edit, version bump included. The files that need it the
    controller, M3 touches `Translator` and the controller's chunking, so agree on
    the controller's API before starting both.
 4. M4 after M3 (the Test connection button uses the same request path as Translate).
-5. M6 tasks ride along with whichever milestone they belong to; the packaging ones
+5. M4.5 after M4: it touches only the result window and the controller, and the
+   X11 pass showed both gaps, so do not fold it into M4's settings/privacy work.
+6. M6 tasks ride along with whichever milestone they belong to; the packaging ones
    (T6.1, T6.2, T6.3) close a round.
-6. M5 last, on its own.
+7. M5 last, on its own.
 
 Every milestone ends with: build, `ctest` (27 + new tests), F8 on a desktop, a
 rebuilt AppImage, a CHANGELOG entry under the current beta heading (EN/PL), and the
@@ -472,7 +533,7 @@ drops by one. Treat the other FAILs as the known container gaps
 ## Manual verification pass (before the 0.8.10 release)
 
 Everything below needs a real desktop or the real machine; the container covers the
-logic and the windows only. Run it once M2/M3/M4 have landed, and add their
+logic and the windows only. Run it once M2/M3/M4/M4.5 have landed, and add their
 acceptance lines to the Desktop block as each milestone closes. Tick a line only with
 the compositor or OS named next to it: "verified in a container" is not a tick here.
 
@@ -503,6 +564,10 @@ the compositor or OS named next to it: "verified in a container" is not a tick h
       and "Translating… 2/3" with one dot per chunk is visible while it runs.
 - [ ] M4 once landed: Test connection against a real endpoint, an export without secrets,
       the first-send host notice.
+- [ ] M4.5 once landed: Ctrl+click two non-adjacent lines and Copy selection takes both,
+      double-click a word and Translate sends only that word (shown in the pane, no cover
+      over its line), a whole-line selection still paints covers, and Esc/Ctrl+A clear or
+      extend the set.
 
 ### Desktop, X11 session (best-effort second target)
 
