@@ -791,7 +791,7 @@ ships WITH 0.8.10 as one edit, version bump included. The files that need it the
    and before 0.8.10; T6.2 is already done.
 9. M5 last, on its own.
 
-Every milestone ends with: build, `ctest` (27 + new tests), F8 on a desktop, a
+Every milestone ends with: build, `ctest` (28 + new tests), F8 on a desktop, a
 rebuilt AppImage, a CHANGELOG entry under the current beta heading (EN/PL), and the
 counts/lists that changed corrected in the same commit.
 
@@ -889,7 +889,7 @@ the compositor or OS named next to it: "verified in a container" is not a tick h
 
 ### Windows 11, real machine (T6.3, nobody has run it yet)
 
-- [ ] Build with MSYS2 UCRT64 (commands in PR #6); `ctest` runs the 27 tests.
+- [ ] Build with MSYS2 UCRT64 (commands in PR #6); `ctest` runs the 28 tests.
 - [ ] Screenshots, editor, OCR result window and translation work on Tesseract.
 - [ ] Settings > General > Text recognition: the OCR rows are greyed out with the
       Linux-only explanation (`PaddleOcr::available()` false).
