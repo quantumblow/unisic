@@ -794,29 +794,44 @@ static QString ocrTextFromWords(const QVector<OcrWord> &words)
     return text;
 }
 
-void AppContext::ocrImage(const QImage &img)
+void AppContext::ocrImage(const QImage &img, bool translate)
 {
     if (img.isNull()) {
         showToast(tr("Nothing to recognize"));
         return;
     }
     showToast(tr("Recognizing text…"));
+    // One presentation for both entry kinds: the result window opens with the
+    // text in hand, and the Translate variant starts the whole-text request
+    // before the window maps, so its own streaming/Cancel/target picker take
+    // over from the first frame. A failed start (not configured) still opens
+    // the window on the Translation layer, where its error line and standing
+    // setup line explain why.
+    auto present = [this, translate](const QImage &image, const QVector<OcrWord> &words,
+                                     const QString &text) {
+        m_ocrResult->setResult(image, words, text);
+        m_ocrResult->setOpenInTranslation(translate);
+        emit ocrResultReady();
+        if (translate) {
+            m_ocrResult->translate();
+            return;
+        }
+        copyText(text);
+        showToast(tr("Text copied"));
+    };
     // The barcode scan can be slow on a busy 4K picture, so it runs off the GUI
     // thread. A code has no glyph geometry: its payload becomes a text-only
     // result and never goes through the box pass.
     auto *scan = new QFutureWatcher<QString>(this);
-    connect(scan, &QFutureWatcher<QString>::finished, this, [this, scan, img] {
+    connect(scan, &QFutureWatcher<QString>::finished, this, [this, scan, img, present] {
         const QString payload = scan->result();
         scan->deleteLater();
         if (!payload.isEmpty()) {
-            m_ocrResult->setResult(img, {}, payload);
-            emit ocrResultReady();
-            copyText(payload);
-            showToast(tr("Text copied"));
+            present(img, {}, payload);
             return;
         }
         m_ocr->recognizeBoxes(img, effectiveOcrLanguages(), m_settings->ocrAutoLanguage(),
-                              [this, img](const QVector<OcrWord> &words, const QString &err) {
+                              [this, img, present](const QVector<OcrWord> &words, const QString &err) {
                                   if (!err.isEmpty()) {
                                       showToast(err);
                                       return;
@@ -826,10 +841,7 @@ void AppContext::ocrImage(const QImage &img)
                                       showToast(tr("No text found"));
                                       return;
                                   }
-                                  m_ocrResult->setResult(img, words, text);
-                                  emit ocrResultReady();
-                                  copyText(text);
-                                  showToast(tr("Text copied"));
+                                  present(img, words, text);
                               });
     });
     scan->setFuture(QtConcurrent::run([img] { return scanBarcode(img); }));
@@ -852,37 +864,9 @@ void AppContext::ocrBoxes(const QImage &img,
 
 // ---------------------------------------------------------------- language
 
-// The one list of UI languages. `zh_CN`, not a bare `zh`, keeps the catalog
-// name aligned with Qt's own qtbase_zh_CN.qm and QLocale("zh_CN"); a
-// Traditional Chinese desktop falls back to English until a zh_TW catalog
-// exists, rather than silently getting Simplified. Shared by applyLanguage()
-// and the notification helper subprocess, which used to carry a second copy.
-static QString resolveUiLanguage(const QString &pref)
-{
-    // Every language (incl. English) has its own .qm, so English text is
-    // editable in i18n/unisic_en.ts without touching source strings.
-    static const QStringList supported = {
-        QStringLiteral("en"), QStringLiteral("pl"), QStringLiteral("es"),
-        QStringLiteral("it"), QStringLiteral("fr"), QStringLiteral("ru"),
-        QStringLiteral("de"), QStringLiteral("zh_CN")};
-    if (supported.contains(pref))
-        return pref;
-    const QString sys = QLocale::system().name(); // e.g. "pl_PL", "zh_CN"
-    if (supported.contains(sys))
-        return sys;
-    if (sys.startsWith(QLatin1String("zh")))
-        return (sys.startsWith(QLatin1String("zh_TW"))
-                || sys.startsWith(QLatin1String("zh_HK"))
-                || sys.startsWith(QLatin1String("zh_MO")))
-                   ? QStringLiteral("en")
-                   : QStringLiteral("zh_CN");
-    const QString two = sys.left(2);
-    return supported.contains(two) ? two : QStringLiteral("en");
-}
-
 void AppContext::applyLanguage()
 {
-    const QString code = resolveUiLanguage(m_settings->uiLanguage());
+    const QString code = Settings::resolveUiLanguage(m_settings->uiLanguage());
     m_uiLanguage = code;
     if (m_engine)
         m_engine->setUiLanguage(code);
@@ -1419,7 +1403,21 @@ void AppContext::captureRegionWithTool(int initialTool)
         m_overlay->pickAnnotatedImage([this, inhibited](const QImage &img) {
             m_captureInFlight = false;
             endCaptureIsolation();
+            // The one-shot action chips replace the whole capture pipeline.
+            // Take the request before the null check so a cancelled session
+            // cannot leave it armed for the next one.
+            const OverlayController::Action action = m_overlay->takeRequestedAction();
             if (!img.isNull()) {
+                if (action != OverlayController::Action::None) {
+                    // The chip replaces the capture: consume the hotkey's task
+                    // preset and any pending `--output` request, or a later
+                    // tray capture would inherit the task and a CLI caller
+                    // would wait for a file that is deliberately not written.
+                    m_nextCaptureTask = {};
+                    clearCliCapture(tr("Capture cancelled"));
+                    ocrImage(img, action == OverlayController::Action::Translate);
+                    return;
+                }
                 // Persist the rect for re-capture BEFORE finishCapture so a
                 // task preset that uploads/deletes still leaves the region.
                 const QRect r = m_overlay->lastRegionLogical();
@@ -1601,8 +1599,11 @@ void AppContext::captureRegionOcr()
         m_overlay->pickAnnotatedImage([this](const QImage &img) {
             m_captureInFlight = false;
             endCaptureIsolation();
+            // This pill already is a read, so its confirm button runs OCR; the
+            // Translate chip beside it is the only action it shows.
+            const OverlayController::Action action = m_overlay->takeRequestedAction();
             if (!img.isNull())
-                ocrImage(img);   // recognizes (QR first, then text) + copies
+                ocrImage(img, action == OverlayController::Action::Translate);
         }, OverlayController::Purpose::Ocr);
     });
 }
@@ -2771,7 +2772,7 @@ bool AppContext::showNotificationHelper(CaptureNotification *n, const QVariantMa
 
     // Resolve the UI language exactly as applyLanguage() does, so the card's
     // qsTr strings render in the same language as the rest of the app.
-    const QString lang = resolveUiLanguage(m_settings->uiLanguage());
+    const QString lang = Settings::resolveUiLanguage(m_settings->uiLanguage());
 
     auto *proc = new QProcess(this);
     proc->setProgram(QCoreApplication::applicationFilePath());
@@ -6352,7 +6353,7 @@ QVector<TrayEntry> trayEntryTable(AppContext *a)
         {QStringLiteral("scroll"), QStringLiteral("chevron-down"), AppContext::tr("Capture scrolling region"), 0, false, [a] { a->captureScroll(); }},
         {QStringLiteral("recapture"), QStringLiteral("region"), AppContext::tr("Re-capture last region"), 0, false, [a] { a->recaptureLastRegion(); }},
         {QStringLiteral("measure"), QStringLiteral("measure"), AppContext::tr("Measure"), 0, false, [a] { a->captureMeasure(); }},
-        {QStringLiteral("ocr"), QStringLiteral("ocr"), AppContext::tr("Select text…"), 0, false, [a] { a->captureRegionOcr(); }},
+        {QStringLiteral("ocr"), QStringLiteral("ocr"), AppContext::tr("OCR region…"), 0, false, [a] { a->captureRegionOcr(); }},
         {QStringLiteral("video-region"), QStringLiteral("media-record"), AppContext::tr("Record video (region)"), 1, false, [a] { a->startVideoRegion(); }},
         {QStringLiteral("video-screen"), QStringLiteral("media-record"), AppContext::tr("Record video (full screen)"), 1, false, [a] { a->startVideoScreen(); }},
         {QStringLiteral("video-window"), QStringLiteral("media-record"), AppContext::tr("Record video (window)"), 1, false, [a] { a->startVideoWindow(); }},

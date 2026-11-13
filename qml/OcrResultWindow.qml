@@ -279,6 +279,12 @@ Window {
         return out.join("\n")
     }
 
+    function translateFromKeyboard() {
+        if (privacyNotice.visible || App.ocrResult.translating)
+            return
+        resultWindow.translateFromPane()
+    }
+
     function translateFromPane() {
         // Resolve the selection against the layer the user is looking at,
         // before switching to Translation: the offsets belong to that text.
@@ -332,6 +338,19 @@ Window {
             resultWindow.syncingPaneSelection = false
             App.ocrResult.selectAllLines()
         }
+    }
+
+    // Ctrl+Enter is the keyboard entry for Translate. It runs exactly the
+    // button's selection-aware path (pane text, chosen lines or the whole
+    // text), and stays out of the way while a request is streaming or the
+    // first-send privacy notice is waiting for an answer.
+    Shortcut {
+        sequence: "Ctrl+Return"
+        onActivated: resultWindow.translateFromKeyboard()
+    }
+    Shortcut {
+        sequence: "Ctrl+Enter"
+        onActivated: resultWindow.translateFromKeyboard()
     }
 
     Connections {
@@ -463,6 +482,21 @@ Window {
                     opacity: text !== "" ? 1 : 0
                     Behavior on opacity { NumberAnimation { duration: 120 } }
                 }
+            }
+
+            // Standing setup line, above the Translate button. The button
+            // itself stays clickable - the text is already in hand, so a click
+            // only repeats the setting in the error line - but this says why
+            // nothing can be sent yet, and names the pane like the overlay
+            // chip's tip does. Hidden as soon as an endpoint and a model are
+            // both set, so a configured window keeps its old height.
+            Text {
+                Layout.fillWidth: true
+                visible: !App.ocrResult.translationConfigured
+                text: qsTr("Translation is not set up. Add an endpoint and a model in Settings > General > Translation.")
+                color: Theme.textSecondary
+                font.pixelSize: Theme.fontS
+                wrapMode: Text.WordWrap
             }
 
             RowLayout {

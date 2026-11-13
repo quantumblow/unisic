@@ -297,15 +297,27 @@ OcrResultController::~OcrResultController()
 
 bool OcrResultController::canTranslate() const
 {
-    return m_translator && m_translator->configured() && !m_text.isEmpty();
+    return translationConfigured() && !m_text.isEmpty();
+}
+
+bool OcrResultController::translationConfigured() const
+{
+    return m_translator && m_translator->configured();
+}
+
+void OcrResultController::setOpenInTranslation(bool on)
+{
+    if (m_openInTranslation == on)
+        return;
+    m_openInTranslation = on;
+    emit openInTranslationChanged();
 }
 
 QString OcrResultController::translationTarget() const
 {
-    if (!m_settings)
-        return QStringLiteral("English");
-    const QString target = m_settings->translationTarget().trimmed();
-    return target.isEmpty() ? QStringLiteral("English") : target;
+    // Settings owns the default (it follows the UI language), so both readers
+    // and the prompt always see the same target.
+    return m_settings ? m_settings->translationTarget() : Settings::defaultTranslationTarget();
 }
 
 void OcrResultController::translate()
@@ -1272,6 +1284,10 @@ void OcrResultController::setResult(const QImage &image, const QVector<OcrWord> 
     m_streamTimer.stop();
     m_translationError.clear();
     m_translating = false;
+    if (m_openInTranslation) {
+        m_openInTranslation = false;
+        emit openInTranslationChanged();
+    }
     m_translationPartialText = false;
     clearPartialState();
     clearPrivacyNotice();

@@ -1055,6 +1055,10 @@ Window {
     Connections {
         target: App
         function onOcrResultReady() {
+            // The Translate chip and the editor's Translate button ask for the
+            // Translation layer up front, because their request is already in
+            // flight; an ordinary OCR read leaves this false.
+            ocrResultWindow.showTranslation = App.ocrResult.openInTranslation
             ocrResultWindow.show()
             ocrResultWindow.raise()
             ocrResultWindow.requestActivate()

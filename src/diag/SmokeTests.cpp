@@ -3446,6 +3446,67 @@ void AppContext::devTestSettingsSecrets()
               !result.startsWith(QLatin1String("PASS")));
 }
 
+// The two one-shot capture entries (the overlay's OCR and Translate chips):
+// the name <-> Action mapping QML uses, the latch that is consumed exactly
+// once, and the Translation-layer request that a new result clears. No
+// overlay window and no endpoint.
+static QString captureActionCheck(OcrResultController *result)
+{
+    using A = OverlayController::Action;
+    if (OverlayController::actionFromName(QStringLiteral("ocr")) != A::Ocr
+        || OverlayController::actionFromName(QStringLiteral("translate")) != A::Translate
+        || OverlayController::actionFromName(QStringLiteral("OCR")) != A::None
+        || OverlayController::actionFromName(QString()) != A::None)
+        return QStringLiteral("FAIL (action names)");
+    if (OverlayController::actionName(A::Ocr) != QLatin1String("ocr")
+        || OverlayController::actionName(A::Translate) != QLatin1String("translate")
+        || !OverlayController::actionName(A::None).isEmpty())
+        return QStringLiteral("FAIL (action name round trip)");
+
+    // The ctor only connects to qGuiApp, so a probe is safe here.
+    OverlayController probe(nullptr);
+    probe.setRequestedAction(A::Ocr);
+    if (probe.takeRequestedAction() != A::Ocr || probe.takeRequestedAction() != A::None)
+        return QStringLiteral("FAIL (action is not one-shot)");
+    probe.setRequestedAction(A::Translate);
+    if (probe.takeRequestedAction() != A::Translate)
+        return QStringLiteral("FAIL (Translate request)");
+
+    // Translate opens the window on the Translation layer; the NEXT result must
+    // open on Original again, or a quick OCR read would land translated.
+    const QImage image(8, 8, QImage::Format_ARGB32);
+    result->setResult(image, {}, QStringLiteral("one"));
+    result->setOpenInTranslation(true);
+    if (!result->openInTranslation())
+        return QStringLiteral("FAIL (Translation layer request)");
+    result->setResult(image, {}, QStringLiteral("two"));
+    if (result->openInTranslation())
+        return QStringLiteral("FAIL (a new result kept the Translation layer)");
+
+    return QStringLiteral("PASS (names, one-shot latch, Translation layer)");
+}
+
+// The one gate the overlay Translate chip, the editor Translate button and the
+// result window's standing line all read. It is Translator::configured() on the
+// live settings (never the wire), and text is a second condition of
+// canTranslate() alone. No request is sent.
+static QString translationActionCheck(OcrResultController *result, Settings *settings)
+{
+    Translator translator(settings);
+    if (result->translationConfigured() != translator.configured())
+        return QStringLiteral("FAIL (the gate disagrees with Translator)");
+
+    const QImage image(32, 16, QImage::Format_ARGB32);
+    result->setResult(image, {}, QStringLiteral("hello"));
+    if (result->canTranslate() != result->translationConfigured())
+        return QStringLiteral("FAIL (text gate)");
+    result->setResult(image, {}, QString());
+    if (result->canTranslate())
+        return QStringLiteral("FAIL (empty text offered Translate)");
+
+    return QStringLiteral("PASS (setup gate, text gate)");
+}
+
 // M4.5: the result window's two new interactions, without a network. The
 // controller's selection model, the whole-line/partial classification and the
 // exact-text prompt are what the window and the request path branch on.
@@ -3830,6 +3891,28 @@ void AppContext::devTestOcrResultWindow()
     emit ocrResultReady();
     showToast(tr("Dev: OCR result window: PASS (%1 lines, translated)")
                   .arg(m_ocrResult->translatedLines().size()));
+}
+
+void AppContext::devTestOcrAction()
+{
+    if (!devBuild())
+        return;
+    // The OCR chip's path on the synthetic fixture: OCR, copy the text, open
+    // the result window on Original. No overlay, nothing saved or uploaded.
+    ocrImage(ocrBoxTestImage(), false);
+    showToast(tr("Dev: OCR action: running (the result window follows)"));
+}
+
+void AppContext::devTestTranslationAction()
+{
+    if (!devBuild())
+        return;
+    // The Translate chip's path on the synthetic fixture. With an endpoint and
+    // model configured this sends that fixed fixture text (never a capture);
+    // without one it still opens the window on the Translation layer, where the
+    // standing setup line and the error line are the state worth checking.
+    ocrImage(ocrBoxTestImage(), true);
+    showToast(tr("Dev: Translate action: running (the result window follows on Translation)"));
 }
 
 void AppContext::devTestPaddleOcr()
@@ -6081,7 +6164,7 @@ QString AppContext::trayMenuCheck()
             noGlyph.append(icon);
     }
 
-    const bool hidden = !texts.contains(tr("Capture region")) && !texts.contains(tr("Select text…"));
+    const bool hidden = !texts.contains(tr("Capture region")) && !texts.contains(tr("OCR region…"));
     const bool kept = texts.contains(tr("Capture full screen"))
                       && texts.contains(tr("Open Unisic")) && texts.contains(tr("Quit"));
     if (!hidden || !kept || badSeparator || !noGlyph.isEmpty() || !monitorsOk)
@@ -7395,6 +7478,21 @@ void AppContext::runSmokeTest()
     // stops at the next column, and the RTL/overflow flags ride along.
     m_smokeSteps.append([this] {
         smokeLog(QStringLiteral("ocr result image: ") + ocrResultImageCheck());
+        smokeNext();
+    });
+
+    // 3f3e3) The one-shot capture entries: the action names, the consume-once
+    // latch and the Translation-layer request. No overlay, no endpoint.
+    m_smokeSteps.append([this] {
+        smokeLog(QStringLiteral("ocr action: ") + captureActionCheck(m_ocrResult));
+        smokeNext();
+    });
+
+    // 3f3e4) The translation setup gate the chip, the editor button and the
+    // window's standing line share, plus the text condition. No request.
+    m_smokeSteps.append([this] {
+        smokeLog(QStringLiteral("translation action: ")
+                 + translationActionCheck(m_ocrResult, m_settings));
         smokeNext();
     });
 

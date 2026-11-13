@@ -44,6 +44,11 @@ public:
     Q_INVOKABLE void upload();
     Q_INVOKABLE void print();                 // the image as edited, through the print dialog
     Q_INVOKABLE void ocrCopyText();           // OCR the composited image, copy text
+    // OCR the composited image, start the whole-text translation and open the
+    // result window on the Translation layer. The button is disabled until a
+    // translation endpoint and model are set (OcrResultController::
+    // translationConfigured), so this is the same path as the overlay chip.
+    Q_INVOKABLE void ocrTranslate();
     // Native file picker, then the picture goes onto the canvas centred on the
     // given image point (a toast when it does not decode).
     Q_INVOKABLE void insertImageFile(qreal imgX, qreal imgY);

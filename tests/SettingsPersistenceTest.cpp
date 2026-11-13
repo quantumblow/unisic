@@ -162,6 +162,34 @@ private slots:
         }
     }
 
+    void translationTargetFollowsUiLanguage()
+    {
+        // One rule maps a UI code onto the prompt's target name, including the
+        // two-word Chinese case that a bare left(2) would turn into "Chinese".
+        QCOMPARE(Settings::defaultTranslationTarget(QStringLiteral("en")), QStringLiteral("English"));
+        QCOMPARE(Settings::defaultTranslationTarget(QStringLiteral("pl")), QStringLiteral("Polish"));
+        QCOMPARE(Settings::defaultTranslationTarget(QStringLiteral("es")), QStringLiteral("Spanish"));
+        QCOMPARE(Settings::defaultTranslationTarget(QStringLiteral("it")), QStringLiteral("Italian"));
+        QCOMPARE(Settings::defaultTranslationTarget(QStringLiteral("fr")), QStringLiteral("French"));
+        QCOMPARE(Settings::defaultTranslationTarget(QStringLiteral("ru")), QStringLiteral("Russian"));
+        QCOMPARE(Settings::defaultTranslationTarget(QStringLiteral("de")), QStringLiteral("German"));
+        QCOMPARE(Settings::defaultTranslationTarget(QStringLiteral("zh_CN")), QStringLiteral("Simplified Chinese"));
+        // An explicit setting is one of the shipped codes; anything else is
+        // "follow the system", exactly as applyLanguage() reads it.
+        QCOMPARE(Settings::resolveUiLanguage(QStringLiteral("zh_CN")), QStringLiteral("zh_CN"));
+        QCOMPARE(Settings::resolveUiLanguage(QStringLiteral("pl")), QStringLiteral("pl"));
+
+        // The default is READ, never written: switching the UI moves a target
+        // nobody picked, and a target someone did pick survives the switch.
+        Settings s;
+        s.setUiLanguage(QStringLiteral("pl"));
+        QCOMPARE(s.translationTarget(), QStringLiteral("Polish"));
+        QVERIFY(!s.raw()->contains(QStringLiteral("translation/target")));
+        s.setTranslationTarget(QStringLiteral("German"));
+        s.setUiLanguage(QStringLiteral("de"));
+        QCOMPARE(s.translationTarget(), QStringLiteral("German"));
+    }
+
     void ocrPinnedSpecKeepsAutoOff()
     {
         // Upgrade path: a user who pinned ocr/languages before ocr/autoLanguage

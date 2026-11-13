@@ -908,6 +908,20 @@ Window {
                     }
                     UButton {
                         compact: true
+                        iconName: "translate"
+                        text: qsTr("Translate")
+                        variant: "tonal"
+                        // Same rule as the overlay chip: the endpoint AND the
+                        // model have to be set, or the click can only produce
+                        // the result window's configure error.
+                        enabled: App.ocrResult.translationConfigured
+                        accessibleDescription: App.ocrResult.translationConfigured
+                                               ? qsTr("Recognizes the picture, translates all of it and opens the result window on the translation")
+                                               : qsTr("Configure the translation endpoint and model in Settings > General")
+                        onClicked: { editorWindow.commitPendingText(); editorSession.ocrTranslate() }
+                    }
+                    UButton {
+                        compact: true
                         iconName: "edit-copy"; text: qsTr("Copy"); variant: "tonal"
                         onClicked: { editorWindow.commitPendingText(); editorSession.copyToClipboard() }
                     }

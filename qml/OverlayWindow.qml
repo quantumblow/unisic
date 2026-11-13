@@ -163,6 +163,25 @@ Window {
             return n > 0 ? w + item.spacing * (n - 1) : 0
         }
 
+        // The one-shot action chips live at the END of the tool row, after
+        // Undo/Redo, not in the tool order. The Shot and Measure pills show
+        // both; the OCR pill (OCR hotkey, tray) shows Translate only, because
+        // its confirm button already is Read text. Capture-on-release hides
+        // the whole toolbar, so those users keep the hotkey.
+        readonly property var actionTools: {
+            const all = ToolCatalog.actionsFor("overlay", App.settings.hiddenTools)
+            var out = []
+            for (var i = 0; i < all.length; ++i) {
+                const t = all[i]
+                if (overlayPurpose === "ocr") {
+                    if (t.id === "translate")
+                        out.push(t)
+                } else if (overlayPurpose === "shot" || overlayPurpose === "measure") {
+                    out.push(t)
+                }
+            }
+            return out
+        }
         // ---- tool grouping (Shapes) — same model as the editor top bar ----
         readonly property var shapesTools: ToolCatalog.groupTools("shapes", "overlay", App.settings.hiddenTools)
         readonly property bool shapesActive: ToolCatalog.groupForEnum(canvas.tool) === "shapes"
@@ -194,12 +213,23 @@ Window {
                 out.push(ToolCatalog.labelWithShortcut(ts[i]))
             return out.join(", ")
         }
+        // Confirm with a one-shot action. Same text commit as every other
+        // confirm, then the controller arms the request and closes the
+        // overlay; AppContext sends the image to OCR instead of finishCapture.
+        function runCaptureAction(id) {
+            if (textEditor.visible)
+                root.commitTextBox()
+            overlayController.confirmWithAction(overlayWindow, id)
+        }
         function mainRowModel() {
             var out = []
             var seen = {}
             var ts = ToolCatalog.visibleFor("overlay", App.settings.hiddenTools)
             for (var i = 0; i < ts.length; ++i) {
                 var t = ts[i]
+                // Actions are drawn separately, at the end of the row.
+                if (t.kind === "action")
+                    continue
                 if (t.group) {
                     if (!seen[t.group]) {
                         seen[t.group] = true
@@ -782,6 +812,33 @@ Window {
                         }
                         ToolChip { activeFocusOnTab: false; iconSize: ToolCatalog.overlayIconSize; iconName: "edit-undo"; label: qsTr("Undo"); enabled: canvas.canUndo; onClicked: canvas.undo() }
                         ToolChip { activeFocusOnTab: false; iconSize: ToolCatalog.overlayIconSize; iconName: "edit-redo"; label: qsTr("Redo"); enabled: canvas.canRedo; onClicked: canvas.redo() }
+
+                        // One-shot actions close the overlay and hand the
+                        // capture to OCR; nothing is saved, uploaded or opened
+                        // in the editor. Translate stays disabled until an
+                        // endpoint and model are set, and its hover tip says
+                        // where. Never a tab stop, like every chip here.
+                        Repeater {
+                            model: annotationToolsEnabled ? root.actionTools : []
+                            delegate: ToolChip {
+                                activeFocusOnTab: false
+                                iconSize: ToolCatalog.overlayIconSize
+                                iconName: ToolCatalog.toolIconName(modelData, App.settings.editorIconStyle, App.settings.editorToolIcons)
+                                iconStyle: App.settings.editorIconStyle
+                                label: modelData.id === "translate"
+                                       && !App.ocrResult.translationConfigured
+                                       ? qsTr("Translate (set it up in Settings > General)")
+                                       : ToolCatalog.labelWithShortcut(modelData)
+                                accessibleName: modelData.label
+                                accessibleDescription: modelData.id === "translate"
+                                                      && !App.ocrResult.translationConfigured
+                                                      ? qsTr("Configure the translation endpoint and model in Settings > General")
+                                                      : qsTr("Confirms the capture and opens the result window; nothing is saved")
+                                enabled: modelData.id !== "translate"
+                                         || App.ocrResult.translationConfigured
+                                onClicked: root.runCaptureAction(modelData.id)
+                            }
+                        }
 
                         // Carried in a chip-tall Item: a Flow positions its
                         // children itself, so a 28 px divider cannot centre

@@ -42,6 +42,10 @@ Working today:
   text with its line as context into the pane only, with no cover over the whole
   line. The chosen lines are tinted under the pane text, the boxes report their
   selected state, Ctrl+A picks all lines and Esc clears the set first.
+- Entry points (since 2026-11-13): the capture tool row ends with one-shot Copy
+  text (OCR) and Translate chips, the editor has a labelled Translate button
+  beside OCR on the same path, and the result window opens on the Translation
+  layer with Ctrl+Enter as its keyboard entry. See the settled section below.
 - Translation: any OpenAI-compatible `/chat/completions`, numbered-line prompts,
   SSE streaming with a buffered fallback, a request token budget (and long lines
   split at sentence boundaries), tolerant parsing, whole-text fallback,
@@ -735,6 +739,48 @@ tidy-up, the target-language default, eight catalogs, CHANGELOG EN/PL, F8 +
 Developer for the new paths, the manual acceptance lines, and one kit commit
 for `translate.svg` (submodule bump).
 
+**Done in this round (2026-11-13):**
+
+- `ToolCatalog` carries the two `kind: "action"` entries (`tool: -1`, no props,
+  group or shortcut). `actionsFor()` keeps them out of the tool order; the
+  overlay draws them after Undo/Redo and before the divider, one-shot, never a
+  tab stop, with the Translate chip disabled and its tip naming Settings >
+  General until `OcrResultController::translationConfigured`. Shot and Measure
+  show both, the OCR pill shows Translate only.
+- `OverlayController::confirmWithAction`/`takeRequestedAction` is the new
+  one-shot latch, consumed like `takeCopyRequested()` and cleared by `begin()`.
+  `captureRegionWithTool` and `captureRegionOcr` route the request to
+  `ocrImage(img, translate)` before the save/copy/editor pipeline, so an action
+  click costs no capture, history entry, file or upload.
+- `AppContext::ocrImage(img, translate)` shares one presentation: OCR copies and
+  opens on Original; Translate sets `openInTranslation`, emits the ready signal
+  and starts the whole-text request, so the window opens already translating.
+  `EditorSession::ocrTranslate` is the editor button's entry on the same path.
+- Result window: a standing line above Translate while translation is not set
+  up, and Ctrl+Enter (Return and keypad Enter) as the keyboard entry; Copy all
+  stays filled and Translate stays tonal. Main.qml applies `openInTranslation`
+  when it raises the window.
+- Tray: the OCR entry is renamed "OCR region…"; Settings gained no category.
+- Settings: Tesseract moved under Text recognition (OCR) so OCR is contiguous
+  and Translation follows; "Editor tools" is now "Tools" with the toolbar +
+  General copy; the default target follows the UI language
+  (`Settings::resolveUiLanguage`/`defaultTranslationTarget`, read not written,
+  so a chosen target survives a language switch).
+- Kit: `resources/icons/sym/translate.svg` in `external/unisic-kit` (commit
+  `4b70707`, submodule pointer bumped in this commit).
+- F8: `ocr action` (name mapping, one-shot latch, Translation-layer reset) and
+  `translation action` (the setup gate the chip, the editor button and the
+  standing line share, plus the text condition). Developer: "OCR action" and
+  "Translate action" run both entry paths on the synthetic fixture.
+- `ctest` 28/28 in `unisic-zh-build` (`QT_QPA_PLATFORM=offscreen`); the new
+  `SettingsPersistenceTest` case pins the target mapping and the read-not-written
+  default. F8 in the same container under `Xvfb` + `dbus-run-session`: 108 PASS,
+  5 FAIL, 34 SKIP, with both new steps `ocr action: PASS` and
+  `translation action: PASS`; the five FAILs are the known container gaps (WebP
+  encoder, portal twice, ffmpeg twice). The overlay toolbar itself needs a real
+  screen, so the entry-point acceptance lines are in the manual pass below,
+  unticked.
+
 ## M5. The other scripts' recognizers (5-8 days, D5 settled: own round)
 
 Korean, Arabic, Cyrillic, Thai, Indic and Greek currently fall back to Tesseract.
@@ -838,9 +884,10 @@ ships WITH 0.8.10 as one edit, version bump included. The files that need it the
    above. It built on the same result-window/controller boundary; the AppImage
    is rebuilt, so only the desktop F8 pass and the accepted manual lines are
    still open.
-7. Entry points settled 2026-11-13 (see "OCR and translation entry points"):
-   implement the two capture-toolbar chips, the editor Translate button and the
-   result-window fixes before the T6.x release chores.
+7. Entry points settled 2026-11-13 (see "OCR and translation entry points"),
+   implemented 2026-11-13: the two capture-toolbar chips, the editor Translate
+   button, the result-window fixes, the tray rename and the Settings tidy-up
+   landed before the T6.x release chores; the desktop acceptance pass is open.
 8. T6.x release chores before 0.8.10: T6.1 and T6.3 need a real machine, T6.7 waits
    for every string to freeze. T6.2, T6.4, T6.5 and T6.6 are done (2026-11-13).
 9. M5 last, on its own.
@@ -940,6 +987,22 @@ the compositor or OS named next to it: "verified in a container" is not a tick h
       page's size, a cover starts on the source text and stops before the word or label
       to its left, and a short answer is centred in its cover; zoom, pan,
       Original/Translation and a new result leave no stale overlay.
+- [ ] Entry points (landed 2026-11-13, desktop pass still open): the Shot and
+      Measure pills end their tool row with Copy text (OCR) and Translate, after
+      Undo/Redo; the OCR pill shows Translate only. A click on Copy text confirms,
+      copies the recognized text and opens the result window with no file, no
+      history entry and no editor; Translate opens the window on the Translation
+      layer with the request already streaming. With no endpoint, Translate is
+      disabled on the chips and the editor button, and the result window shows the
+      standing setup line while Ctrl+Enter reports the same setting. The editor's
+      Translate button opens the same window. A mis-click costs one Esc and no
+      capture.
+- [ ] Settings > General (landed 2026-11-13, desktop pass still open): Tesseract
+      sits under Text recognition (OCR) and Translation follows it; Tools lists
+      OCR and Translate among the hideable tools and its line points to General;
+      on a Polish UI the default target is Polish until another one is typed, and
+      a typed target survives a UI-language switch; the tray entry says OCR
+      region… and opens the OCR pill.
 
 ### Desktop, X11 session (best-effort second target)
 

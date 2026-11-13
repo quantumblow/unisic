@@ -426,6 +426,13 @@ public:
     // endpoint.
     Q_INVOKABLE void devTestOcrResultImage();
     Q_INVOKABLE void devTestOcrResultWindow();
+    // The two one-shot capture entries (the overlay's OCR and Translate chips,
+    // and the editor's Translate button behind them) on the synthetic fixture:
+    // no overlay, no save, no upload. The Translate one opens the window on the
+    // Translation layer, which is the state the standing "not set up" line and
+    // the Ctrl+Enter shortcut live in.
+    Q_INVOKABLE void devTestOcrAction();
+    Q_INVOKABLE void devTestTranslationAction();
     Q_INVOKABLE void devTestTranslation();
     Q_INVOKABLE void devTestTranslationOverlay();
     Q_INVOKABLE void devTestTranslationStream();
@@ -830,7 +837,11 @@ public:
     Q_INVOKABLE void uploadFromHistory(const QString &filePath);
     // Print a saved image file (history card) through printImage.
     Q_INVOKABLE void printFromHistory(const QString &filePath);
-    void ocrImage(const QImage &img);                // OCR + copy recognized text
+    // `translate`: the one-shot Translate entry points (overlay chip, editor
+    // button) want OCR + the whole-text translation + the result window on the
+    // Translation layer, with nothing copied. The plain OCR path copies the
+    // text as it always did.
+    void ocrImage(const QImage &img, bool translate = false);
     // The OCR result window's picture actions, on whichever layer it shows:
     // `translated` false is the untouched capture, true the translation laid on
     // it. The picture comes from OcrResultController::compositedImage, so it is

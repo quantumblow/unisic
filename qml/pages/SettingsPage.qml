@@ -1430,6 +1430,36 @@ Item {
                             }
                         }
                     }
+                    SectionTitle { text: qsTr("Tesseract") }
+                    SettingRow {
+                        label: qsTr("Detect languages automatically")
+                        help: qsTr("Detects the script and recognizes with the matching language pack.")
+                        helpDetail: qsTr("No need to know Tesseract language codes. With the OSD data installed (the “osd” Tesseract pack), Unisic detects the script of each capture - Latin, Arabic, Hebrew, Chinese/Japanese/Korean, Devanagari, and so on - and recognizes with just that script's installed packs, which is faster and more accurate than loading them all. Without the OSD pack it falls back to loading every installed pack. Install the packs for the scripts you use.")
+                        USwitch { checked: App.settings.ocrAutoLanguage; onToggled: (c) => App.settings.ocrAutoLanguage = c }
+                    }
+                    SettingRow {
+                        available: !App.settings.ocrAutoLanguage
+                        label: qsTr("OCR languages")
+                        help: qsTr("Tesseract language spec used when recognizing text.")
+                        helpDetail: qsTr("Combine languages with “+”, e.g. “pol+eng”; each needs its Tesseract langpack installed. OCR also scans QR and bar codes: a code found in the region copies its content instead of the surrounding text.")
+                        UTextField {
+                            width: 150
+                            text: App.settings.ocrLanguages
+                            placeholder: "eng"
+                            onEdited: (t) => App.settings.ocrLanguages = t
+                        }
+                    }
+                    // Built in (always), but nothing to recognize with yet -
+                    // the real "OCR does nothing" trap. The language data is a
+                    // separate install that no build flag can supply.
+                    Text {
+                        visible: !App.ocrHasLanguages
+                        width: parent.width
+                        wrapMode: Text.WordWrap
+                        text: qsTr("No Tesseract language pack is installed, so OCR can't recognize anything yet. Install one, e.g. “tesseract-langpack-eng”.")
+                        color: Theme.danger
+                        font.pixelSize: Theme.fontS
+                    }
                     SectionTitle { text: qsTr("Translation") }
                     SettingRow {
                         label: qsTr("Translation endpoint")
@@ -1500,36 +1530,6 @@ Item {
                                 Accessible.name: text
                             }
                         }
-                    }
-                    SectionTitle { text: qsTr("Tesseract") }
-                    SettingRow {
-                        label: qsTr("Detect languages automatically")
-                        help: qsTr("Detects the script and recognizes with the matching language pack.")
-                        helpDetail: qsTr("No need to know Tesseract language codes. With the OSD data installed (the “osd” Tesseract pack), Unisic detects the script of each capture - Latin, Arabic, Hebrew, Chinese/Japanese/Korean, Devanagari, and so on - and recognizes with just that script's installed packs, which is faster and more accurate than loading them all. Without the OSD pack it falls back to loading every installed pack. Install the packs for the scripts you use.")
-                        USwitch { checked: App.settings.ocrAutoLanguage; onToggled: (c) => App.settings.ocrAutoLanguage = c }
-                    }
-                    SettingRow {
-                        available: !App.settings.ocrAutoLanguage
-                        label: qsTr("OCR languages")
-                        help: qsTr("Tesseract language spec used when recognizing text.")
-                        helpDetail: qsTr("Combine languages with “+”, e.g. “pol+eng”; each needs its Tesseract langpack installed. OCR also scans QR and bar codes: a code found in the region copies its content instead of the surrounding text.")
-                        UTextField {
-                            width: 150
-                            text: App.settings.ocrLanguages
-                            placeholder: "eng"
-                            onEdited: (t) => App.settings.ocrLanguages = t
-                        }
-                    }
-                    // Built in (always), but nothing to recognize with yet -
-                    // the real "OCR does nothing" trap. The language data is a
-                    // separate install that no build flag can supply.
-                    Text {
-                        visible: !App.ocrHasLanguages
-                        width: parent.width
-                        wrapMode: Text.WordWrap
-                        text: qsTr("No Tesseract language pack is installed, so OCR can't recognize anything yet. Install one, e.g. “tesseract-langpack-eng”.")
-                        color: Theme.danger
-                        font.pixelSize: Theme.fontS
                     }
                 }
             }
@@ -2523,11 +2523,11 @@ Item {
                 Column {
                     width: parent.width
                     spacing: Theme.spacingS
-                    SectionTitle { text: qsTr("Editor tools") }
+                    SectionTitle { text: qsTr("Tools") }
                     Text {
                         width: parent.width
                         wrapMode: Text.WordWrap
-                        text: qsTr("Hide tools you don't use; they disappear from the editor and the capture overlay.")
+                        text: qsTr("Hide the tools you never use: they disappear from the toolbar that shows them. Set up the OCR engine and the translation service under Settings > General.")
                         color: Theme.textTertiary
                         font.pixelSize: Theme.fontS
                     }
@@ -4587,6 +4587,8 @@ Item {
                         UButton { compact: true; variant: "tonal"; text: qsTr("OCR result"); onClicked: App.devTestOcrResult() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("OCR result image"); onClicked: App.devTestOcrResultImage() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("OCR result window"); onClicked: App.devTestOcrResultWindow() }
+                        UButton { compact: true; variant: "tonal"; text: qsTr("OCR action"); onClicked: App.devTestOcrAction() }
+                        UButton { compact: true; variant: "tonal"; text: qsTr("Translate action"); onClicked: App.devTestTranslationAction() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("Translation"); onClicked: App.devTestTranslation() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("Translation overlay"); onClicked: App.devTestTranslationOverlay() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("Translation stream"); onClicked: App.devTestTranslationStream() }

@@ -238,6 +238,11 @@ void EditorSession::ocrCopyText()
     m_app->ocrImage(composited());
 }
 
+void EditorSession::ocrTranslate()
+{
+    m_app->ocrImage(composited(), true);
+}
+
 void EditorSession::startOcrPick()
 {
     if (!m_canvas)

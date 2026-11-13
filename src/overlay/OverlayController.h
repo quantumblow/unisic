@@ -79,6 +79,27 @@ public:
         return r;
     }
 
+    // The two one-shot action chips at the end of the overlay's tool row
+    // (ToolCatalog `kind: "action"`). Confirming with one of them replaces the
+    // whole capture pipeline: the caller runs OCR (copy the text and open the
+    // result window) or OCR + translation, and nothing is saved, uploaded or
+    // opened in the editor. The request is consumed like the copy flag, so a
+    // later Enter-confirm can never inherit it, and begin() clears it too.
+    enum class Action { None, Ocr, Translate };
+    static Action actionFromName(const QString &name);
+    static QString actionName(Action a);
+    void setRequestedAction(Action a) { m_requestedAction = a; }
+    Action takeRequestedAction()
+    {
+        const Action a = m_requestedAction;
+        m_requestedAction = Action::None;
+        return a;
+    }
+    // QML entry point: validates the selection exactly like confirmFromWindow()
+    // and arms the one-shot action before confirming, so a click with no
+    // selection arms nothing.
+    Q_INVOKABLE void confirmWithAction(QQuickWindow *win, const QString &action);
+
     // Last confirmed screenshot selection in LOGICAL pixels of the named
     // screen (re-capture feature). Logical (not physical) so the rect survives
     // the frozen-image-vs-native scaling of both the KWin and portal paths;
@@ -129,6 +150,7 @@ private:
     bool m_starting = false;
     bool m_textEditing = false;
     bool m_copyRequested = false;
+    Action m_requestedAction = Action::None;
     int m_initialTool = 0; // optional full-screen tool mode (e.g. CLI --measure)
     int m_generation = 0; // invalidates in-flight freeze callbacks
     QRect m_lastRegionLogical;

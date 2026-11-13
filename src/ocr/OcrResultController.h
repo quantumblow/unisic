@@ -56,6 +56,15 @@ class OcrResultController : public QObject
     Q_PROPERTY(bool translating READ translating NOTIFY translationChanged)
     Q_PROPERTY(QString translationError READ translationError NOTIFY translationChanged)
     Q_PROPERTY(bool canTranslate READ canTranslate NOTIFY translationChanged)
+    // True when the endpoint AND model are set, independent of whether there is
+    // text yet: the overlay and editor Translate buttons are disabled until
+    // this is true, and the result window shows a standing line while it is
+    // false. One property, so the three surfaces cannot disagree.
+    Q_PROPERTY(bool translationConfigured READ translationConfigured NOTIFY translationChanged)
+    // Set by the one-shot Translate chip and the editor Translate button before
+    // ocrResultReady: the window opens on the Translation layer. Reset by the
+    // next setResult(), so an ordinary OCR read still opens on Original.
+    Q_PROPERTY(bool openInTranslation READ openInTranslation NOTIFY openInTranslationChanged)
     Q_PROPERTY(QString translationTarget READ translationTarget NOTIFY translationChanged)
     // True when the last/current translation covers only the lines the user
     // selected in the pane, so the window can say so instead of implying the
@@ -140,6 +149,9 @@ public:
     bool translating() const { return m_translating; }
     QString translationError() const { return m_translationError; }
     bool canTranslate() const;
+    bool translationConfigured() const;
+    bool openInTranslation() const { return m_openInTranslation; }
+    void setOpenInTranslation(bool on);
     QString translationTarget() const;
     bool translationSelectionOnly() const { return m_translationSelectionOnly; }
     int translationLineCount() const { return m_translationLineCount; }
@@ -281,6 +293,7 @@ public:
 signals:
     void resultChanged();
     void translationChanged();
+    void openInTranslationChanged();
     void statusTextChanged();
     void selectionChanged();
     void privacyNoticeChanged();
@@ -308,6 +321,7 @@ private:
     bool m_translationUnchanged = false;
     QString m_translationError;
     bool m_translating = false;
+    bool m_openInTranslation = false;
     // The line boxes the current translation covers (all of m_lines, or the
     // selection) and the text they join to. Every request and every map uses
     // these instead of m_lines/m_text, so a selection translation can never

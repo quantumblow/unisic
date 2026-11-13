@@ -7,6 +7,7 @@
 #include <QFile>
 #include <QDebug>
 #include <QCoreApplication>
+#include <QLocale>
 #include "ConfigPath.h"
 #include "hotkeys/HotkeyDefaults.h"
 // For kDefaultTimeoutMs: the shipped default and the runner's own fallback have
@@ -396,6 +397,47 @@ public:
         return d;
     }
 
+    // The one UI-language rule, shared by applyLanguage() and the translation
+    // target's default: the explicit choice when it is a shipped catalog, else
+    // the system locale mapped onto one. A Traditional Chinese desktop falls
+    // back to English until a zh_TW catalog exists.
+    static QString resolveUiLanguage(const QString &pref)
+    {
+        static const QStringList supported = {
+            QStringLiteral("en"), QStringLiteral("pl"), QStringLiteral("es"),
+            QStringLiteral("it"), QStringLiteral("fr"), QStringLiteral("ru"),
+            QStringLiteral("de"), QStringLiteral("zh_CN")};
+        if (supported.contains(pref))
+            return pref;
+        const QString sys = QLocale::system().name(); // e.g. "pl_PL", "zh_CN"
+        if (supported.contains(sys))
+            return sys;
+        if (sys.startsWith(QLatin1String("zh")))
+            return (sys.startsWith(QLatin1String("zh_TW"))
+                    || sys.startsWith(QLatin1String("zh_HK"))
+                    || sys.startsWith(QLatin1String("zh_MO")))
+                       ? QStringLiteral("en")
+                       : QStringLiteral("zh_CN");
+        const QString two = sys.left(2);
+        return supported.contains(two) ? two : QStringLiteral("en");
+    }
+
+    // A UI in Polish means the page being read is usually in another language,
+    // so the default target is Polish - not a hardcoded English. The name is
+    // what the prompt sends, so it stays in English like the picker's presets.
+    static QString defaultTranslationTarget(const QString &uiLanguagePref = QStringLiteral("system"))
+    {
+        const QString code = resolveUiLanguage(uiLanguagePref);
+        if (code == QLatin1String("pl")) return QStringLiteral("Polish");
+        if (code == QLatin1String("es")) return QStringLiteral("Spanish");
+        if (code == QLatin1String("it")) return QStringLiteral("Italian");
+        if (code == QLatin1String("fr")) return QStringLiteral("French");
+        if (code == QLatin1String("ru")) return QStringLiteral("Russian");
+        if (code == QLatin1String("de")) return QStringLiteral("German");
+        if (code == QLatin1String("zh_CN")) return QStringLiteral("Simplified Chinese");
+        return QStringLiteral("English");
+    }
+
     U_SETTING(QString, saveDirectory, setSaveDirectory, "saveDirectory", defaultSaveDir())
     // Recordings (GIF/MP4/WebM) land here; screenshots keep saveDirectory.
     U_SETTING(QString, videoSaveDirectory, setVideoSaveDirectory, "videoSaveDirectory", defaultVideoSaveDir())
@@ -700,7 +742,26 @@ public:
     U_SETTING(QString, translationEndpoint, setTranslationEndpoint, "translation/endpoint", QString())
     U_SETTING(QString, translationApiKey, setTranslationApiKey, "translation/apiKey", QString())
     U_SETTING(QString, translationModel, setTranslationModel, "translation/model", QString())
-    U_SETTING(QString, translationTarget, setTranslationTarget, "translation/target", QStringLiteral("English"))
+    // No stored target means "the language this UI is in": the default is read,
+    // never written, so an upgrade keeps a target the user chose and a language
+    // switch moves only the people who never picked one.
+    QString translationTarget() const
+    {
+        const QString pref = uiLanguage();
+        QString target = m_s.value(QStringLiteral("translation/target"),
+                                   defaultTranslationTarget(pref)).toString().trimmed();
+        if (target.isEmpty())
+            target = defaultTranslationTarget(pref);
+        return target;
+    }
+    void setTranslationTarget(const QString &v)
+    {
+        if (translationTarget() == v)
+            return;
+        m_s.setValue(QStringLiteral("translation/target"), v);
+        m_syncTimer.start();
+        emit translationTargetChanged();
+    }
     // Which non-local endpoint host the user already said yes to. Not a secret:
     // it makes the first-send notice appear once per host instead of on every
     // Translate.

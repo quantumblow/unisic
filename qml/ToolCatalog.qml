@@ -44,7 +44,17 @@ QtObject {
         { id: "step",       tool: 10, iconName: "number",             label: qsTr("Step marker"),  shortcut: "N", shortcutKey: Qt.Key_N, overlay: true,  editor: true, hideable: true, props: ["stroke", "stepSize"] },
         { id: "crop",       tool: 11, iconName: "transform-crop",     label: qsTr("Crop"),         shortcut: "C", shortcutKey: Qt.Key_C, overlay: false, editor: true, hideable: true, props: [] },
         { id: "cutout",     tool: 21, iconName: "cut",                label: qsTr("Cut out"),      shortcut: "K", shortcutKey: Qt.Key_K, overlay: false, editor: true, hideable: true, props: [] },
-        { id: "sticker",    tool: 22, iconName: "sticker",            label: qsTr("Sticker"),      shortcut: "G", shortcutKey: Qt.Key_G, overlay: false, editor: true, hideable: true, props: ["sticker"] }
+        { id: "sticker",    tool: 22, iconName: "sticker",            label: qsTr("Sticker"),      shortcut: "G", shortcutKey: Qt.Key_G, overlay: false, editor: true, hideable: true, props: ["sticker"] },
+        // One-shot capture actions, not toggle tools: they confirm the capture
+        // and hand it to OCR / OCR + translation instead of picking a canvas
+        // tool. `tool: -1` is the "no canvas enum" sentinel; they carry no
+        // props, no group and no shortcut letter, but they are `hideable` and
+        // go through toolIconName() like every other catalog entry, so the
+        // hidden-tools list and the per-tool icon override work for them too.
+        // The overlay renders them at the end of its tool row; the editor gets
+        // its own labelled buttons instead (see EditorWindow.qml).
+        { id: "ocr",        tool: -1, iconName: "ocr",                label: qsTr("Copy text (OCR)"), overlay: true, editor: false, hideable: true, kind: "action", props: [] },
+        { id: "translate",  tool: -1, iconName: "translate",          label: qsTr("Translate"),    overlay: true, editor: false, hideable: true, kind: "action", props: [] }
     ]
 
     readonly property var groups: [
@@ -79,6 +89,13 @@ QtObject {
             out.push(t)
         }
         return out
+    }
+
+    // The one-shot action entries for a context (today only the overlay has
+    // them). Kept out of visibleFor()'s tool order on purpose: the overlay
+    // draws them after Undo/Redo, not in the middle of the tool chips.
+    function actionsFor(ctx, hiddenCsv) {
+        return visibleFor(ctx, hiddenCsv).filter(function (t) { return t.kind === "action" })
     }
 
     // Visible members of a group (the group chip hides when this is empty).

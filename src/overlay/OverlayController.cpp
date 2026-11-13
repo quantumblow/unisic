@@ -27,6 +27,25 @@ OverlayController::OverlayController(AppContext *app, QObject *parent)
     });
 }
 
+OverlayController::Action OverlayController::actionFromName(const QString &name)
+{
+    if (name == QLatin1String("ocr"))
+        return Action::Ocr;
+    if (name == QLatin1String("translate"))
+        return Action::Translate;
+    return Action::None;
+}
+
+QString OverlayController::actionName(Action a)
+{
+    switch (a) {
+    case Action::Ocr:       return QStringLiteral("ocr");
+    case Action::Translate: return QStringLiteral("translate");
+    case Action::None:      break;
+    }
+    return QString();
+}
+
 QString OverlayController::purposeName(Purpose p)
 {
     switch (p) {
@@ -64,6 +83,7 @@ void OverlayController::begin(bool annotationTools, Purpose purpose)
     m_annotationTools = annotationTools;
     m_purpose = purpose;
     m_copyRequested = false; // never inherit a Ctrl+C from a previous session
+    m_requestedAction = Action::None; // nor a one-shot OCR/Translate chip
     m_screens = QGuiApplication::screens().toVector();
     m_frozen.clear();
     m_frozen.resize(m_screens.size());
@@ -282,6 +302,22 @@ void OverlayController::confirmAndCopy(QQuickWindow *win)
     if (!canvas || !canvas->hasSelection())
         return;
     m_copyRequested = true;
+    confirmFromWindow(win);
+}
+
+// A one-shot action chip (OCR / Translate): same confirm, same selection guard,
+// but the session's result goes to OCR instead of finishCapture(). Arming the
+// action only after the guard means a bare click on the disabled/empty state
+// leaves no request behind for a later Enter-confirm.
+void OverlayController::confirmWithAction(QQuickWindow *win, const QString &action)
+{
+    auto *canvas = win ? win->findChild<AnnotationCanvas *>(QStringLiteral("overlayCanvas")) : nullptr;
+    if (!canvas || !canvas->hasSelection())
+        return;
+    const Action requested = actionFromName(action);
+    if (requested == Action::None)
+        return;
+    m_requestedAction = requested;
     confirmFromWindow(win);
 }
 
