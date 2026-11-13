@@ -497,6 +497,62 @@ hit-testing inside the text), and a word request carries its line as context.
   ON, the new source strings are in the binary, `--version` answers 0.8.9, and
   it starts under an isolated offscreen profile and exits cleanly on SIGTERM.
 
+## M4.6. Put a word or partial translation on the picture (investigated 2026-11-13, not started)
+
+After the M4.5 real-machine try: selecting a word translates correctly, but the
+answer only fills the pane. The question is whether a partial selection can also
+appear over the picture, and what that costs.
+
+**It can: the geometry already exists.** Both engines emit `OcrWord` per glyph
+(PaddleOCR tokens cut at token midpoints, Tesseract at `RIL_SYMBOL`), with
+`rect`, `line` and `spaceBefore`; `OcrResultController::setResult()` rebuilds
+`m_text` from those glyphs but currently throws the per-glyph boxes away. Kept as
+`m_glyphs` (`{start, length, rect, line}` into the same `m_text`), a partial
+selection maps to exact character boxes, and `translatedLineMap()` already turns
+`{text,x,y,width,height,start,length}` entries into covers with sampled colours,
+fitted font, overshoot, RTL and overflow. QML draws `translatedLines` without
+knowing whether an entry is a line or a word, so the picture path needs no new
+delegate; `composeOverlay()` and `lineAt(translated=true)` follow the same list.
+The partial path is one function: `startPartialTranslation()` currently sets
+`translatedLines` empty and `translationPartialText` true.
+
+**Real-time is a small addition, not a protocol change.** A partial translation
+is one request; while it streams, the existing 60 ms throttle can refresh one
+cover from `m_streamText`, so the word box fills as the answer arrives. Fitting
+the font on every delta can make the text jump; update the text every tick and
+re-fit at the end, or re-fit at a slower fixed cadence.
+
+**Two shapes to choose from:**
+
+- **In-place glyph cover (2-3 days).** Cover exactly the selected glyphs, one
+  cover per line fragment, and draw the translated fragment there. Reuses the
+  M3 map and composite. Costs: store `m_glyphs` and tests (0.5 day), partial
+  map with word grouping and multi-line grouping (0.5-1 day), streaming and fit
+  policy (0.5 day), QML/composite/F8/strings/docs (0.5-1 day). Risks: a long
+  translation in a narrow word box shrinks to the 5 px floor and becomes a dot
+  rather than readable text; a selection inside one multi-character glyph cannot
+  be split exactly; multi-word and multi-line selections return one answer that
+  has to be split across covers or kept as one union cover; saving the picture
+  would bake a word cover into the file unless covers gain a screen-only flag.
+- **Callout anchored to the selection (0.5-1 day).** Draw a small themed popup
+  in the picture pane at the selection rectangle, with the answer and the
+  source fragment. No image pixels change, no fit problem, nothing extra lands
+  in Save/Copy image. This is the common word-lookup shape and the cheapest way
+  to make the answer appear "on the picture area" without pretending the page
+  was rewritten. The M4.5 note would stay true; it only stops saying the answer
+  is pane-only.
+
+**Recommendation:** callout first if the goal is the double-click word lookup,
+because it is cheap and never misrepresents the page. In-place glyph covers are
+feasible and reuse most of M3, but they need a readability decision (grow into
+the line's whitespace, clip with the overflow dot, or fall back to the callout
+when the text does not fit). A hybrid (word-sized cover when it fits, callout
+otherwise) is the best result at roughly 3-4 days. Whatever is chosen, the
+saved picture should keep whole-line covers only unless a screen-only flag is
+added.
+
+Not scheduled: the next round is T6.x. Add this as M4.6 when it is picked up.
+
 ## M5. The other scripts' recognizers (5-8 days, D5 settled: own round)
 
 Korean, Arabic, Cyrillic, Thai, Indic and Greek currently fall back to Tesseract.
