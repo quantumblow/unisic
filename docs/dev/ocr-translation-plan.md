@@ -148,8 +148,10 @@ says "SKIP (models not downloaded)" and will now PASS everywhere.
   and Download shows only the 11 MB runtime).
 - T1.6: only the AppImage was rebuilt here (164,977,144 bytes, 159.3 MB -> 165.0 MB, 10 gates ON, model names and new
   strings found in the shipped binary, starts under Xvfb with an isolated profile; hash and the full verification log in
-  `notes/ocr-paddle-translation.md`). `unisic-website` is not in the workspace, so its OCR lines (`content/docs/**`,
-  `lib/i18n/dictionaries/**`) still say the models must be downloaded and need the same update.
+  `notes/ocr-paddle-translation.md`). The `unisic-website` repo is cloned beside this one now (`unisic/unisic-website`,
+  checked 2026-11-13), but it is pinned to the released version (`src/lib/release.ts` `VERSION`, bumped by
+  `.github/workflows/follow-release.yml`) and its OCR text describes Tesseract only, so the PaddleOCR/tiny wording
+  belongs to the 0.8.10 release rather than this PR. T6.7 has the file list.
 
 **Risk worth writing down:** tiny misreads Han glyphs that small gets right
 (素材库 came back as 索材库 in the measurements), so "works out of the box" must
@@ -283,8 +285,20 @@ the Developer pane for every new path (save image, edit in editor, zoom, selecti
 translation, streaming, retry, test connection).
 
 **T6.7** i18n and website: native review of the Chinese and Polish strings added in
-this feature, and the `unisic-website` sync (README/feature page, `content/docs/**`,
-`lib/i18n/dictionaries/**`) once that repository is in the workspace.
+this feature, and the `unisic-website` sync. The site repo is cloned beside this tree and
+its layout is confirmed; it is release-scoped on purpose (`src/lib/release.ts` holds
+`VERSION` and `RELEASED`, `.github/workflows/follow-release.yml` bumps them, and its last
+commit before this round was "describe only what v0.8.9 ships"), so the OCR/PP-OCRv6 text
+ships WITH 0.8.10 as one edit, version bump included. The files that need it then:
+
+- `src/lib/i18n/*.ts` (nine catalogs: en, pl, de, es, fr, it, nl, zh-Hans, zh-Hant): the
+  comparison row `{ feature: 'OCR', notes: ['Tesseract', ...] }` and the OCR lede name
+  Tesseract only, and both need PP-OCRv6 (tiny included, small/medium downloads) plus the
+  translation feature.
+- `content/docs/capture.md` (the OCR section), `content/docs/dependencies.md` ("OCR language
+  packs": the tiers, the ONNX Runtime, which scripts stay on Tesseract), `content/docs/editor.md`
+  (the result window and Translate), `content/docs/installation.md` ("bundles ... OCR data").
+- `src/lib/components/Read.svelte` and the hero/feature copy if either names the OCR engine.
 
 ## Order and dependencies
 
