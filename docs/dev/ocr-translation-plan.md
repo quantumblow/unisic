@@ -506,8 +506,10 @@ a cover starts on the source text) and `62b56a1` (a short answer is centred in
 its cover). The controller half
 (glyphs, fragments, cover/callout decision, screen-only composite) and the QML
 callout are in; `ctest` is green, and the AppImage was rebuilt from the refined
-tip. The desktop acceptance lines below are still open and are not claimed as
-done.
+tip. The user accepted the behaviour on the real desktop on 2026-11-13 with the
+175,245,816-byte AppImage (sha256 `30827cdd...`). The manual line below stays
+open for the 0.8.10 release run, where the compositor is named; it is not a
+feature gap.
 
 Goal: after M4.5 a double-clicked word (or any partial-line selection) translates
 into the pane only. The answer should also appear over the picture: replace the
@@ -672,6 +674,23 @@ Branch `feat/ocr-m4.6` from local `dev` at the design commit. Read
 `m_glyphs` plus a test that every glyph range indexes `m_text`; then the fragment
 map and the fit decision, then the QML callout.
 
+### Next session (before T6.x): OCR and translation entry points
+
+The user accepted the current feature set on 2026-11-13 and asked to discuss
+where OCR and Translate live before starting the T6.x release chores:
+
+- the editor's labelled OCR split button (whole-picture OCR vs Select text…)
+  and whether the result window's Translate needs a second entry;
+- the tray and quick actions: is an OCR/Translate entry expected there;
+- the Settings > General > Text recognition / Translation split: what is
+  discoverable, what sends text, and where the endpoint and target are found;
+- the result window's own entry points (Translate selection, target picker,
+  Original/Translation) and how a first-time user reaches them.
+
+No design is settled. Start the next session with this discussion; decide
+whether it is a small UI round of its own or folds into T6.6/T6.7 before
+touching code.
+
 ## M5. The other scripts' recognizers (5-8 days, D5 settled: own round)
 
 Korean, Arabic, Cyrillic, Thai, Indic and Greek currently fall back to Tesseract.
@@ -731,7 +750,7 @@ F8 `translation connection`, `translation privacy`, `settings secrets` and the
 Developer equivalents. M4.5 wired the line-box set and the exact-text path: F8
 `translation selection` and `devTestTranslationSelection`. M4.6 wired the
 word/partial-line overlay: F8 `translation partial overlay`,
-`devTestTranslationPartialOverlay` and six `OcrResultTest` cases.
+`devTestTranslationPartialOverlay` and ten `OcrResultTest` cases.
 
 **T6.7** i18n and website: native review of the Chinese and Polish strings added in
 this feature, and the `unisic-website` sync. The site repo is cloned beside this tree and
@@ -764,9 +783,13 @@ ships WITH 0.8.10 as one edit, version bump included. The files that need it the
    above. It built on the same result-window/controller boundary; the AppImage
    is rebuilt, so only the desktop F8 pass and the accepted manual lines are
    still open.
-7. T6.x release chores (T6.1, T6.3, T6.4, T6.5, T6.6, T6.7) after M4.6 and before
-   0.8.10; T6.2 is already done.
-8. M5 last, on its own.
+7. Next session: discuss the OCR and translation entry points (the editor split
+   button, the result-window Translate, the tray and Settings). The user asked
+   for this before T6.x; settle the shape, then decide whether it is its own
+   small UI round.
+8. T6.x release chores (T6.1, T6.3, T6.4, T6.5, T6.6, T6.7) after that discussion
+   and before 0.8.10; T6.2 is already done.
+9. M5 last, on its own.
 
 Every milestone ends with: build, `ctest` (27 + new tests), F8 on a desktop, a
 rebuilt AppImage, a CHANGELOG entry under the current beta heading (EN/PL), and the
