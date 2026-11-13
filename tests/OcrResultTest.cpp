@@ -1012,12 +1012,12 @@ void OcrResultTest::translatedLinesIndexThePane()
     QCOMPARE(second.value(QStringLiteral("start")).toInt(), 6);
     QCOMPARE(second.value(QStringLiteral("length")).toInt(), 11);
     QCOMPARE(joined.mid(6, 11), QStringLiteral("Druga linia"));
-    // The cover is the box grown by the glyph overshoot: 30 percent of the line
-    // height sideways (4 px here) and 1 px up/down, so the last letter is hidden
-    // without the line above being touched.
-    QCOMPARE(second.value(QStringLiteral("x")).toInt(), 6);
+    // The cover is the box grown by the glyph overshoot: the trailing edge
+    // keeps 30 percent of the line height (4 px here) while the lead edge stops
+    // at 2 px, so the box starts on the text; 1 px up/down.
+    QCOMPARE(second.value(QStringLiteral("x")).toInt(), 8);
     QCOMPARE(second.value(QStringLiteral("y")).toInt(), 39);
-    QCOMPARE(second.value(QStringLiteral("width")).toInt(), 98);
+    QCOMPARE(second.value(QStringLiteral("width")).toInt(), 96);
     QCOMPARE(second.value(QStringLiteral("height")).toInt(), 16);
     // A missing translation still produces a box, so nothing shifts.
     const QVariantList shortMap =

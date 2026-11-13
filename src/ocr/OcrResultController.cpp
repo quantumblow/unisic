@@ -136,6 +136,13 @@ QString textOfLines(const QVariantList &lines)
 // the saved composite reads the same `fontSize`, so both stay in step.
 constexpr double kCjkCoverSizeScale = 0.9;
 
+// The lead edge of a cover sits almost on the source box instead of growing
+// the full 30% sideways. The overshoot exists to hide glyphs that poke out of
+// the OCR box, but on the lead edge it reads as the whole box being shifted
+// left (or right, in RTL) and can paint over the word or label before it.
+// The trailing edge keeps the full overshoot.
+constexpr int kCoverLeadPad = 2;
+
 bool hasCjkGlyphs(const QString &text)
 {
     for (const QChar c : text) {
@@ -156,12 +163,14 @@ bool hasCjkGlyphs(const QString &text)
 // letter of the next column. `skipIndex` is the box the cover is drawn for; a
 // partial fragment passes the line box it sits in, so the fragment's own line
 // never counts as its neighbour.
-QRect paddedCoverRect(const QRect &rect, const QVector<QRect> &boxes, int skipIndex)
+QRect paddedCoverRect(const QRect &rect, const QVector<QRect> &boxes, int skipIndex,
+                      bool rtl)
 {
     const int padX = std::clamp(int(std::lround(rect.height() * 0.3)), 3, 32);
     const int padY = 1;
-    int leftPad = padX;
-    int rightPad = padX;
+    const int leadPad = std::min(padX, kCoverLeadPad);
+    int leftPad = rtl ? padX : leadPad;
+    int rightPad = rtl ? leadPad : padX;
     for (int j = 0; j < boxes.size(); ++j) {
         if (j == skipIndex)
             continue;
@@ -678,15 +687,17 @@ void OcrResultController::rebuildPartialFragments()
         }
         if (glyphRect.isNull())
             continue;
-        QRect cover = paddedCoverRect(glyphRect, m_lineRects, lineIndex);
+        const QString fragmentText = m_text.mid(start, end - start);
+        QRect cover = paddedCoverRect(glyphRect, m_lineRects, lineIndex,
+                                      lineIsRtl(fragmentText));
         // The line boxes are not enough for a word: its own line has words on
-        // both sides, and the 30% sideways overshoot would otherwise reach
-        // into the glyph before it. Stop at the glyphs outside this range.
+        // both sides, and the sideways overshoot would otherwise reach into
+        // the glyph before it. Stop at the glyphs outside this range.
         capCoverAtGlyphs(m_glyphs, start, end - start, glyphRect, &cover);
         QVariantMap fragment;
         fragment.insert(QStringLiteral("start"), start);
         fragment.insert(QStringLiteral("length"), end - start);
-        fragment.insert(QStringLiteral("text"), m_text.mid(start, end - start));
+        fragment.insert(QStringLiteral("text"), fragmentText);
         fragment.insert(QStringLiteral("x"), cover.x());
         fragment.insert(QStringLiteral("y"), cover.y());
         fragment.insert(QStringLiteral("width"), cover.width());
@@ -1452,9 +1463,11 @@ QVariantList OcrResultController::translatedLineMap(const QVariantList &lines,
     QVector<QRect> boxes;
     QVector<int> sourceStarts;
     QVector<int> sourceLengths;
+    QVector<bool> sourceRtl;
     boxes.reserve(lines.size());
     sourceStarts.reserve(lines.size());
     sourceLengths.reserve(lines.size());
+    sourceRtl.reserve(lines.size());
     for (const QVariant &value : lines) {
         const QVariantMap line = value.toMap();
         boxes.append(QRect(line.value(QStringLiteral("x")).toInt(),
@@ -1463,6 +1476,10 @@ QVariantList OcrResultController::translatedLineMap(const QVariantList &lines,
                            line.value(QStringLiteral("height")).toInt()));
         sourceStarts.append(line.value(QStringLiteral("start")).toInt());
         sourceLengths.append(line.value(QStringLiteral("length")).toInt());
+        // The lead edge of the box follows the SOURCE line, the text inside
+        // follows the answer. A Chinese source and a Chinese answer agree;
+        // a cross-direction pair still covers the source correctly.
+        sourceRtl.append(lineIsRtl(line.value(QStringLiteral("text")).toString()));
     }
     for (int i = 0; i < boxes.size(); ++i) {
         const QRect rect = boxes.at(i);
@@ -1473,7 +1490,8 @@ QVariantList OcrResultController::translatedLineMap(const QVariantList &lines,
         // the page's neighbours), so it must not be grown a second time. A
         // whole line is capped again at the glyphs just outside it, so a label
         // in another box on the same row is not painted over either.
-        QRect cover = padCover ? paddedCoverRect(rect, boxes, i) : rect;
+        QRect cover = padCover ? paddedCoverRect(rect, boxes, i, sourceRtl.value(i, false))
+                               : rect;
         if (padCover && !glyphs.isEmpty())
             capCoverAtGlyphs(glyphs, sourceStarts.at(i), sourceLengths.at(i), rect, &cover);
         const LineColors colors = sampleLineColors(source, cover);

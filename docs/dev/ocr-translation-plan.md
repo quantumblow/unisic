@@ -643,8 +643,10 @@ F8/Developer/strings/docs.
 - Acceptance refinements after the desktop pass: the partial note is ONE
   elided line (two stacked notes under the controls were easy to miss); a CJK
   cover is set 10% below the largest fitted size because those glyphs fill the
-  em box; and a cover is capped at the glyphs just outside the covered range,
-  not only at the next line box. Pinned by `cjkCoverSetsItselfSlightlySmaller`,
+  em box; a cover's lead edge stops at 2 px so the box starts on the source
+  text instead of a full sideways overshoot; and the trailing edge is capped
+  at the glyphs just outside the covered range, not only at the next line box.
+  Pinned by `cjkCoverSetsItselfSlightlySmaller`,
   `partialCoverStopsAtThePreviousWord` and `lineCoverStopsAtALabelGlyph`.
 - AppImage rebuilt from `dev` (tip `601c022`, with the one-line note, the CJK
   cover size and the glyph-level gutter cap) for the real-machine pass:
