@@ -867,7 +867,9 @@ word/partial-line overlay: F8 `translation partial overlay`,
 `devTestTranslationPartialOverlay` and ten `OcrResultTest` cases.
 
 **T6.7** i18n and website: native review of the Chinese and Polish strings added in
-this feature, and the `unisic-website` sync. The site repo is cloned beside this tree and
+this feature, and the `unisic-website` sync. The zh_CN OCR labels were reviewed on
+2026-11-13 and now read `OCR 区域`, `OCR（文字识别）` and `文本翻译`; the Polish
+review is still open. The site repo is cloned beside this tree and
 its layout is confirmed; it is release-scoped on purpose (`src/lib/release.ts` holds
 `VERSION` and `RELEASED`, `.github/workflows/follow-release.yml` bumps them, and its last
 commit before this round was "describe only what v0.8.9 ships"), so the OCR/PP-OCRv6 text
@@ -881,6 +883,17 @@ ships WITH 0.8.10 as one edit, version bump included. The files that need it the
   packs": the tiers, the ONNX Runtime, which scripts stay on Tesseract), `content/docs/editor.md`
   (the result window and Translate), `content/docs/installation.md` ("bundles ... OCR data").
 - `src/lib/components/Read.svelte` and the hero/feature copy if either names the OCR engine.
+
+**T6.8 (open, 2026-11-13)** Nix kit pin after the fork: `external/unisic-kit` now
+points at `quantumblow/unisic-kit` (`4b70707`), so `flake.nix` and `flake.lock` must
+move together with `nix flake update unisic-kit`; the Nix job is red until they do,
+because the three-pin check still sees `0ebe87b`. The AUR README's note that the kit
+commit must exist on `unisic/unisic-kit` moves to the fork too.
+
+**T6.9 (open)** README: add the capture overlay's OCR/Translate chips and the
+editor's labelled Translate button to the OCR feature paragraph, and add a
+Simplified Chinese README next to the English one (`README.zh_CN.md`, linked from
+the English README). The site copy stays T6.7.
 
 ## Order and dependencies
 
@@ -902,8 +915,9 @@ ships WITH 0.8.10 as one edit, version bump included. The files that need it the
    button, the result-window fixes, the tray rename and the Settings tidy-up
    landed before the T6.x release chores; the desktop acceptance pass is open.
 8. T6.x release chores before 0.8.10: T6.1 and T6.3 need a real machine, T6.7 waits
-   for every string to freeze. T6.2, T6.4, T6.5 and T6.6 are done (2026-11-13).
-9. M5 last, on its own.
+   for every string to freeze, T6.8 is the Nix fork pin and T6.9 the README plus
+   Chinese README. T6.2, T6.4, T6.5 and T6.6 are done (2026-11-13).
+9. M5 last, on its own; the next round is M5.
 
 Every milestone ends with: build, `ctest` (28 + new tests), F8 on a desktop, a
 rebuilt AppImage, a CHANGELOG entry under the current beta heading (EN/PL), and the
