@@ -263,6 +263,8 @@ void OcrResultTest::streamingFillsThePaneAndCancelStopsIt()
     result.translate();
     QVERIFY(result.translating());
     QCOMPARE(result.translationLineCount(), 3);
+    QCOMPARE(result.translationChunkCount(), 1);
+    QCOMPARE(result.translationChunkIndex(), 1);
     QVERIFY(!result.translationSelectionOnly());
     QVERIFY(result.translation().isEmpty());
 
@@ -347,8 +349,11 @@ void OcrResultTest::retriesAChunkOnceThenSucceeds()
     result.setResult(image, words, QString());
 
     result.translate();
+    QCOMPARE(result.translationChunkCount(), 1);
     QTRY_VERIFY_WITH_TIMEOUT(!result.translating(), 5000);
     QCOMPARE(result.translationError(), QString());
+    QCOMPARE(result.translationChunksDone(), 1);
+    QCOMPARE(result.translationChunkIndex(), 0);
     QCOMPARE(result.translation(), QStringLiteral("Translated part 1\nTranslated part 2"));
     QCOMPARE(result.translatedLines().size(), 2);
     QCOMPARE(server.bodies.size(), 2);
@@ -379,7 +384,11 @@ void OcrResultTest::partialTranslationNamesFailedLines()
     QCOMPARE(result.lines().size(), 45);
 
     result.translate();
+    QCOMPARE(result.translationChunkCount(), 2);
+    QCOMPARE(result.translationChunkIndex(), 1);
     QTRY_VERIFY_WITH_TIMEOUT(!result.translating(), 8000);
+    QCOMPARE(result.translationChunkIndex(), 0);
+    QCOMPARE(result.translationChunksDone(), 2);
     // The first 40 lines are translated and shown; lines 41-45 are named.
     QCOMPARE(result.translatedLines().size(), 40);
     QVERIFY(!result.translation().isEmpty());

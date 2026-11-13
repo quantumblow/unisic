@@ -350,10 +350,15 @@ Window {
                 UButton {
                     compact: true
                     variant: "tonal"
-                    text: App.ocrResult.translating ? qsTr("Translating…")
-                                                    : resultWindow.selectedLineCount > 0
-                                                      ? qsTr("Translate selection")
-                                                      : qsTr("Translate all")
+                    text: App.ocrResult.translating
+                          ? (App.ocrResult.translationChunkCount > 1
+                             ? qsTr("Translating… %1/%2")
+                                   .arg(Math.max(1, App.ocrResult.translationChunkIndex))
+                                   .arg(App.ocrResult.translationChunkCount)
+                             : qsTr("Translating…"))
+                          : resultWindow.selectedLineCount > 0
+                            ? qsTr("Translate selection")
+                            : qsTr("Translate all")
                     accessibleDescription: App.ocrResult.canTranslate
                                            ? (resultWindow.selectedLineCount > 0
                                               ? qsTr("Translate only the selected lines")
@@ -1049,6 +1054,12 @@ Window {
                         id: textFlick
                         anchors.fill: parent
                         anchors.margins: Theme.spacingM
+                        // The chunk progress footer sits on the pane's bottom
+                        // edge while a multi-request translation streams; the
+                        // text must not run under it.
+                        anchors.bottomMargin: App.ocrResult.translating
+                                              && App.ocrResult.translationChunkCount > 1
+                                              ? Theme.spacingM + 22 : Theme.spacingM
                         contentWidth: width
                         contentHeight: textEdit.contentHeight
                         clip: true
@@ -1089,6 +1100,54 @@ Window {
                             Accessible.role: Accessible.StaticText
                             Accessible.name: qsTr("Recognized text")
                             Accessible.description: qsTr("Selectable text. Ctrl and the mouse wheel change its size.")
+                        }
+                    }
+
+                    // Per-chunk state, inside the pane it describes: one dot
+                    // per request (done, in flight, still pending) plus the
+                    // count. Only shown when a page actually needs more than
+                    // one request, so a short result keeps its plain pane.
+                    Row {
+                        id: chunkProgress
+                        visible: App.ocrResult.translating
+                                 && App.ocrResult.translationChunkCount > 1
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        anchors.leftMargin: Theme.spacingM
+                        anchors.rightMargin: Theme.spacingM
+                        anchors.bottomMargin: Theme.spacingS
+                        height: 16
+                        spacing: 5
+
+                        Repeater {
+                            model: App.ocrResult.translationChunkCount
+
+                            Rectangle {
+                                required property int index
+                                width: 8
+                                height: 8
+                                radius: 4
+                                anchors.verticalCenter: parent.verticalCenter
+                                color: index < App.ocrResult.translationChunksDone
+                                       || index === App.ocrResult.translationChunkIndex - 1
+                                       ? Theme.accent : Theme.divider
+                                opacity: index < App.ocrResult.translationChunksDone ? 1
+                                         : index === App.ocrResult.translationChunkIndex - 1
+                                           ? 0.75 : 0.4
+                            }
+                        }
+
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            leftPadding: 4
+                            text: qsTr("%1 of %2 chunks")
+                                      .arg(App.ocrResult.translationChunksDone)
+                                      .arg(App.ocrResult.translationChunkCount)
+                            color: Theme.textSecondary
+                            font.pixelSize: Theme.fontS
+                            Accessible.role: Accessible.StaticText
+                            Accessible.name: text
                         }
                     }
                 }

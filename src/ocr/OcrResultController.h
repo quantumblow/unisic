@@ -13,6 +13,7 @@
 
 #include "OcrWord.h"
 
+#include <algorithm>
 #include <memory>
 
 class QTemporaryFile;
@@ -67,6 +68,12 @@ class OcrResultController : public QObject
     // sentence boundaries before being sent. The window tells the reader
     // instead of letting a split look like a truncation.
     Q_PROPERTY(int translationSplitLines READ translationSplitLines NOTIFY translationChanged)
+    // Progress while a line-by-line translation runs: how many requests the
+    // page needs, which one is in flight (1-based, 0 while idle/finishing) and
+    // how many have finished (successfully or not, so the dots never go back).
+    Q_PROPERTY(int translationChunkCount READ translationChunkCount NOTIFY translationChanged)
+    Q_PROPERTY(int translationChunkIndex READ translationChunkIndex NOTIFY translationChanged)
+    Q_PROPERTY(int translationChunksDone READ translationChunksDone NOTIFY translationChanged)
     // True when a successful answer is the recognized text itself (a service
     // that echoed the input, often for a language pair it handles badly). The
     // window says so instead of presenting the source as a translation.
@@ -96,6 +103,12 @@ public:
     bool translationSelectionOnly() const { return m_translationSelectionOnly; }
     int translationLineCount() const { return m_translationLineCount; }
     int translationSplitLines() const { return m_translationSplitLines; }
+    int translationChunkCount() const { return int(m_chunks.size()); }
+    int translationChunkIndex() const
+    {
+        return m_translating && m_chunkIndex < m_chunks.size() ? m_chunkIndex + 1 : 0;
+    }
+    int translationChunksDone() const { return std::min(m_chunkIndex, int(m_chunks.size())); }
     bool translationUnchanged() const { return m_translationUnchanged; }
     QString statusText() const { return m_statusText; }
     bool statusIsError() const { return m_statusIsError; }
