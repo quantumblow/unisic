@@ -2047,7 +2047,7 @@
     <message>
         <location line="-334"/>
         <source>OCR region…</source>
-        <translation>OCR 区域…</translation>
+        <translation>OCR 区域</translation>
     </message>
     <message>
         <location line="+340"/>
@@ -3216,7 +3216,7 @@
     <message>
         <location line="+484"/>
         <source>OCR</source>
-        <translation>OCR</translation>
+        <translation>OCR（文字识别）</translation>
     </message>
     <message>
         <location line="+1"/>
@@ -4713,7 +4713,7 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <location line="+1"/>
         <location line="+23"/>
         <source>Read text</source>
-        <translation>读取文本</translation>
+        <translation>OCR（文字识别）</translation>
     </message>
     <message>
         <location line="-22"/>
@@ -7854,7 +7854,7 @@ Applies to the next capture.</source>
     <message>
         <location line="+1071"/>
         <source>Text recognition (OCR)</source>
-        <translation>文字识别（OCR）</translation>
+        <translation>OCR（文字识别）</translation>
     </message>
     <message>
         <location line="+3"/>
@@ -8746,7 +8746,7 @@ Applies to the next capture.</source>
         <location line="-2919"/>
         <location line="+3129"/>
         <source>Translation</source>
-        <translation>译文</translation>
+        <translation>文本翻译</translation>
     </message>
     <message>
         <location line="-3127"/>
@@ -9502,7 +9502,7 @@ Applies to the next capture.</source>
     <message>
         <location line="+9"/>
         <source>Copy text (OCR)</source>
-        <translation>复制文本（OCR）</translation>
+        <translation>OCR（文字识别）</translation>
     </message>
     <message>
         <location line="+1"/>
@@ -10236,7 +10236,7 @@ Applies to the next capture.</source>
     <message>
         <location line="+1"/>
         <source>Read text</source>
-        <translation>读取文本</translation>
+        <translation>OCR（文字识别）</translation>
     </message>
     <message>
         <location line="+1"/>

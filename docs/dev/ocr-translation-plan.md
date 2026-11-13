@@ -732,6 +732,11 @@ and Translate live in the session that followed. The decisions, in one place:
 - **Naming.** Chips: "Copy text (OCR)" and "Translate". Overlay badge and
   confirm: "Read text". Editor buttons: "OCR" and "Translate". Tray: "OCR
   region…". Result, history and notification: "Copy text (OCR)".
+- **Naming follow-up (2026-11-13, user review of the Chinese UI).** The zh_CN
+  catalog alone drops the tray ellipsis ("OCR 区域"), names the capture and
+  editor OCR buttons and the Settings > General OCR section "OCR（文字识别）",
+  and calls the Settings > General translation section "文本翻译". The English
+  source strings and the other seven catalogs are unchanged.
 
 Work: the two chips plus the toolbar model and the Settings rows, the editor
 Translate button, the three result-window fixes, the tray rename, the Settings
