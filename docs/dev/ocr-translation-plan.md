@@ -279,8 +279,9 @@ and translation paths are settled.
 (`--share=network` is already in the finish-args; the code path is the one the
 container test covers).
 
-**T6.2** Debian: rebuild the full package on `debian:trixie` (the last
-`unisic-deb-build` attempt exited 1 and was never re-run).
+**T6.2 (done 2026-11-13)** Debian: rebuild the full package on `debian:trixie` (the last
+`unisic-deb-build` attempt exited 1 and was never re-run). The `Debian build check` job runs
+exactly that on every PR now, and it passed on #5 (7m35s) and #6 (7m47s).
 
 **T6.3** Windows: one real-machine pass (Tesseract path, translation window,
 `PaddleOcr::available()` false). CI compiles it; nobody has run it.
@@ -292,10 +293,13 @@ or medium download does not start over.
 ModelScope outage does not disable downloads; base URL, sizes and hashes change
 together.
 
-**T6.6** Tests: pull the tier memory table, the effective-tier rule and
+**T6.6 (partly done)** Tests: pull the tier memory table, the effective-tier rule and
 `MemAvailable` parsing into pure functions and cover them in QtTest; extend F8 and
 the Developer pane for every new path (save image, edit in editor, zoom, selection
-translation, streaming, retry, test connection).
+translation, streaming, retry, test connection). The routing half is done
+(`tierSupportsLanguages()`/`tierReadsJapanese()` are pure and pinned by
+`tests/PaddleOcrTest.cpp`); `runMiB`/`availableMiB` are still file-statics, and the
+"selected tier installed" branch of the effective-tier rule needs a fixture model.
 
 **T6.7** i18n and website: native review of the Chinese and Polish strings added in
 this feature, and the `unisic-website` sync. The site repo is cloned beside this tree and
@@ -365,3 +369,74 @@ F8 baseline with models present: the four OCR/translation steps PASS; with M1 th
 `paddleocr` step moves from SKIP to PASS on a clean profile, so the SKIP total
 drops by one. Treat the other FAILs as the known container gaps
 (`notes/ocr-paddle-translation.md` section 8) unless they change.
+
+## Manual verification pass (before the 0.8.10 release)
+
+Everything below needs a real desktop or the real machine; the container covers the
+logic and the windows only. Run it once M2/M3/M4 have landed, and add their
+acceptance lines to the Desktop block as each milestone closes. Tick a line only with
+the compositor or OS named next to it: "verified in a container" is not a tick here.
+
+### Desktop, Wayland (KDE Plasma first, one GNOME pass)
+
+- [ ] F8 in a dev build (`unisic --hotkey smoke-test` or F8): `paddleocr`,
+      `ocr result`, `translation` and `translation overlay` PASS, no new FAIL.
+- [ ] Region OCR (`Meta+Shift+T`) on a Chinese page and an English page: the result
+      window opens with the untouched capture at 100%, clickable lines, Copy all.
+- [ ] Translate against a local Ollama: line-by-line overlay, colours sampled from a
+      dark banner, Cancel mid-request, Original/Translation switch, Esc to close.
+- [ ] Settings > General > Text recognition on the AppImage/Flatpak: `Tiny (6 MB):
+      Included, in use` with no runtime download. Download Small, OCR a Japanese page
+      (Small in use) and a Chinese page.
+- [ ] Remove background in the editor: the runtime comes from the bundle on
+      AppImage/Flatpak and from the 11 MB download on deb/rpm/Arch; one run, one undo.
+- [ ] 100%, 125% and 150% display scale, plus a 1060x700 window: nothing clipped in the
+      OCR rows, the result window or the translation overlay.
+- [ ] M2 once landed: Save image and Copy image on both layers, Edit in editor, zoom to
+      200% on a 4K capture with a click hitting the right line, split ratio, an RTL target.
+- [ ] M3 once landed: selection-only translate, streaming with Cancel mid-stream, a
+      failing chunk with the partial result, the progress line.
+- [ ] M4 once landed: Test connection against a real endpoint, an export without secrets,
+      the first-send host notice.
+
+### Desktop, X11 session (best-effort second target)
+
+- [ ] Region OCR and the translation overlay behave as on Wayland.
+- [ ] No OCR row is greyed out that was not greyed out on Wayland.
+
+### Windows 11, real machine (T6.3, nobody has run it yet)
+
+- [ ] Build with MSYS2 UCRT64 (commands in PR #6); `ctest` runs the 27 tests.
+- [ ] Screenshots, editor, OCR result window and translation work on Tesseract.
+- [ ] Settings > General > Text recognition: the OCR rows are greyed out with the
+      Linux-only explanation (`PaddleOcr::available()` false).
+- [ ] `bin\unisic.exe` did not grow by 6.3 MB and `strings` finds no
+      `PP-OCRv6_det_tiny` (Windows embeds neither the model nor ONNX Runtime).
+- [ ] Remove background is absent from the editor's More menu.
+
+### Flatpak sandbox (T6.1)
+
+- [ ] Install the bundle; OCR works with no download at all (runtime bundled, tiny
+      embedded). Settings says `Tiny (6 MB): Included, in use`, no Download button.
+- [ ] Download Small inside the sandbox (the finish-args allow network) and OCR Japanese.
+- [ ] Remove background inside the sandbox (the 181 MB model download plus a run).
+
+### AppImage and portable tarball
+
+- [ ] On a desktop with no ONNX Runtime installed: Settings shows `ONNX Runtime 1.31.1`
+      and `Tiny (6 MB): Included, in use`, and there is no Download button.
+- [ ] Remove background asks only for the 181 MB model, never the runtime.
+- [ ] Tarball: unpack and run `./AppRun`, same result.
+
+### Native packages (deb, rpm, Arch)
+
+- [ ] OCR works out of the box on Tesseract, and PaddleOCR offers Download (11 MB).
+- [ ] After that download Tiny is in use; with Small downloaded, Japanese uses Paddle.
+- [ ] rpm/Arch with the distro's own `onnxruntime` package: no download is offered.
+
+### Release mechanics
+
+- [ ] `UNISIC_VERSION_STRING` bumped, the CHANGELOG heading matches it, the metainfo
+      `<release>` entry added, `follow-release.yml` bumps the site's `VERSION`, and the
+      site's OCR copy is updated (T6.7) in the same release.
+- [ ] `dist/SHA256SUMS` regenerated from the files the release actually publishes.
