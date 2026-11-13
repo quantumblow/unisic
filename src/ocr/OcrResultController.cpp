@@ -230,6 +230,12 @@ void OcrResultController::startTranslation(int start, int length)
         for (const int index : selected)
             m_translateLines.append(m_lines.at(index));
     }
+    m_translateLineSource = selected;
+    if (selected.isEmpty()) {
+        m_translateLineSource.reserve(m_lines.size());
+        for (int i = 0; i < m_lines.size(); ++i)
+            m_translateLineSource.append(i);
+    }
     m_translationLineCount = m_translateLines.size();
     m_sourceText = textOfLines(m_translateLines);
     // A result without line geometry (a QR payload) has nothing to map onto,
@@ -341,8 +347,11 @@ void OcrResultController::requestNextLineChunk(quint64 seq)
                 m_lastChunkError = error;
                 for (const int index : chunk) {
                     const int line = m_items.at(index).line;
-                    if (!m_failedLines.contains(line))
-                        m_failedLines.append(line);
+                    const int sourceLine = line >= 0 && line < m_translateLineSource.size()
+                                               ? m_translateLineSource.at(line)
+                                               : line;
+                    if (!m_failedLines.contains(sourceLine))
+                        m_failedLines.append(sourceLine);
                 }
                 std::sort(m_failedLines.begin(), m_failedLines.end());
                 ++m_chunkIndex;
@@ -624,6 +633,9 @@ void OcrResultController::setTranslationForPreview(const QStringList &translated
     m_lastChunkError.clear();
     m_wholeTextRetried = false;
     m_translateLines = m_lines;
+    m_translateLineSource.clear();
+    for (int i = 0; i < m_lines.size(); ++i)
+        m_translateLineSource.append(i);
     m_sourceText = m_text;
     m_translationSelectionOnly = false;
     m_translationLineCount = m_translateLines.size();
@@ -647,6 +659,7 @@ void OcrResultController::setResult(const QImage &image, const QVector<OcrWord> 
     setTranslatedLines({});
     m_translationUnchanged = false;
     m_translateLines.clear();
+    m_translateLineSource.clear();
     m_sourceText.clear();
     m_translationSelectionOnly = false;
     m_translationLineCount = 0;

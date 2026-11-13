@@ -397,6 +397,22 @@ void OcrResultTest::partialTranslationNamesFailedLines()
     QVERIFY(result.translationError().contains(QStringLiteral("server is down")));
     // Chunk one plus two attempts at the failing chunk, each a real request.
     QCOMPARE(server.bodies.size(), 3);
+
+    // The same failure for a selection names the SOURCE lines the reader
+    // counts, not the position inside the selection.
+    MockTranslationEndpoint selectedServer(MockTranslationEndpoint::FailSecondChunk);
+    QVERIFY(selectedServer.start());
+    Settings selectedSettings;
+    selectedSettings.setTranslationEndpoint(selectedServer.base());
+    selectedSettings.setTranslationModel(QStringLiteral("mock"));
+    OcrResultController selected(&selectedSettings);
+    selected.setResult(image, words, QString());
+    selected.translateRange(0, selected.text().size());
+    QVERIFY(selected.translationSelectionOnly());
+    QTRY_VERIFY_WITH_TIMEOUT(!selected.translating(), 8000);
+    QCOMPARE(selected.translatedLines().size(), 40);
+    QVERIFY2(selected.translationError().contains(QStringLiteral("Selected lines 41-45")),
+             qPrintable(selected.translationError()));
 }
 
 void OcrResultTest::translatedLinesIndexThePane()

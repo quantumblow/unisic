@@ -221,6 +221,10 @@ private:
     // these instead of m_lines/m_text, so a selection translation can never
     // place a cover on a line it did not send.
     QVariantList m_translateLines;
+    // m_translateLines[i] came from this line of m_lines. The whole text maps
+    // to itself; a selection maps to the source lines the reader counts, so a
+    // failed-chunk message can name them.
+    QVector<int> m_translateLineSource;
     QString m_sourceText;
     bool m_translationSelectionOnly = false;
     int m_translationLineCount = 0;
