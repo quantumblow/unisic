@@ -153,6 +153,19 @@ says "SKIP (models not downloaded)" and will now PASS everywhere.
   `.github/workflows/follow-release.yml`) and its OCR text describes Tesseract only, so the PaddleOCR/tiny wording
   belongs to the 0.8.10 release rather than this PR. T6.7 has the file list.
 
+**Follow-up (2026-11-13, user's decision): the AppImage and the tarball carry ONNX Runtime.** D1 decided where
+the model bytes live, but the runtime was still a Settings download on this channel, so "works out of the box"
+was only true in the Flatpak. `scripts/build-appimage.sh` and the `appimage` workflow now unpack the same pinned
+1.31.1 tarball into `usr/lib`, create the `libonnxruntime.so.1` link `QLibrary` asks for, ship its LICENSE and
+ThirdPartyNotices, and assert all three after linuxdeploy (which cannot discover a `dlopen()`ed library, so this
+is done by hand; linuxdeploy's own dependency pass then patches the file it finds in the AppDir). Measured:
+175,106,552 bytes (159.3 MB before the OCR work, 165.0 MB with the models only), sha256
+`87254d2a0723c89ba80af92eca4117cee37d37d796180d6ec7486d9af462bc5e`; the extracted bundle's log says
+`paddleocr: ONNX Runtime 1.31.1 from libonnxruntime.so.1`, Settings shows `Tiny (6 MB): Included, in use` with no
+Download button and only Small/Medium offered, and background removal asks for its model only. deb, rpm, Arch
+and Nix keep the system package or the 11 MB download. The manual pass at the end of this document checks it on
+each channel.
+
 **Risk worth writing down:** tiny misreads Han glyphs that small gets right
 (素材库 came back as 索材库 in the measurements), so "works out of the box" must
 not read as "best result". The changelog and the Settings help both say Small is

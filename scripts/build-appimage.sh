@@ -217,6 +217,35 @@ for lang in eng pol osd; do
     cp "$data" "$APPDIR/usr/share/tessdata/"
 done
 
+# --- 7b. ONNX Runtime, so this channel really needs no download --------------
+# Unisic dlopen()s the runtime, so it is never a link dependency and linuxdeploy
+# cannot discover it from the binary the way it discovers Qt and the KDE libs.
+# The AppImage is the channel a newcomer starts with, so it carries the runtime:
+# the same pinned 1.31.1 tarball the Settings download and the Flatpak module
+# use, one copy for both background removal (needs 1.25+) and PP-OCRv6 (1.17+).
+# Deployed by hand rather than with `--library`: its only NEEDED entries are
+# glibc/libstdc++, which the host must supply anyway.
+ORT_VERSION=1.31.1
+ORT_SHA=c849e36a1ef3e22d4ff217b9d1ce4a3cf5b9467b975610913ae959ad5b16bdc9
+ORT_TARBALL="$TOOLS/onnxruntime-linux-x64-$ORT_VERSION.tgz"
+ORT_DIR="$TOOLS/onnxruntime-linux-x64-$ORT_VERSION"
+if [ ! -f "$ORT_TARBALL" ] || [ "$(sha256sum "$ORT_TARBALL" | cut -d' ' -f1)" != "$ORT_SHA" ]; then
+    curl -fL -o "$ORT_TARBALL" \
+        "https://github.com/microsoft/onnxruntime/releases/download/v$ORT_VERSION/onnxruntime-linux-x64-$ORT_VERSION.tgz"
+fi
+[ "$(sha256sum "$ORT_TARBALL" | cut -d' ' -f1)" = "$ORT_SHA" ] \
+    || { echo "ERROR: the ONNX Runtime tarball does not match its pin" >&2; exit 1; }
+rm -rf "$ORT_DIR"
+tar xzf "$ORT_TARBALL" -C "$TOOLS"
+install -Dm755 "$ORT_DIR/lib/libonnxruntime.so.$ORT_VERSION" \
+    "$APPDIR/usr/lib/libonnxruntime.so.$ORT_VERSION"
+# QLibrary asks for libonnxruntime.so.1 (the SONAME); the tarball ships only the
+# versioned name, exactly like the Flatpak module creates this link.
+ln -sf "libonnxruntime.so.$ORT_VERSION" "$APPDIR/usr/lib/libonnxruntime.so.1"
+install -Dm644 "$ORT_DIR/LICENSE" "$APPDIR/usr/share/licenses/onnxruntime/LICENSE"
+install -Dm644 "$ORT_DIR/ThirdPartyNotices.txt" \
+    "$APPDIR/usr/share/licenses/onnxruntime/ThirdPartyNotices.txt"
+
 # --- 8. linuxdeploy -> AppImage ----------------------------------------------
 version_line="$(grep -m1 '^set(UNISIC_VERSION_STRING' "$SRC/CMakeLists.txt" || true)"
 if [ -n "$version_line" ]; then
@@ -303,6 +332,11 @@ test -f "$APPDIR/usr/qml/QtMultimedia/libquickmultimediaplugin.so" \
     || { echo "ERROR: QtMultimedia QML plugin was not deployed" >&2; exit 1; }
 test -f "$APPDIR/usr/plugins/multimedia/libffmpegmediaplugin.so" \
     || { echo "ERROR: QtMultimedia ffmpeg backend was not deployed" >&2; exit 1; }
+# ONNX Runtime is dlopen()ed, so the linker can never prove it survived.
+test -f "$APPDIR/usr/lib/libonnxruntime.so.1.31.1" \
+    || { echo "ERROR: ONNX Runtime went missing from the AppDir" >&2; exit 1; }
+test -e "$APPDIR/usr/lib/libonnxruntime.so.1" \
+    || { echo "ERROR: the libonnxruntime.so.1 symlink is missing" >&2; exit 1; }
 for tool in ffmpeg ffprobe wl-copy curl zip pw-record pw-dump pw-play grim; do
     test -x "$APPDIR/usr/bin/$tool" \
         || { echo "ERROR: $tool went missing from the AppDir" >&2; exit 1; }

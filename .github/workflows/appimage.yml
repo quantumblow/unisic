@@ -214,6 +214,28 @@ jobs:
           done
           ls -la AppDir/usr/share/tessdata
 
+          # ONNX Runtime, so this channel needs no download at all: background
+          # removal and PP-OCRv6 both dlopen() it, so linuxdeploy cannot find
+          # it from the binary. Same pinned 1.31.1 tarball as the Flatpak
+          # module and the Settings download; only 1.25+ has the DeformConv
+          # kernel background removal needs, PP-OCRv6 needs 1.17+.
+          ort_version=1.31.1
+          ort_sha=c849e36a1ef3e22d4ff217b9d1ce4a3cf5b9467b975610913ae959ad5b16bdc9
+          mkdir -p tools
+          curl -fL -o tools/onnxruntime.tgz \
+            "https://github.com/microsoft/onnxruntime/releases/download/v${ort_version}/onnxruntime-linux-x64-${ort_version}.tgz"
+          echo "${ort_sha}  tools/onnxruntime.tgz" | sha256sum -c -
+          tar xzf tools/onnxruntime.tgz -C tools
+          install -Dm755 "tools/onnxruntime-linux-x64-${ort_version}/lib/libonnxruntime.so.${ort_version}" \
+            "AppDir/usr/lib/libonnxruntime.so.${ort_version}"
+          # QLibrary asks for libonnxruntime.so.1 (the SONAME); the tarball only
+          # carries the versioned name, like the Flatpak module's own link.
+          ln -sf "libonnxruntime.so.${ort_version}" AppDir/usr/lib/libonnxruntime.so.1
+          install -Dm644 "tools/onnxruntime-linux-x64-${ort_version}/LICENSE" \
+            AppDir/usr/share/licenses/onnxruntime/LICENSE
+          install -Dm644 "tools/onnxruntime-linux-x64-${ort_version}/ThirdPartyNotices.txt" \
+            AppDir/usr/share/licenses/onnxruntime/ThirdPartyNotices.txt
+
       - name: Build AppImage
         env:
           APPIMAGE_EXTRACT_AND_RUN: 1
@@ -334,6 +356,11 @@ jobs:
             || { echo "::error::QtMultimedia QML plugin was not deployed"; exit 1; }
           test -f AppDir/usr/plugins/multimedia/libffmpegmediaplugin.so \
             || { echo "::error::QtMultimedia ffmpeg backend was not deployed"; exit 1; }
+          # dlopen()ed, so the linker can never prove the runtime survived.
+          test -f AppDir/usr/lib/libonnxruntime.so.1.31.1 \
+            || { echo "::error::ONNX Runtime went missing from the AppDir"; exit 1; }
+          test -e AppDir/usr/lib/libonnxruntime.so.1 \
+            || { echo "::error::the libonnxruntime.so.1 symlink is missing"; exit 1; }
           for tool in ffmpeg ffprobe wl-copy curl zip pw-record pw-dump pw-play grim; do
             test -x "AppDir/usr/bin/$tool" \
               || { echo "::error::$tool went missing from the AppDir"; exit 1; }
@@ -366,8 +393,9 @@ jobs:
               ./AppRun
 
           Qt, the KDE libraries, QtMultimedia, OCR with English/Polish/script
-          data, ffmpeg, curl, zip, wl-copy, grim and the PipeWire command-line
-          tools are bundled. No FUSE and no package manager are needed.
+          data, ONNX Runtime (background removal and PaddleOCR), ffmpeg, curl,
+          zip, wl-copy, grim and the PipeWire command-line tools are bundled.
+          No FUSE and no package manager are needed.
 
           The desktop still supplies its platform services: a running PipeWire
           service and xdg-desktop-portal with the backend for KDE, GNOME or
