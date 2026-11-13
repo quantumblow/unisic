@@ -319,6 +319,11 @@ per-chunk state in the pane when streaming and chunks are combined.
   fallback, so the desktop row below stays open.
 - All 14 new strings are translated in the eight catalogs; CHANGELOG EN/PL has
   the M3 entry.
+- AppImage rebuilt from the merged `dev` for the real-machine pass: 175,172,088
+  bytes, sha256
+  `87a9b1634ea0ff2fd751cd3d842b087ccb1b8c2913cc128a58c3c3312ef4a45d`, 10 gates ON,
+  the new strings are in the binary, and it starts under Xvfb with an isolated
+  profile.
 
 ## M4. Settings, privacy, secrets (1-2 days)
 
