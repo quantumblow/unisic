@@ -100,6 +100,19 @@ class OcrResultController : public QObject
     Q_PROPERTY(bool statusIsError READ statusIsError NOTIFY statusTextChanged)
 
 public:
+    // One recognized glyph in the text the pane shows. `start`/`length` index
+    // that string, `rect` is the glyph's box in image pixels, `line` indexes
+    // `lines()` and `spaceBefore` records the word boundary the engine marked.
+    // A word or partial-line selection is resolved against this list, so the
+    // overlay can cover exactly the glyphs the reader selected.
+    struct Glyph {
+        int start = 0;
+        int length = 0;
+        QRect rect;
+        int line = 0;
+        bool spaceBefore = false;
+    };
+
     explicit OcrResultController(Settings *settings = nullptr, QObject *parent = nullptr);
     ~OcrResultController() override;
 
@@ -107,6 +120,10 @@ public:
     QSize imageSize() const { return m_image.size(); }
     QString text() const { return m_text; }
     QVariantList lines() const { return m_lines; }
+    // Every recognized glyph, in reading order; empty for a payload without
+    // geometry (a QR code). Built in the same pass as `text`, so the two can
+    // never describe different strings.
+    QVector<Glyph> glyphs() const { return m_glyphs; }
     QImage image() const { return m_image; }
     QString translation() const { return m_translation; }
     QVariantList translatedLines() const { return m_translatedLines; }
@@ -249,6 +266,7 @@ private:
     QUrl m_source;
     QString m_text;
     QVariantList m_lines;
+    QVector<Glyph> m_glyphs;
     // Parallel to m_lines / m_translatedLines: the hit-test rects, so a mouse
     // move does not convert a whole QVariantList of maps.
     QVector<QRect> m_lineRects;

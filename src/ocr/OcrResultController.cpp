@@ -986,6 +986,7 @@ void OcrResultController::setResult(const QImage &image, const QVector<OcrWord> 
     m_image = image;
     m_lines.clear();
     m_lineRects.clear();
+    m_glyphs.clear();
     if (words.isEmpty()) {
         m_text = text;
     } else {
@@ -996,13 +997,19 @@ void OcrResultController::setResult(const QImage &image, const QVector<OcrWord> 
         QString lineText;
         QRect lineRect;
         int currentLine = -1;
+        // A glyph's range is relative to its line until flush() knows where
+        // that line starts in `built`.
+        QVector<Glyph> lineGlyphs;
         const auto flush = [&] {
-            if (currentLine < 0 || lineText.isEmpty())
+            if (currentLine < 0 || lineText.isEmpty()) {
+                lineGlyphs.clear();
                 return;
+            }
             if (!built.isEmpty())
                 built += QLatin1Char('\n');
             const int start = int(built.size());
             built += lineText;
+            const int lineIndex = int(m_lines.size());
             QVariantMap line;
             line.insert(QStringLiteral("text"), lineText);
             line.insert(QStringLiteral("x"), lineRect.x());
@@ -1013,6 +1020,12 @@ void OcrResultController::setResult(const QImage &image, const QVector<OcrWord> 
             line.insert(QStringLiteral("length"), lineText.size());
             m_lines.append(line);
             m_lineRects.append(lineRect);
+            for (Glyph glyph : lineGlyphs) {
+                glyph.start += start;
+                glyph.line = lineIndex;
+                m_glyphs.append(glyph);
+            }
+            lineGlyphs.clear();
         };
         for (const OcrWord &w : words) {
             if (w.line != currentLine) {
@@ -1023,6 +1036,12 @@ void OcrResultController::setResult(const QImage &image, const QVector<OcrWord> 
             }
             if (!lineText.isEmpty() && w.spaceBefore)
                 lineText += QLatin1Char(' ');
+            Glyph glyph;
+            glyph.start = int(lineText.size());
+            glyph.length = int(w.text.size());
+            glyph.rect = w.rect;
+            glyph.spaceBefore = w.spaceBefore;
+            lineGlyphs.append(glyph);
             lineText += w.text;
             lineRect = lineRect.united(w.rect);
         }

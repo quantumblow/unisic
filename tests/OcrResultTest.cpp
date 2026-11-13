@@ -109,6 +109,7 @@ class OcrResultTest : public QObject
 private slots:
     void initTestCase();
     void rangesMatchTheText();
+    void glyphRangesIndexTheText();
     void payloadWithoutGeometry();
     void selectionMapsToWholeLines();
     void streamingFillsThePaneAndCancelStopsIt();
@@ -179,6 +180,83 @@ void OcrResultTest::rangesMatchTheText()
     QCOMPARE(second.value(QStringLiteral("height")).toInt(), 10);
     QVERIFY(!result.imageSource().isEmpty());
     QCOMPARE(result.imageSize(), QSize(40, 40));
+}
+
+// M4.6: a word or partial-line overlay is resolved against the glyph list, so
+// every glyph's [start, length) range has to be exactly its own glyph in the
+// string the pane shows - including the spaces the engine marked and the
+// newline between two lines. Everything else (a cover, a callout anchor) is
+// read off this list, so a drift here would put a word's translation on its
+// neighbour.
+void OcrResultTest::glyphRangesIndexTheText()
+{
+    struct Expected {
+        int line;
+        const char *text;
+        QRect rect;
+        bool space;
+    };
+    const QVector<Expected> expected{
+        {0, "H", QRect(0, 0, 10, 10), false},
+        {0, "i", QRect(10, 0, 10, 10), false},
+        {0, "t", QRect(24, 0, 10, 10), true},
+        {0, "h", QRect(34, 0, 10, 10), false},
+        {0, "e", QRect(44, 0, 10, 10), false},
+        {1, "Y", QRect(0, 20, 10, 10), false},
+        {1, "o", QRect(10, 20, 10, 10), true},
+    };
+    QVector<OcrWord> words;
+    for (const Expected &e : expected) {
+        OcrWord word;
+        word.line = e.line;
+        word.text = QString::fromLatin1(e.text);
+        word.rect = e.rect;
+        word.spaceBefore = e.space;
+        words.append(word);
+    }
+
+    OcrResultController result;
+    const QImage image(40, 40, QImage::Format_RGB32);
+    // The passed text is deliberately different: with glyphs present the
+    // controller rebuilds it, and the ranges index that rebuilt string.
+    result.setResult(image, words, QStringLiteral("ignored"));
+    QCOMPARE(result.text(), QStringLiteral("Hi the\nY o"));
+
+    const QVector<OcrResultController::Glyph> glyphs = result.glyphs();
+    QCOMPARE(glyphs.size(), expected.size());
+    const QVariantList lines = result.lines();
+    QCOMPARE(lines.size(), 2);
+    int previousEnd = 0;
+    for (int i = 0; i < glyphs.size(); ++i) {
+        const OcrResultController::Glyph &glyph = glyphs.at(i);
+        const Expected &want = expected.at(i);
+        QVERIFY(glyph.start >= previousEnd);
+        QVERIFY(glyph.length > 0);
+        QVERIFY(glyph.start + glyph.length <= result.text().size());
+        QCOMPARE(result.text().mid(glyph.start, glyph.length),
+                 QString::fromLatin1(want.text));
+        QCOMPARE(glyph.rect, want.rect);
+        QCOMPARE(glyph.line, want.line);
+        QCOMPARE(glyph.spaceBefore, want.space);
+        // The space the engine marked really is the character before it.
+        if (glyph.spaceBefore)
+            QCOMPARE(result.text().at(glyph.start - 1), QLatin1Char(' '));
+        // Its line's range contains it, so a selection can map a glyph to a
+        // whole line without a second pass.
+        const QVariantMap line = lines.at(want.line).toMap();
+        const int lineStart = line.value(QStringLiteral("start")).toInt();
+        const int lineLength = line.value(QStringLiteral("length")).toInt();
+        QVERIFY(glyph.start >= lineStart);
+        QVERIFY(glyph.start + glyph.length <= lineStart + lineLength);
+        QVERIFY(line.contains(QStringLiteral("x")));
+        previousEnd = glyph.start + glyph.length;
+    }
+
+    // A payload without geometry has no glyphs either; nothing may index a
+    // string that has no boxes behind it.
+    OcrResultController payload;
+    payload.setResult(image, {}, QStringLiteral("https://example.test/abc"));
+    QVERIFY(payload.glyphs().isEmpty());
 }
 
 void OcrResultTest::payloadWithoutGeometry()
