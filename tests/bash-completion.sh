@@ -6,6 +6,30 @@ binary=$1
 source "$2"
 # compopt only works inside a real completion; the PATH case calls it.
 compopt() { :; }
+# compgen is a programmable-completion builtin, and a minimal bash (the Nix
+# check sandbox) does not carry it at all: the script then dies with "compgen:
+# command not found" and every case fails. The shipped script calls it exactly
+# once per value type, as `compgen -W <words> -- <prefix>`, so fall back to a
+# plain prefix filter only where the builtin is missing. Where it exists it
+# stays under test.
+if ! type compgen >/dev/null 2>&1; then
+    compgen()
+    {
+        local words= prefix=
+        while (( $# )); do
+            case $1 in
+                -W) words=${2-}; shift 2 ;;
+                --) prefix=${2-}; shift; break ;;
+                *) return 1 ;;
+            esac
+        done
+        local w
+        for w in $words; do
+            [[ $w == "$prefix"* ]] || continue
+            printf '%s\n' "$w"
+        done
+    }
+fi
 
 fails=0
 check()
