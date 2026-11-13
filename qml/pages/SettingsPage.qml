@@ -4593,6 +4593,7 @@ Item {
                         UButton { compact: true; variant: "tonal"; text: qsTr("Test connection"); onClicked: App.devTestTranslationConnection() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("Translation privacy"); onClicked: App.devTestTranslationPrivacy() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("Translation selection"); onClicked: App.devTestTranslationSelection() }
+                        UButton { compact: true; variant: "tonal"; text: qsTr("Translation partial overlay"); onClicked: App.devTestTranslationPartialOverlay() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("OCR highlight + redact"); onClicked: App.devTestOcrHighlight() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("Auto-redact pattern"); onClicked: App.devTestOcrRedactPattern() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("Style presets"); onClicked: App.devTestStylePresets() }

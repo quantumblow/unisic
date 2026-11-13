@@ -439,6 +439,11 @@ public:
     // M4.5: the line-box multi-selection and the exact-text (word/partial line)
     // translation path.
     Q_INVOKABLE void devTestTranslationSelection();
+    // M4.6: the same word/partial-line path on the picture. The first press
+    // opens the window with a short answer (cover), the next with a long one
+    // (callout), so both presentations can be checked by eye without an
+    // endpoint.
+    Q_INVOKABLE void devTestTranslationPartialOverlay();
     Q_INVOKABLE void devTestPaddleOcr();
     Q_INVOKABLE void devTestClipboardPaste();
     Q_INVOKABLE void devTestCaptureDelay();
@@ -1290,6 +1295,9 @@ private:
     ScrollCaptureController *m_scrollCapture = nullptr;
     OcrEngine *m_ocr = nullptr;
     OcrResultController *m_ocrResult = nullptr;
+    // Which presentation the M4.6 Developer preview opens next: false = cover,
+    // true = callout. Toggled on each press so one button shows both.
+    bool m_partialPreviewLong = false;
     // A Translator of its own for Settings' Test connection, so the probe can
     // never cancel a translation the result window has in flight.
     Translator *m_translationProbe = nullptr;

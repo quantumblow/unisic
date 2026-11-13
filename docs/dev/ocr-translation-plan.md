@@ -497,9 +497,12 @@ hit-testing inside the text), and a word request carries its line as context.
   ON, the new source strings are in the binary, `--version` answers 0.8.9, and
   it starts under an isolated offscreen profile and exits cleanly on SIGTERM.
 
-## M4.6. Word and partial-line translation on the picture (hybrid) - DESIGNED 2026-11-13, NEXT ROUND
+## M4.6. Word and partial-line translation on the picture (hybrid) - done 2026-11-13
 
-Status: design settled, implementation not started. The next session starts here.
+Status: implemented 2026-11-13 on `feat/ocr-m4.6`. The controller half (glyphs,
+fragments, cover/callout decision, screen-only composite), the QML callout and
+both notes are in; `ctest` is green. The desktop and AppImage passes below are
+still open and are not claimed as done.
 
 Goal: after M4.5 a double-clicked word (or any partial-line selection) translates
 into the pane only. The answer should also appear over the picture: replace the
@@ -617,9 +620,29 @@ seam), `qml/OcrResultWindow.qml` (callout, notes, `screenOnly`), `src/AppContext
 decision plus the composite flag, 1 day callout QML and streaming, 0.5-1 day
 F8/Developer/strings/docs.
 
-### Start here
+### Done in this round (2026-11-13)
 
-Branch `feat/ocr-m4.6` from local `dev` at this commit. Read
+- `setResult()` builds `m_glyphs` in the same pass as the text; the glyph range
+  test pins every glyph against `m_text`, its line and its `spaceBefore`.
+- `startPartialTranslation(start, length)` + `rebuildPartialFragments()` produce
+  one padded, neighbour-capped fragment per touched line; `applyPartialAnswer()`
+  is the one decision (`pane` / `cover` / `callout`), the cover is `screenOnly`
+  and `composeOverlay()` skips it. Cancel, failure, a new result and a
+  whole-line translation clear the state.
+- `qml/OcrResultWindow.qml` draws the callout in `imagePane` from `renderScale`
+  and the holder offset, and reports the cover/callout and screen-only notes;
+  the "service did not translate line by line" note no longer fires for a
+  partial answer.
+- `ctest` 28/28 binaries; `OcrResultTest` 29 cases (6 new M4.6 cases), F8
+  `translation partial overlay` and `devTestTranslationPartialOverlay` wired,
+  eight catalogs filled, CHANGELOG EN/PL under 0.8.10 and the `src/ocr/`
+  architecture note updated.
+- Still open for the release pass: F8 on a desktop, the manual acceptance lines
+  below, and the rebuilt AppImage.
+
+### Start here (historical)
+
+Branch `feat/ocr-m4.6` from local `dev` at the design commit. Read
 `OcrResultController::setResult()` (the glyph rebuild),
 `startPartialTranslation()` and `translatedLineMap()` first. First commit:
 `m_glyphs` plus a test that every glyph range indexes `m_text`; then the fragment
@@ -682,7 +705,9 @@ translation, streaming, retry and partial results: F8 `translation stream`,
 wired Test connection, the first-send privacy notice and the export-secrets rule:
 F8 `translation connection`, `translation privacy`, `settings secrets` and the
 Developer equivalents. M4.5 wired the line-box set and the exact-text path: F8
-`translation selection` and `devTestTranslationSelection`.
+`translation selection` and `devTestTranslationSelection`. M4.6 wired the
+word/partial-line overlay: F8 `translation partial overlay`,
+`devTestTranslationPartialOverlay` and six `OcrResultTest` cases.
 
 **T6.7** i18n and website: native review of the Chinese and Polish strings added in
 this feature, and the `unisic-website` sync. The site repo is cloned beside this tree and
@@ -711,8 +736,10 @@ ships WITH 0.8.10 as one edit, version bump included. The files that need it the
 4. M4 after M3 (the Test connection button uses the same request path as Translate).
 5. M4.5 after M4: it touches only the result window and the controller, and the
    X11 pass showed both gaps, so do not fold it into M4's settings/privacy work.
-6. M4.6 next: the hybrid word/partial-line overlay, designed above. It builds on
-   the same result-window/controller boundary and is the next coding round.
+6. M4.6 (landed 2026-11-13): the hybrid word/partial-line overlay, designed
+   above. It built on the same result-window/controller boundary; only the
+   release pass (desktop F8, the accepted manual lines, a rebuilt AppImage) is
+   still open.
 7. T6.x release chores (T6.1, T6.3, T6.4, T6.5, T6.6, T6.7) after M4.6 and before
    0.8.10; T6.2 is already done.
 8. M5 last, on its own.
@@ -798,6 +825,12 @@ the compositor or OS named next to it: "verified in a container" is not a tick h
       double-click a word and Translate sends only that word (shown in the pane, no cover
       over its line), a whole-line selection still paints covers, and Esc/Ctrl+A clear or
       extend the set.
+- [ ] M4.6 (landed 2026-11-13, desktop pass still open): double-click a word and
+      Translate paints a readable answer over those glyphs and puts a long one in a
+      callout anchored to them; a selection crossing a line boundary uses one callout;
+      Save image and Copy image contain no word cover or callout while whole-line covers
+      are still saved; zoom, pan, Original/Translation and a new result leave no stale
+      overlay.
 
 ### Desktop, X11 session (best-effort second target)
 

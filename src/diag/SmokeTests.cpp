@@ -3509,6 +3509,96 @@ void AppContext::devTestTranslationSelection()
               !result.startsWith(QLatin1String("PASS")));
 }
 
+// M4.6: a word or partial-line answer on the picture. No endpoint: the preview
+// seam applies a fixed answer, and the check reads the presentation decision,
+// the screen-only cover and the callout it produced.
+static QString translationPartialOverlayCheck()
+{
+    QImage image(400, 160, QImage::Format_RGB32);
+    image.fill(QColor(250, 250, 245));
+    const QStringList texts{QStringLiteral("One two three"), QStringLiteral("Second line")};
+    const QVector<QRect> boxes{QRect(20, 16, 340, 28), QRect(20, 70, 340, 28)};
+    QVector<OcrWord> words;
+    for (int line = 0; line < texts.size(); ++line) {
+        const QString &text = texts.at(line);
+        const QRect box = boxes.at(line);
+        const int step = qMax(1, box.width() / qMax(1, text.size()));
+        int x = box.x();
+        bool firstGlyph = true;
+        for (const QString &token : text.split(QLatin1Char(' '))) {
+            bool firstOfWord = true;
+            for (const QChar c : token) {
+                OcrWord word;
+                word.line = line;
+                word.text = QString(c);
+                word.rect = QRect(x, box.y(), step, box.height());
+                word.spaceBefore = firstOfWord && !firstGlyph;
+                firstGlyph = false;
+                firstOfWord = false;
+                words.append(word);
+                x += step;
+            }
+            x += step; // the space between two words is not a glyph
+        }
+    }
+
+    OcrResultController result;
+    result.setResult(image, words, QString());
+    const QString text = result.text();
+    if (text != QLatin1String("One two three\nSecond line"))
+        return QStringLiteral("FAIL (synthetic text)");
+    // The glyph list is the index every overlay rect is resolved against.
+    if (result.glyphs().size() != words.size())
+        return QStringLiteral("FAIL (glyph count)");
+    for (const OcrResultController::Glyph &glyph : result.glyphs()) {
+        if (glyph.start < 0 || glyph.length <= 0
+            || glyph.start + glyph.length > text.size()
+            || text.mid(glyph.start, glyph.length).isEmpty())
+            return QStringLiteral("FAIL (a glyph range does not index the text)");
+    }
+
+    const int start = text.indexOf(QLatin1String("two"));
+    if (start < 0)
+        return QStringLiteral("FAIL (fixture word)");
+    result.setPartialTranslationForPreview(start, 3, QStringLiteral("dwa"));
+    if (result.partialPresentation() != QLatin1String("cover"))
+        return QStringLiteral("FAIL (a short answer did not cover the word)");
+    const QVariantList covers = result.translatedLines();
+    if (covers.size() != 1
+        || !covers.first().toMap().value(QStringLiteral("screenOnly")).toBool())
+        return QStringLiteral("FAIL (the word cover is not one screen-only entry)");
+    if (OcrResultController::composeOverlay(image, covers) != image)
+        return QStringLiteral("FAIL (the word cover reached the saved picture)");
+    if (!result.partialCallout().isEmpty())
+        return QStringLiteral("FAIL (a cover left a callout behind)");
+
+    result.setPartialTranslationForPreview(
+        start, 3, QStringLiteral("A translation far too long to read on one short word"));
+    if (result.partialPresentation() != QLatin1String("callout")
+        || !result.translatedLines().isEmpty())
+        return QStringLiteral("FAIL (a long answer did not use the callout)");
+    const QVariantMap callout = result.partialCallout();
+    if (callout.value(QStringLiteral("source")).toString() != QLatin1String("two")
+        || callout.value(QStringLiteral("translation")).toString().isEmpty())
+        return QStringLiteral("FAIL (callout content)");
+    if (callout.value(QStringLiteral("width")).toInt() <= 0
+        || callout.value(QStringLiteral("height")).toInt() <= 0)
+        return QStringLiteral("FAIL (callout anchor)");
+
+    // Crossing a line boundary: one callout, never a cover split across lines.
+    const int end = text.indexOf(QLatin1String("Second")) + 6;
+    result.setPartialTranslationForPreview(start, end - start, QStringLiteral("dwa druga"));
+    if (result.partialFragments().size() != 2
+        || result.partialPresentation() != QLatin1String("callout")
+        || !result.translatedLines().isEmpty())
+        return QStringLiteral("FAIL (a multi-line selection did not use one callout)");
+    if (result.partialCallout().value(QStringLiteral("source")).toString()
+        != QLatin1String("two three\nSecond"))
+        return QStringLiteral("FAIL (multi-line callout source)");
+
+    return QStringLiteral("PASS (glyph ranges, screen-only cover, callout, multi-line)");
+}
+
 // ---- the result window's picture (composite, fitted text, hit test) --------
 //
 // Its own synthetic capture, not ocrBoxTestImage(): these checks are about the
@@ -3543,6 +3633,68 @@ static QVariantList ocrResultPictureLines()
                                  {QStringLiteral("length"), texts.at(i).size()}});
     }
     return lines;
+}
+
+// The same four lines one glyph at a time, the way both OCR engines emit them:
+// a partial selection then resolves to a real word rect instead of the whole
+// line, which is what the M4.6 preview has to show by eye.
+static QVector<OcrWord> ocrResultPictureWords()
+{
+    const QVariantList lines = ocrResultPictureLines();
+    QVector<OcrWord> words;
+    for (int line = 0; line < lines.size(); ++line) {
+        const QVariantMap entry = lines.at(line).toMap();
+        const QString text = entry.value(QStringLiteral("text")).toString();
+        const QRect box(entry.value(QStringLiteral("x")).toInt(),
+                        entry.value(QStringLiteral("y")).toInt(),
+                        entry.value(QStringLiteral("width")).toInt(),
+                        entry.value(QStringLiteral("height")).toInt());
+        const int step = qMax(1, box.width() / qMax(1, text.size()));
+        int x = box.x();
+        bool firstGlyph = true;
+        for (const QString &token : text.split(QLatin1Char(' '))) {
+            bool firstOfWord = true;
+            for (const QChar c : token) {
+                OcrWord word;
+                word.line = line;
+                word.text = QString(c);
+                word.rect = QRect(x, box.y(), step, box.height());
+                word.spaceBefore = firstOfWord && !firstGlyph;
+                firstGlyph = false;
+                firstOfWord = false;
+                words.append(word);
+                x += step;
+            }
+            x += step; // the space between two words is not a glyph
+        }
+    }
+    return words;
+}
+
+void AppContext::devTestTranslationPartialOverlay()
+{
+    if (!devBuild())
+        return;
+    // A synthetic result with per-glyph boxes, so a word's anchor is the word
+    // and not its line. The first press opens the window with a short answer
+    // (a cover), the next with a long one (a callout).
+    const QImage image = ocrResultPictureImage();
+    m_ocrResult->setResult(image, ocrResultPictureWords(), QString());
+    const int start = m_ocrResult->text().indexOf(QStringLiteral("the"));
+    if (start < 0) {
+        showToast(tr("Dev: translation partial overlay: FAIL (fixture word)"), true);
+        return;
+    }
+    const bool longAnswer = m_partialPreviewLong;
+    m_partialPreviewLong = !m_partialPreviewLong;
+    m_ocrResult->setPartialTranslationForPreview(
+        start, 3,
+        longAnswer ? tr("A translation far too long to fit on one short word, so it is anchored to it instead")
+                   : tr("Captured"));
+    emit ocrResultReady();
+    showToast(tr("Dev: translation partial overlay: PASS (%1)")
+                  .arg(m_ocrResult->partialPresentation()),
+              m_ocrResult->partialPresentation() == QLatin1String("pane"));
 }
 
 static QString ocrResultImageCheck()
@@ -7225,6 +7377,15 @@ void AppContext::runSmokeTest()
     // whole-line/partial decision and the exact-text prompt. No endpoint.
     m_smokeSteps.append([this] {
         smokeLog(QStringLiteral("translation selection: ") + translationSelectionCheck());
+        smokeNext();
+    });
+
+    // 3f3e1d) Word and partial-line overlay (M4.6): the glyph index, the
+    // in-place screen-only cover, the callout fallback and the single-line
+    // rule. No endpoint: the preview seam applies fixed answers.
+    m_smokeSteps.append([this] {
+        smokeLog(QStringLiteral("translation partial overlay: ")
+                 + translationPartialOverlayCheck());
         smokeNext();
     });
 

@@ -85,12 +85,12 @@
     <message>
         <location filename="../src/AppContext.cpp" line="+5305"/>
         <location filename="../src/diag/SmokeTests.cpp" line="+810"/>
-        <location line="+3143"/>
+        <location line="+3295"/>
         <source>Quit</source>
         <translation>退出</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="-3131"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-3283"/>
         <source>Dev: language: %1</source>
         <translation>Dev: 语言：%1</translation>
     </message>
@@ -105,12 +105,12 @@
         <translation>Dev: OCR 文本框：%1（%2 个字形）</translation>
     </message>
     <message>
-        <location line="+933"/>
+        <location line="+1085"/>
         <source>Dev: played capture sound &apos;%1&apos;</source>
         <translation>Dev: 已播放截图音效 “%1”</translation>
     </message>
     <message>
-        <location line="-1790"/>
+        <location line="-1942"/>
         <source>Dev: capture on release: %1</source>
         <translation>Dev: 释放时截图：%1</translation>
     </message>
@@ -169,7 +169,7 @@
         <translation>录制单个窗口需要窗口选择器，而此桌面不提供该功能，请改为录制屏幕或区域。</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="+1939"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="+2091"/>
         <source>no screen</source>
         <translation>无屏幕</translation>
     </message>
@@ -204,7 +204,7 @@
         <translation>已找到，OCR 会自动识别每张截图的文字体系。</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="-3216"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-3368"/>
         <source>Dev: custom theme: %1</source>
         <translation>Dev: 自定义主题：%1</translation>
     </message>
@@ -214,7 +214,7 @@
         <translation>Dev: 诊断信息已复制（%1 个字符）</translation>
     </message>
     <message>
-        <location line="+2560"/>
+        <location line="+2712"/>
         <source>Dev: OCR auto language: %1 (installed: %2; %3; map: %4)</source>
         <translation>Dev: OCR 自动语言：%1（已安装：%2；%3；映射：%4）</translation>
     </message>
@@ -531,7 +531,7 @@
         <translation>将在 %1 秒后开始录制…</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="-5266"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-5418"/>
         <source>Dev: clipboard paste: %1</source>
         <translation>Dev: 剪贴板粘贴：%1</translation>
     </message>
@@ -761,7 +761,7 @@
         <translation type="vanished">开发者：PaddleOCR：跳过（模型未下载）</translation>
     </message>
     <message>
-        <location line="+662"/>
+        <location line="+814"/>
         <source>Dev: PaddleOCR: FAIL (%1)</source>
         <translation>开发者：PaddleOCR：失败（%1）</translation>
     </message>
@@ -831,7 +831,7 @@
         <translation>Dev: 原生快捷键：%1</translation>
     </message>
     <message>
-        <location line="+1542"/>
+        <location line="+1551"/>
         <source>Dev: scrolling hand-off: %1</source>
         <translation>Dev: 滚动交接：%1</translation>
     </message>
@@ -866,7 +866,7 @@
         <translation>主窗口可见</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="-4804"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-4965"/>
         <source>Dev: OCR highlight + redact: FAIL (%1)</source>
         <translation>Dev: OCR 高亮与涂黑：失败（%1）</translation>
     </message>
@@ -886,7 +886,7 @@
         <translation>Dev: 样式预设：%1</translation>
     </message>
     <message>
-        <location line="+830"/>
+        <location line="+982"/>
         <source>Dev: auto-redact pattern: FAIL (%1)</source>
         <translation>Dev: 自动涂黑规则：失败（%1）</translation>
     </message>
@@ -1069,7 +1069,7 @@
         <translation>无法保存到 %1</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="-4215"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-4367"/>
         <source>Dev: hide while capturing: %1</source>
         <translation>Dev: 截图时隐藏：%1</translation>
     </message>
@@ -1367,7 +1367,27 @@
         <translation>开发者：翻译选区：%1</translation>
     </message>
     <message>
-        <location line="+141"/>
+        <location line="+177"/>
+        <source>Dev: translation partial overlay: FAIL (fixture word)</source>
+        <translation>开发者：部分翻译覆盖层：FAIL（测试词）</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>A translation far too long to fit on one short word, so it is anchored to it instead</source>
+        <translation>译文太长，放不进一个短单词，因此锚定在它旁边。</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Captured</source>
+        <translation>已截取</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Dev: translation partial overlay: PASS (%1)</source>
+        <translation>开发者：部分翻译覆盖层：PASS（%1）</translation>
+    </message>
+    <message>
+        <location line="+106"/>
         <source>Dev: OCR result image: %1</source>
         <translation>Dev: OCR 结果图片: %1</translation>
     </message>
@@ -1811,7 +1831,7 @@
         <translation>已从 %1 移除 Unisic 快捷键</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="+1606"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="+1615"/>
         <source>Dev: desktop shortcuts: %1</source>
         <translation>Dev: 桌面快捷键：%1</translation>
     </message>
@@ -1910,7 +1930,7 @@
     </message>
     <message>
         <location line="+51"/>
-        <location filename="../src/diag/SmokeTests.cpp" line="-1635"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-1644"/>
         <source>Capture monitor</source>
         <translation>截取显示器</translation>
     </message>
@@ -4288,19 +4308,19 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
 <context>
     <name>OcrResultController</name>
     <message>
-        <location filename="../src/ocr/OcrResultController.cpp" line="+204"/>
-        <location line="+280"/>
+        <location filename="../src/ocr/OcrResultController.cpp" line="+238"/>
+        <location line="+274"/>
         <source>No text to translate</source>
         <translation>没有可翻译的文本</translation>
     </message>
     <message>
-        <location line="-275"/>
-        <location line="+280"/>
+        <location line="-269"/>
+        <location line="+274"/>
         <source>Set the translation endpoint and model in Settings &gt; General</source>
         <translation>请在“设置 &gt; 通用”中设置翻译端点和模型</translation>
     </message>
     <message>
-        <location line="+209"/>
+        <location line="+372"/>
         <source>The translation service returned an empty result</source>
         <translation>翻译服务返回了空结果</translation>
     </message>
@@ -4324,12 +4344,12 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
     <name>OcrResultWindow</name>
     <message>
         <location filename="../qml/OcrResultWindow.qml" line="+28"/>
-        <location line="+1248"/>
+        <location line="+1400"/>
         <source>Recognized text</source>
         <translation>识别结果</translation>
     </message>
     <message>
-        <location line="-917"/>
+        <location line="-1021"/>
         <source>Minimize</source>
         <translation>最小化</translation>
     </message>
@@ -4403,11 +4423,27 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
     </message>
     <message>
         <location line="-30"/>
+        <location line="+724"/>
         <source>Translating…</source>
         <translation>正在翻译…</translation>
     </message>
     <message>
-        <location line="+909"/>
+        <location line="-525"/>
+        <source>The selection is too small for the translation to fit, so it is shown in a callout.</source>
+        <translation>选区太小，放不下译文，因此显示在标注框中。</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Translated the selected text on the picture.</source>
+        <translation>已在图片上显示所选文本的译文。</translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>Word and partial-line translations are shown on screen only. Save image keeps the page.</source>
+        <translation>单词和部分行的译文仅在屏幕上显示。保存图片时保留原页面。</translation>
+    </message>
+    <message>
+        <location line="+807"/>
         <location line="+4"/>
         <source>Send this text to %1?</source>
         <translation>将此文本发送到 %1？</translation>
@@ -4438,7 +4474,7 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>翻译</translation>
     </message>
     <message>
-        <location line="-937"/>
+        <location line="-1047"/>
         <source>Translate the recognized text</source>
         <translation>翻译识别出的文本</translation>
     </message>
@@ -4538,7 +4574,7 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>适应图片</translation>
     </message>
     <message>
-        <location line="+21"/>
+        <location line="+24"/>
         <source>The service did not translate line by line, so the translation is shown in the pane instead of on the picture.</source>
         <translation>该服务未按行翻译，因此译文显示在面板中，而不是覆盖在图片上。</translation>
     </message>
@@ -4548,12 +4584,11 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>只翻译了所选行。按“全部翻译”发送其余内容。</translation>
     </message>
     <message>
-        <location line="+11"/>
         <source>Translated the selected text. A word or part of a line stays in the pane and is not laid over the picture.</source>
-        <translation>已翻译选中的文本。单词或行的一部分只显示在面板中，不会覆盖到图片上。</translation>
+        <translation type="vanished">已翻译选中的文本。单词或行的一部分只显示在面板中，不会覆盖到图片上。</translation>
     </message>
     <message>
-        <location line="+11"/>
+        <location line="+38"/>
         <source>Some lines were too long for one request, so they were split at sentence boundaries before translating.</source>
         <translation>有些行对单个请求来说太长，因此翻译前已在句子边界处拆分。</translation>
     </message>
@@ -4578,7 +4613,7 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>图片中的译文行</translation>
     </message>
     <message>
-        <location line="+232"/>
+        <location line="+317"/>
         <source>Divider between the picture and the text</source>
         <translation>图片与文本之间的分隔条</translation>
     </message>
@@ -5329,34 +5364,34 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
     </message>
     <message>
         <location line="-875"/>
-        <location line="+3069"/>
+        <location line="+3070"/>
         <source>Appearance</source>
         <translation>外观</translation>
     </message>
     <message>
-        <location line="-3070"/>
+        <location line="-3071"/>
         <source>Editor</source>
         <translation>编辑器</translation>
     </message>
     <message>
         <location line="+0"/>
-        <location line="+1746"/>
+        <location line="+1747"/>
         <source>Recording</source>
         <translation>录制</translation>
     </message>
     <message>
-        <location line="-1745"/>
+        <location line="-1746"/>
         <source>Hotkeys</source>
         <translation>快捷键</translation>
     </message>
     <message>
         <location line="+2"/>
-        <location line="+3901"/>
+        <location line="+3902"/>
         <source>Developer</source>
         <translation>开发者</translation>
     </message>
     <message>
-        <location line="-3885"/>
+        <location line="-3886"/>
         <source>System Theme</source>
         <translation>系统主题</translation>
     </message>
@@ -5460,12 +5495,12 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
     </message>
     <message>
         <location line="+159"/>
-        <location line="+3307"/>
+        <location line="+3309"/>
         <source>Language</source>
         <translation>语言</translation>
     </message>
     <message>
-        <location line="-3306"/>
+        <location line="-3308"/>
         <source>Language of the Unisic interface.</source>
         <translation>Unisic 界面的语言。</translation>
     </message>
@@ -5481,7 +5516,7 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
     </message>
     <message>
         <location line="-885"/>
-        <location line="+2760"/>
+        <location line="+2761"/>
         <source>Notifications</source>
         <translation>通知</translation>
     </message>
@@ -5809,8 +5844,8 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>有新版本 %1 可用</translation>
     </message>
     <message>
-        <location line="-259"/>
-        <location line="+271"/>
+        <location line="-260"/>
+        <location line="+272"/>
         <location line="+931"/>
         <source>Downloading… %1%</source>
         <translation>正在下载… %1%</translation>
@@ -6299,7 +6334,7 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>像素放大镜</translation>
     </message>
     <message>
-        <location line="+16"/>
+        <location line="+17"/>
         <source>Auto-redact pattern</source>
         <translation>自动遮挡图案</translation>
     </message>
@@ -6329,7 +6364,7 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>模拟更新</translation>
     </message>
     <message>
-        <location line="-2141"/>
+        <location line="-2142"/>
         <source>Editor defaults</source>
         <translation>编辑器默认值</translation>
     </message>
@@ -6475,7 +6510,7 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>GIF 最长时长</translation>
     </message>
     <message>
-        <location line="-1754"/>
+        <location line="-1755"/>
         <source>Capture</source>
         <translation>截图</translation>
     </message>
@@ -6610,7 +6645,7 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
     </message>
     <message>
         <location line="+0"/>
-        <location line="+3105"/>
+        <location line="+3106"/>
         <source>Test connection</source>
         <translation>测试连接</translation>
     </message>
@@ -7099,7 +7134,7 @@ Applies to the next capture.</source>
         <translation>录制前倒计时</translation>
     </message>
     <message>
-        <location line="-1558"/>
+        <location line="-1559"/>
         <source>More about %1</source>
         <translation>关于 %1 的更多信息</translation>
     </message>
@@ -7109,7 +7144,7 @@ Applies to the next capture.</source>
         <translation>设置面板</translation>
     </message>
     <message>
-        <location line="+658"/>
+        <location line="+659"/>
         <source>Detects the script and recognizes with the matching language pack.</source>
         <translation>检测书写系统，并用匹配的语言包进行识别。</translation>
     </message>
@@ -7129,7 +7164,7 @@ Applies to the next capture.</source>
         <translation>打开更新日志</translation>
     </message>
     <message>
-        <location line="-1550"/>
+        <location line="-1551"/>
         <source>Flatpak installs are updated by Flatpak - Unisic does not check on its own.</source>
         <translation>Flatpak 安装的版本由 Flatpak 更新，Unisic 不会自行检查。</translation>
     </message>
@@ -7139,7 +7174,7 @@ Applies to the next capture.</source>
         <translation>这份副本来自 AUR，由你的 AUR 助手更新，因此 Unisic 不会自行检查。</translation>
     </message>
     <message>
-        <location line="+3581"/>
+        <location line="+3582"/>
         <source>A zoomed pixel grid follows the cursor with the hovered pixel highlighted, plus its position and colour - so a selection edge lands on exactly the pixel you mean. Scroll on the overlay to zoom it in and out; scroll all the way out to hide the loupe. Purely visual and never captured into the image.</source>
         <translation>放大的像素网格会跟随光标，高亮当前悬停的像素，并显示其位置和颜色，这样选区边缘就能准确落在你想要的那个像素上。在覆盖层上滚动可以放大或缩小网格，一直缩小到底则隐藏放大镜。它只用于显示，绝不会被截取进图像。</translation>
     </message>
@@ -7239,12 +7274,12 @@ Applies to the next capture.</source>
         <translation>统计</translation>
     </message>
     <message>
-        <location line="-411"/>
+        <location line="-412"/>
         <source>Tiny is included with Unisic, so PaddleOCR works without a model download; it reads Chinese and Latin text but not Japanese, and it is the least accurate. Small is the recommended download: it also reads Japanese, and it takes about a second per page on a 4-core CPU. Medium is the most accurate and the largest, and holds about 1 GB of memory while it is loaded. Downloaded tiers are checked against their pinned SHA-256 and run offline. Until a downloaded tier is present, Tiny (included) does the work and this list says which one is in use.</source>
         <translation>极小号已内置在 Unisic 中，因此 PaddleOCR 无需下载模型即可使用；它可识别中文和拉丁文字，但不支持日文，精度也最低。推荐下载小号：它同时支持日文，在 4 核 CPU 上每页约需一秒。中号最准确、体积也最大，加载后约占用 1 GB 内存。下载的档位会按固定的 SHA-256 校验，并完全离线运行。在下载其他档位之前，由内置的极小号负责识别，这个列表会显示正在使用的是哪个档位。</translation>
     </message>
     <message>
-        <location line="+413"/>
+        <location line="+414"/>
         <source>Screenshots taken</source>
         <translation>截图数量</translation>
     </message>
@@ -7585,7 +7620,7 @@ Applies to the next capture.</source>
         <translation>全局快捷键</translation>
     </message>
     <message>
-        <location line="-3764"/>
+        <location line="-3765"/>
         <source>Delete the background removal files?</source>
         <translation>删除背景移除文件？</translation>
     </message>
@@ -7616,7 +7651,7 @@ Applies to the next capture.</source>
         <translation>在 Ko-fi 上捐赠</translation>
     </message>
     <message>
-        <location line="+726"/>
+        <location line="+727"/>
         <source>Shorten the link</source>
         <translation>缩短链接</translation>
     </message>
@@ -7713,8 +7748,8 @@ Applies to the next capture.</source>
         <translation>ONNX Runtime：未安装，将随模型一起下载</translation>
     </message>
     <message>
-        <location line="-1240"/>
-        <location line="+1243"/>
+        <location line="-1241"/>
+        <location line="+1244"/>
         <source>ONNX Runtime: not installed - install the onnxruntime package from your distribution</source>
         <translation>ONNX Runtime：未安装，请从发行版安装 onnxruntime 软件包</translation>
     </message>
@@ -7729,13 +7764,13 @@ Applies to the next capture.</source>
         <translation>模型：未下载</translation>
     </message>
     <message>
-        <location line="-1179"/>
-        <location line="+1202"/>
+        <location line="-1180"/>
+        <location line="+1203"/>
         <source>Download (%1)</source>
         <translation>下载（%1）</translation>
     </message>
     <message>
-        <location line="-2378"/>
+        <location line="-2379"/>
         <source>Delete the PaddleOCR models?</source>
         <translation>删除 PaddleOCR 模型？</translation>
     </message>
@@ -7831,13 +7866,13 @@ Applies to the next capture.</source>
     <message>
         <location line="-1025"/>
         <location line="+1099"/>
-        <location line="+1202"/>
+        <location line="+1203"/>
         <source>Cancel</source>
         <translation>取消</translation>
     </message>
     <message>
-        <location line="-1191"/>
-        <location line="+1199"/>
+        <location line="-1192"/>
+        <location line="+1200"/>
         <source>Delete downloaded files</source>
         <translation>删除已下载的文件</translation>
     </message>
@@ -8486,7 +8521,7 @@ Applies to the next capture.</source>
         <translation>QR 预览</translation>
     </message>
     <message>
-        <location line="+58"/>
+        <location line="+59"/>
         <source>OCR highlight + redact</source>
         <translation>OCR 高亮与遮蔽</translation>
     </message>
@@ -8531,7 +8566,7 @@ Applies to the next capture.</source>
         <translation>切换开机启动</translation>
     </message>
     <message>
-        <location line="-230"/>
+        <location line="-231"/>
         <source>Running…</source>
         <translation>运行中…</translation>
     </message>
@@ -8642,13 +8677,13 @@ Applies to the next capture.</source>
             sudo chown -R $USER %1</translation>
     </message>
     <message>
-        <location line="-2948"/>
-        <location line="+3156"/>
+        <location line="-2949"/>
+        <location line="+3157"/>
         <source>Translation</source>
         <translation>译文</translation>
     </message>
     <message>
-        <location line="-3154"/>
+        <location line="-3155"/>
         <source>Translation endpoint</source>
         <translation>翻译端点</translation>
     </message>
@@ -8698,7 +8733,7 @@ Applies to the next capture.</source>
         <translation>请使用完整名称，例如 English、Simplified Chinese 或 Japanese。只有你在结果窗口中点击“翻译”时，OCR 文本才会发送到端点；密钥保存在 Unisic 配置文件中。</translation>
     </message>
     <message>
-        <location line="+731"/>
+        <location line="+732"/>
         <source>Video quality</source>
         <translation>视频质量</translation>
     </message>
@@ -9269,6 +9304,11 @@ Applies to the next capture.</source>
         <location line="+1"/>
         <source>Translation selection</source>
         <translation>翻译选区</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Translation partial overlay</source>
+        <translation>部分翻译覆盖层</translation>
     </message>
     <message>
         <location line="+9"/>
