@@ -5,6 +5,7 @@
 #include <QString>
 #include <QStringList>
 #include <QUrl>
+#include <QVector>
 #include <functional>
 
 class Settings;
@@ -54,6 +55,22 @@ public:
     // the live pane while a numbered chunk streams. Never counts as a finished
     // answer: the strict parser above decides that.
     static QStringList parseNumberedLinesPartial(const QString &text, int expected);
+
+    // Rough token budget, in one place: about four characters per token for
+    // Latin text and one per Han/kana/Hangul character. Used to keep one
+    // request inside a small model's context, not to bill anything.
+    static int estimateTokens(const QString &text);
+    // Splits `line` at sentence boundaries (then at word boundaries, and only
+    // then mid-word) until every part fits `maxTokens`. Returns the line
+    // unchanged when it already fits, and never drops text.
+    static QStringList splitLongLine(const QString &line, int maxTokens);
+    // Greedy chunks of at most `maxTextTokens` estimated tokens and `maxItems`
+    // entries, preserving order. A single entry larger than the budget still
+    // gets a chunk of its own; splitLongLine() is what keeps that rare.
+    static QVector<QStringList> chunkTexts(const QStringList &texts, int maxTextTokens,
+                                           int maxItems = 40);
+    static constexpr int kRequestTokenBudget = 2000;
+    static constexpr int kItemTokenBudget = 700;
 
     // The text a `stream: true` response frame adds (choices[0].delta.content,
     // or a message/text shape some compatible servers send instead), or an

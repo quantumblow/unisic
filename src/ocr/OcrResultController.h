@@ -63,6 +63,10 @@ class OcrResultController : public QObject
     // How many recognized lines the last/current translation covers. 0 before
     // the first Translate.
     Q_PROPERTY(int translationLineCount READ translationLineCount NOTIFY translationChanged)
+    // How many of those lines were too long for one request and were split at
+    // sentence boundaries before being sent. The window tells the reader
+    // instead of letting a split look like a truncation.
+    Q_PROPERTY(int translationSplitLines READ translationSplitLines NOTIFY translationChanged)
     // True when a successful answer is the recognized text itself (a service
     // that echoed the input, often for a language pair it handles badly). The
     // window says so instead of presenting the source as a translation.
@@ -91,6 +95,7 @@ public:
     QString translationTarget() const;
     bool translationSelectionOnly() const { return m_translationSelectionOnly; }
     int translationLineCount() const { return m_translationLineCount; }
+    int translationSplitLines() const { return m_translationSplitLines; }
     bool translationUnchanged() const { return m_translationUnchanged; }
     QString statusText() const { return m_statusText; }
     bool statusIsError() const { return m_statusIsError; }
@@ -168,8 +173,9 @@ public:
     // Comparing with whitespace squashed: a service that echoes the input often
     // re-wraps or re-spaces it, and that is still "unchanged" to the reader.
     static bool translationLooksUnchanged(const QString &source, const QString &translation);
-    // A page can be hundreds of lines; one request per this many keeps the
-    // prompt (and the cost) bounded and still leaves every answer mappable.
+    // A page can be hundreds of lines; one request per this many (and per
+    // Translator::kRequestTokenBudget) keeps the prompt inside a small model's
+    // context and still leaves every answer mappable.
     static QVector<QStringList> chunkLines(const QStringList &lines, int perRequest = 40);
 
 signals:
@@ -205,6 +211,7 @@ private:
     QString m_sourceText;
     bool m_translationSelectionOnly = false;
     int m_translationLineCount = 0;
+    int m_translationSplitLines = 0;
     QString m_statusText;
     bool m_statusIsError = false;
     QTimer m_statusTimer;

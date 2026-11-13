@@ -234,6 +234,7 @@ void OcrResultController::startTranslation(int start, int length)
     if (m_translateLines.isEmpty())
         m_sourceText = m_text;
 
+    m_translationSplitLines = 0;
     m_translating = true;
     m_translationError.clear();
     m_translation.clear();
@@ -248,20 +249,29 @@ void OcrResultController::startTranslation(int start, int length)
     m_chunkIndex = 0;
     m_streamText.clear();
     m_streamTimer.stop();
-    if (m_translateLines.size() > 1) {
+    QStringList itemTexts;
+    for (int i = 0; i < m_translateLines.size(); ++i) {
+        const QString lineText =
+            m_translateLines.at(i).toMap().value(QStringLiteral("text")).toString();
+        // A line too long for one request is split at sentence boundaries, and
+        // its parts are sent as separate numbered items. They are joined back
+        // into the one cover they belong to once every part is translated.
+        const QStringList parts =
+            Translator::splitLongLine(lineText, Translator::kItemTokenBudget);
+        if (parts.size() > 1)
+            ++m_translationSplitLines;
+        for (const QString &part : parts) {
+            m_items.append(TranslationItem{i, part});
+            itemTexts.append(part);
+        }
+    }
+    if (m_translateLines.size() > 1 || m_items.size() > 1) {
         // Numbered requests, one per chunk, so every translation comes back
         // with the line box it belongs to. A model that merges or splits lines
         // gives a count mismatch and the whole-text request takes over.
-        QStringList texts;
-        texts.reserve(m_translateLines.size());
-        for (int i = 0; i < m_translateLines.size(); ++i) {
-            const QString lineText =
-                m_translateLines.at(i).toMap().value(QStringLiteral("text")).toString();
-            texts.append(lineText);
-            m_items.append(TranslationItem{i, lineText});
-        }
         int itemIndex = 0;
-        for (const QStringList &chunk : chunkLines(texts)) {
+        for (const QStringList &chunk :
+             Translator::chunkTexts(itemTexts, Translator::kRequestTokenBudget)) {
             QVector<int> indices;
             indices.reserve(chunk.size());
             for (int i = 0; i < chunk.size(); ++i)
@@ -269,8 +279,10 @@ void OcrResultController::startTranslation(int start, int length)
             m_chunks.append(indices);
         }
         m_itemTranslations = QVector<QString>(m_items.size());
-        requestNextLineChunk(seq);
-        return;
+        if (!m_chunks.isEmpty()) {
+            requestNextLineChunk(seq);
+            return;
+        }
     }
     requestWholeText(seq);
 }
@@ -522,6 +534,7 @@ void OcrResultController::setTranslationForPreview(const QStringList &translated
     m_sourceText = m_text;
     m_translationSelectionOnly = false;
     m_translationLineCount = m_translateLines.size();
+    m_translationSplitLines = 0;
     QString joined;
     setTranslatedLines(translatedLineMap(m_translateLines, translated, m_image, &joined));
     m_translation = joined;
@@ -544,6 +557,7 @@ void OcrResultController::setResult(const QImage &image, const QVector<OcrWord> 
     m_sourceText.clear();
     m_translationSelectionOnly = false;
     m_translationLineCount = 0;
+    m_translationSplitLines = 0;
     m_chunks.clear();
     m_items.clear();
     m_itemTranslations.clear();
@@ -713,12 +727,10 @@ bool OcrResultController::translationLooksUnchanged(const QString &source,
 
 QVector<QStringList> OcrResultController::chunkLines(const QStringList &lines, int perRequest)
 {
-    QVector<QStringList> chunks;
-    if (perRequest < 1)
-        perRequest = 1;
-    for (int i = 0; i < lines.size(); i += perRequest)
-        chunks.append(lines.mid(i, perRequest));
-    return chunks;
+    // Both caps matter: a page of 40 very long lines still has to fit a small
+    // model's context, and a page of 400 short ones still needs a bounded
+    // number of requests.
+    return Translator::chunkTexts(lines, Translator::kRequestTokenBudget, perRequest);
 }
 
 QVariantList OcrResultController::translatedLineMap(const QVariantList &lines,

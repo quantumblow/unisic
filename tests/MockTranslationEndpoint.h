@@ -3,6 +3,9 @@
 // same POST in every dialect a real endpoint uses for `stream: true`, so the
 // streaming parser, its buffered fallback and Cancel are exercised without a
 // network or an API key. Header-only because two test binaries include it.
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QRegularExpression>
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -19,6 +22,7 @@ public:
         Json,         // ignores `stream` and answers one chat-completions body
         RejectStream, // 400 to stream:true, a normal body to stream:false
         Always500,    // a retryable server error
+        NumberedSse,  // one "N. Translated part N" line per requested item
     };
 
     explicit MockTranslationEndpoint(Mode mode, QObject *parent = nullptr)
@@ -106,6 +110,33 @@ private:
         case Always500:
             writeJson(socket, 500, R"({"error":{"message":"server is down"}})");
             break;
+        case NumberedSse: {
+            const int bodyStart = int(request.indexOf("\r\n\r\n")) + 4;
+            const QJsonObject payload =
+                QJsonDocument::fromJson(request.mid(bodyStart)).object();
+            const QJsonArray messages = payload.value(QStringLiteral("messages")).toArray();
+            const QString prompt = messages.isEmpty()
+                                       ? QString()
+                                       : messages.last().toObject()
+                                             .value(QStringLiteral("content")).toString();
+            const int items = qMax(1, prompt.count(QRegularExpression(
+                                                QStringLiteral("(?m)^\\d+\\. "))));
+            socket->write("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n"
+                          "Cache-Control: no-cache\r\nConnection: close\r\n\r\n");
+            for (int i = 1; i <= items; ++i) {
+                QJsonObject delta{{QStringLiteral("content"),
+                                   QStringLiteral("%1. Translated part %2\n")
+                                       .arg(i)
+                                       .arg(i)}};
+                QJsonObject choice{{QStringLiteral("delta"), delta}};
+                QJsonObject frame{{QStringLiteral("choices"), QJsonArray{choice}}};
+                socket->write("data: "
+                              + QJsonDocument(frame).toJson(QJsonDocument::Compact) + "\n\n");
+            }
+            socket->write("data: [DONE]\n\n");
+            socket->disconnectFromHost();
+            break;
+        }
         }
     }
 

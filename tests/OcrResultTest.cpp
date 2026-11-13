@@ -112,6 +112,7 @@ private slots:
     void payloadWithoutGeometry();
     void selectionMapsToWholeLines();
     void streamingFillsThePaneAndCancelStopsIt();
+    void longLineIsSplitAndRejoined();
     void translatedLinesIndexThePane();
     void lineColorsFollowThePicture();
     void longPagesSplitIntoRequests();
@@ -274,6 +275,50 @@ void OcrResultTest::streamingFillsThePaneAndCancelStopsIt()
     QTest::qWait(300);
     QVERIFY(result.translation().isEmpty());
     QVERIFY(!result.translating());
+}
+
+// A line over the per-request budget is split at sentence boundaries and sent
+// as separate numbered items, but it must come back as ONE cover with the parts
+// joined: the picture has one box for it, not two.
+void OcrResultTest::longLineIsSplitAndRejoined()
+{
+    MockTranslationEndpoint server(MockTranslationEndpoint::NumberedSse);
+    QVERIFY(server.start());
+    Settings settings;
+    settings.setTranslationEndpoint(server.base());
+    settings.setTranslationModel(QStringLiteral("mock"));
+    settings.setTranslationTarget(QStringLiteral("Polish"));
+
+    OcrResultController result(&settings);
+    QString longLine;
+    for (int i = 0; i < 160; ++i)
+        longLine += QStringLiteral("Sentence number %1 is here. ").arg(i);
+    OcrWord word;
+    word.line = 0;
+    word.text = longLine.trimmed();
+    word.rect = QRect(10, 10, 180, 24);
+    QImage image(200, 120, QImage::Format_RGB32);
+    image.fill(QColor(250, 250, 245));
+    QPainter painter(&image);
+    painter.fillRect(QRect(12, 18, 170, 6), QColor(20, 20, 20));
+    painter.end();
+    result.setResult(image, {word}, QString());
+    QCOMPARE(result.lines().size(), 1);
+
+    result.translate();
+    QTRY_VERIFY_WITH_TIMEOUT(!result.translating(), 5000);
+    QCOMPARE(result.translationError(), QString());
+    QCOMPARE(result.translationLineCount(), 1);
+    QVERIFY2(result.translationSplitLines() >= 1,
+             "the 160-sentence line has to be split for the request budget");
+    QCOMPARE(result.translatedLines().size(), 1);
+    const QString cover =
+        result.translatedLines().at(0).toMap().value(QStringLiteral("text")).toString();
+    QVERIFY2(cover.contains(QStringLiteral("Translated part 1")), qPrintable(cover));
+    QVERIFY2(cover.contains(QStringLiteral("Translated part 2")), qPrintable(cover));
+    // The parts are one line, not two: the pane's joined translation is the
+    // same string the cover carries.
+    QCOMPARE(result.translation(), cover);
 }
 
 void OcrResultTest::translatedLinesIndexThePane()

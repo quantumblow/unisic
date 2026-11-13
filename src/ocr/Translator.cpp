@@ -11,6 +11,8 @@
 #include <QNetworkRequest>
 #include <QRegularExpression>
 
+#include <cmath>
+
 Translator::Translator(Settings *settings, QObject *parent) : QObject(parent), m_settings(settings) {}
 
 Translator::~Translator() = default;
@@ -230,6 +232,164 @@ QStringList Translator::parseNumberedLinesPartial(const QString &text, int expec
         out.append(stripMarks(looksNumbered ? rest : row));
     }
     return out;
+}
+
+namespace {
+
+// About four Latin characters per token, one per Han/kana/Hangul character.
+// Spaces cost nothing, which is close enough for a request budget.
+double tokenCost(QChar c)
+{
+    if (c.isSpace())
+        return 0.0;
+    const uint u = c.unicode();
+    const bool wide = (u >= 0x3040 && u <= 0x30FF)     // hiragana, katakana
+                      || (u >= 0x3400 && u <= 0x4DBF)  // CJK extension A
+                      || (u >= 0x4E00 && u <= 0x9FFF)  // CJK unified
+                      || (u >= 0xAC00 && u <= 0xD7AF)  // Hangul syllables
+                      || (u >= 0xF900 && u <= 0xFAFF)  // CJK compatibility
+                      || (u >= 0x20000 && u <= 0x2FA1F); // CJK extensions B-F
+    return wide ? 1.0 : 0.25;
+}
+
+} // namespace
+
+int Translator::estimateTokens(const QString &text)
+{
+    double tokens = 0.0;
+    for (const QChar c : text)
+        tokens += tokenCost(c);
+    return int(std::ceil(tokens));
+}
+
+QStringList Translator::splitLongLine(const QString &line, int maxTokens)
+{
+    if (line.isEmpty())
+        return {};
+    if (maxTokens < 1)
+        maxTokens = 1;
+    if (estimateTokens(line) <= maxTokens)
+        return {line};
+
+    // Sentence boundaries first: the punctuation stays with the sentence it
+    // ends, and the space after it starts the next one. A '.' inside "e.g." or
+    // "3.14" has no space after it, so it does not cut.
+    QStringList sentences;
+    QString current;
+    for (int i = 0; i < line.size(); ++i) {
+        const QChar c = line.at(i);
+        current.append(c);
+        const bool asciiEnd = (c == QLatin1Char('.') || c == QLatin1Char('!')
+                               || c == QLatin1Char('?'))
+                              && (i + 1 >= line.size() || line.at(i + 1).isSpace());
+        const bool cjkEnd = c == QChar(0x3002) || c == QChar(0xFF01) || c == QChar(0xFF1F)
+                            || c == QChar(0xFF1B);
+        const bool semi = c == QLatin1Char(';')
+                          && (i + 1 >= line.size() || line.at(i + 1).isSpace());
+        if (asciiEnd || cjkEnd || semi || c == QLatin1Char('\n')) {
+            sentences.append(current);
+            current.clear();
+        }
+    }
+    if (!current.isEmpty())
+        sentences.append(current);
+    if (sentences.isEmpty())
+        sentences.append(line);
+
+    // Group whole sentences greedily, then hard-split the ones that are still
+    // over budget (a single run-on sentence with no boundary at all).
+    QStringList parts;
+    QString part;
+    const auto flush = [&] {
+        if (!part.trimmed().isEmpty())
+            parts.append(part.trimmed());
+        part.clear();
+    };
+    for (const QString &sentence : sentences) {
+        if (part.isEmpty()) {
+            part = sentence;
+            continue;
+        }
+        const QString candidate = part + sentence;
+        if (estimateTokens(candidate) > maxTokens) {
+            flush();
+            part = sentence;
+        } else {
+            part = candidate;
+        }
+    }
+    flush();
+
+    QStringList out;
+    for (const QString &piece : parts) {
+        if (estimateTokens(piece) <= maxTokens) {
+            out.append(piece);
+            continue;
+        }
+        int start = 0;
+        while (start < piece.size()) {
+            double tokens = 0.0;
+            int end = start;
+            while (end < piece.size()) {
+                const double cost = tokenCost(piece.at(end));
+                if (tokens + cost > maxTokens && end > start)
+                    break;
+                tokens += cost;
+                ++end;
+            }
+            if (end == start)
+                end = start + 1; // a single character can exceed the budget
+            int cut = end;
+            if (cut < piece.size()) {
+                int space = cut;
+                while (space > start && !piece.at(space).isSpace())
+                    --space;
+                if (space > start && space < piece.size())
+                    cut = space;
+                // Never split a surrogate pair.
+                if (cut > start && piece.at(cut - 1).isHighSurrogate())
+                    --cut;
+                if (cut <= start)
+                    cut = end;
+            }
+            const QString value = piece.mid(start, cut - start).trimmed();
+            if (!value.isEmpty())
+                out.append(value);
+            start = cut;
+            while (start < piece.size() && piece.at(start).isSpace())
+                ++start;
+        }
+    }
+    if (out.isEmpty())
+        out.append(line);
+    return out;
+}
+
+QVector<QStringList> Translator::chunkTexts(const QStringList &texts, int maxTextTokens,
+                                            int maxItems)
+{
+    QVector<QStringList> chunks;
+    if (maxTextTokens < 1)
+        maxTextTokens = 1;
+    if (maxItems < 1)
+        maxItems = 1;
+    QStringList current;
+    int tokens = 0;
+    for (const QString &text : texts) {
+        // The numbered prompt and "N. " cost a few tokens per line; count them
+        // so a page of short lines cannot slip past the budget.
+        const int add = estimateTokens(text) + 4;
+        if (!current.isEmpty() && (current.size() >= maxItems || tokens + add > maxTextTokens)) {
+            chunks.append(current);
+            current.clear();
+            tokens = 0;
+        }
+        current.append(text);
+        tokens += add;
+    }
+    if (!current.isEmpty())
+        chunks.append(current);
+    return chunks;
 }
 
 QString Translator::parseResponse(const QByteArray &body, QString *error)

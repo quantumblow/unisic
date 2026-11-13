@@ -27,6 +27,9 @@ private slots:
     void rejectsUnnumberedTranslation();
     void parsesSseFrames();
     void partialNumberedLinesFillThePane();
+    void estimatesTokensByScript();
+    void splitsLongLinesAtSentenceBoundaries();
+    void chunksWithinTokenBudget();
     void streamsAgainstSseServer();
     void fallsBackWhenStreamIsRejected();
     void parsesJsonBodyWhenStreamIgnored();
@@ -223,6 +226,80 @@ void TranslatorTest::partialNumberedLinesFillThePane()
     // is normal, and the strict parser is what decides success.
     QCOMPARE(Translator::parseNumberedLinesPartial(
                  QStringLiteral("1. One\n2. Two"), 3).size(), 2);
+}
+
+void TranslatorTest::estimatesTokensByScript()
+{
+    QCOMPARE(Translator::estimateTokens(QString()), 0);
+    // About four Latin characters per token; spaces and punctuation cost a
+    // little, so this is the plan's "about 4", not a byte count.
+    QCOMPARE(Translator::estimateTokens(QStringLiteral("Hello world")), 3);
+    // One per Han character, as the budget in the plan says.
+    QCOMPARE(Translator::estimateTokens(QStringLiteral("你好世界")), 4);
+    QCOMPARE(Translator::estimateTokens(QStringLiteral("Hello 你好")), 4);
+    QVERIFY(Translator::estimateTokens(QString(2000, QLatin1Char('a'))) > 400);
+}
+
+void TranslatorTest::splitsLongLinesAtSentenceBoundaries()
+{
+    QCOMPARE(Translator::splitLongLine(QStringLiteral("Short line."), 50),
+             QStringList({QStringLiteral("Short line.")}));
+    QVERIFY(Translator::splitLongLine(QString(), 50).isEmpty());
+
+    const QString line = QStringLiteral(
+        "The first sentence is long enough. The second one is here! Is the third one "
+        "there? And the fourth closes it.");
+    const QStringList parts = Translator::splitLongLine(line, 12);
+    QVERIFY(parts.size() >= 2);
+    for (const QString &part : parts)
+        QVERIFY2(Translator::estimateTokens(part) <= 12, qPrintable(part));
+    // Splitting must not lose or reorder text: only whitespace at the cuts is
+    // normalized, which the strings around the punctuation already carry.
+    QCOMPARE(parts.join(QStringLiteral(" ")).simplified(), line.simplified());
+
+    // One run-on sentence with no punctuation: split at word boundaries, never
+    // mid-word when a space is available.
+    QString runOn;
+    for (int i = 0; i < 80; ++i)
+        runOn += QStringLiteral("word ") + QString::number(i) + QLatin1Char(' ');
+    const QStringList words = Translator::splitLongLine(runOn.trimmed(), 20);
+    QVERIFY(words.size() > 1);
+    for (const QString &part : words)
+        QVERIFY2(Translator::estimateTokens(part) <= 20, qPrintable(part));
+    QCOMPARE(words.join(QStringLiteral(" ")).simplified(), runOn.simplified());
+
+    // CJK has no spaces to cut at: a hard cut still has to stay under budget.
+    QString cjk;
+    for (int i = 0; i < 60; ++i)
+        cjk += QStringLiteral("你好世界");
+    const QStringList cjkParts = Translator::splitLongLine(cjk, 10);
+    QVERIFY(cjkParts.size() > 1);
+    for (const QString &part : cjkParts)
+        QVERIFY2(Translator::estimateTokens(part) <= 10, qPrintable(part));
+    QCOMPARE(cjkParts.join(QString()), cjk);
+}
+
+void TranslatorTest::chunksWithinTokenBudget()
+{
+    // 95 short lines still split by the line cap first, so a page keeps the
+    // same request count it had before the token budget existed.
+    QStringList lines;
+    for (int i = 0; i < 95; ++i)
+        lines.append(QStringLiteral("line %1").arg(i));
+    QCOMPARE(Translator::chunkTexts(lines, Translator::kRequestTokenBudget, 40).size(), 3);
+
+    // A tight budget splits earlier even with the line cap far away.
+    const QVector<QStringList> tight =
+        Translator::chunkTexts({QStringLiteral("aaaa"), QStringLiteral("bbbb")}, 9, 40);
+    QCOMPARE(tight.size(), 2);
+    QCOMPARE(tight.at(0), QStringList({QStringLiteral("aaaa")}));
+    // One entry over the budget still gets a chunk of its own rather than
+    // being dropped or silently truncated.
+    const QVector<QStringList> oversized =
+        Translator::chunkTexts({QString(500, QLatin1Char('x'))}, 10);
+    QCOMPARE(oversized.size(), 1);
+    QCOMPARE(oversized.at(0).size(), 1);
+    QVERIFY(Translator::chunkTexts({}, 10).isEmpty());
 }
 
 void TranslatorTest::streamsAgainstSseServer()

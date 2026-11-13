@@ -529,6 +529,17 @@ Window {
                 wrapMode: Text.WordWrap
             }
 
+            // Long lines are split before they are sent; say so, so a line
+            // that breaks somewhere new does not look truncated.
+            Text {
+                Layout.fillWidth: true
+                visible: resultWindow.showTranslation && App.ocrResult.translationSplitLines > 0
+                text: qsTr("Some lines were too long for one request, so they were split at sentence boundaries before translating.")
+                color: Theme.textSecondary
+                font.pixelSize: Theme.fontS
+                wrapMode: Text.WordWrap
+            }
+
             // A service that answers with the recognized text itself (often a
             // language pair it handles badly) is not a translation: say so
             // instead of letting the source look like the result.
