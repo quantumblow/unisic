@@ -263,6 +263,31 @@ Item {
         return p.split("/").pop().replace(/\.(svg|svgz|png|jpe?g|webp|xpm|ico)$/i, "")
     }
 
+    // PaddleOCR tiers. The C++ side owns the state ("included" is the copy
+    // inside the binary, "downloaded" one in the data dir) and only the three
+    // stable tokens cross the boundary; the words are translated here.
+    function paddleTierLabel(id) {
+        if (id === "tiny") return qsTr("Tiny (6 MB)")
+        if (id === "small") return qsTr("Small (31 MB)")
+        return qsTr("Medium (139 MB)")
+    }
+    function paddleTierState(state) {
+        if (state === "included") return qsTr("Included")
+        if (state === "downloaded") return qsTr("Downloaded")
+        return qsTr("Not downloaded")
+    }
+    function paddleTierLine(entry) {
+        const label = paddleTierLabel(entry.id)
+        const state = paddleTierState(entry.state)
+        // "in use" only when PP-OCRv6 can actually run: the model being
+        // included or downloaded says nothing about ONNX Runtime, and a line
+        // that claims a tier is in use while nothing can run is a lie.
+        // Sequential arg(): the multi-argument form only takes numbers in QML.
+        return App.paddleOcr.runtimeFound && entry.id === App.paddleOcr.effectiveTier
+                ? qsTr("%1: %2, in use").arg(label).arg(state)
+                : qsTr("%1: %2").arg(label).arg(state)
+    }
+
     // FPS dropdown options (15/30/45/60); snap a stored value to the nearest.
     readonly property var fpsOpts: [15, 30, 45, 60]
     function nearestFps(v) {
@@ -1189,7 +1214,7 @@ Item {
                         visible: App.paddleOcr.available
                         label: qsTr("OCR engine")
                         help: qsTr("Which engine reads text from a capture.")
-                        helpDetail: qsTr("Auto uses PaddleOCR when its models are downloaded and falls back to the built-in Tesseract otherwise. PaddleOCR reads Chinese, Japanese and Latin-script text more accurately; Tesseract still covers the other scripts. Both run on this computer and nothing is uploaded.")
+                        helpDetail: qsTr("Auto uses PaddleOCR when it can run and falls back to the built-in Tesseract otherwise. Tiny is included with Unisic, so Auto starts on PaddleOCR for Chinese and Latin text without a download; Japanese stays on Tesseract until Small or Medium is downloaded. PaddleOCR reads Chinese, Japanese and Latin-script text more accurately; Tesseract still covers the other scripts. Both run on this computer and nothing is uploaded.")
                         UComboBox {
                             width: 220
                             property var ids: ["auto", "tesseract", "paddle"]
@@ -1202,11 +1227,11 @@ Item {
                         available: App.paddleOcr.available && App.settings.ocrEngine !== "tesseract"
                         label: qsTr("PaddleOCR model")
                         help: qsTr("Model size and accuracy trade-off.")
-                        helpDetail: qsTr("Small is the recommended default: it reads Chinese (simplified and traditional), Japanese and 48 Latin-script languages in one model and takes about a second per page on a 4-core CPU. Tiny is for slow machines and cannot read Japanese; medium is the most accurate and the largest download, and holds about 1 GB of memory while it is loaded. The files are downloaded once, checked against their pinned SHA-256, and run offline.")
+                        helpDetail: qsTr("Tiny is included with Unisic, so PaddleOCR works without a model download; it reads Chinese and Latin text but not Japanese, and it is the least accurate. Small is the recommended download: it also reads Japanese, and it takes about a second per page on a 4-core CPU. Medium is the most accurate and the largest, and holds about 1 GB of memory while it is loaded. Downloaded tiers are checked against their pinned SHA-256 and run offline. Until a downloaded tier is present, Tiny (included) does the work and this list says which one is in use.")
                         UComboBox {
                             width: 220
                             property var ids: ["tiny", "small", "medium"]
-                            model: [qsTr("Tiny (6 MB)"), qsTr("Small (31 MB)"), qsTr("Medium (139 MB)")]
+                            model: [qsTr("Tiny (6 MB, included)"), qsTr("Small (31 MB)"), qsTr("Medium (139 MB)")]
                             currentIndex: Math.max(0, ids.indexOf(App.settings.paddleTier))
                             onActivated: (i) => App.settings.paddleTier = ids[i]
                         }
@@ -1218,13 +1243,50 @@ Item {
                         Text {
                             width: parent.width
                             wrapMode: Text.WordWrap
-                            text: (App.paddleOcr.runtimeFound
-                                   ? App.paddleOcr.runtimeInfo
-                                   : App.paddleOcr.canDownloadRuntime
-                                     ? qsTr("ONNX Runtime: not installed, it is downloaded with the models")
-                                     : qsTr("ONNX Runtime: not installed - install the onnxruntime package from your distribution"))
-                                  + "\n" + (App.paddleOcr.modelInstalled
-                                             ? qsTr("PaddleOCR model: downloaded") : qsTr("PaddleOCR model: not downloaded"))
+                            text: App.paddleOcr.runtimeFound
+                                  ? App.paddleOcr.runtimeInfo
+                                  : App.paddleOcr.canDownloadRuntime
+                                    ? qsTr("ONNX Runtime: not installed, it is downloaded with the models")
+                                    : qsTr("ONNX Runtime: not installed - install the onnxruntime package from your distribution")
+                            color: Theme.textSecondary
+                            font.pixelSize: Theme.fontS
+                        }
+                        // Every tier's state, so "Downloaded" for Small is
+                        // visible without selecting it. The tier that is really
+                        // running carries "in use".
+                        Column {
+                            width: parent.width
+                            spacing: 1
+                            Repeater {
+                                model: App.paddleOcr.tierStates
+                                delegate: Text {
+                                    width: parent.width
+                                    wrapMode: Text.WordWrap
+                                    text: page.paddleTierLine(modelData)
+                                    // The same condition as "in use": emphasis
+                                    // only where a tier can really run.
+                                    color: App.paddleOcr.runtimeFound
+                                           && modelData.id === App.paddleOcr.effectiveTier
+                                           ? Theme.textPrimary : Theme.textSecondary
+                                    font.pixelSize: Theme.fontS
+                                }
+                            }
+                        }
+                        Text {
+                            width: parent.width
+                            wrapMode: Text.WordWrap
+                            visible: App.paddleOcr.runtimeFound && App.paddleOcr.effectiveTier !== ""
+                                     && App.paddleOcr.effectiveTier !== App.paddleOcr.tier
+                            text: qsTr("The selected model is not downloaded yet, so Tiny (included) is in use for now.")
+                            color: Theme.textSecondary
+                            font.pixelSize: Theme.fontS
+                        }
+                        Text {
+                            width: parent.width
+                            wrapMode: Text.WordWrap
+                            visible: App.paddleOcr.runtimeFound && App.paddleOcr.tierBundled
+                                     && App.paddleOcr.effectiveTier === App.paddleOcr.tier
+                            text: qsTr("Tiny is included, so no model download is needed. It reads Chinese and Latin text; Small reads Japanese too and is more accurate.")
                             color: Theme.textSecondary
                             font.pixelSize: Theme.fontS
                         }
@@ -1242,7 +1304,11 @@ Item {
                                 compact: true
                                 variant: "tonal"
                                 iconName: "folder-cloud"
-                                visible: App.paddleOcr.downloading || !App.paddleOcr.modelInstalled
+                                // Nothing to fetch for a tier that is inside the
+                                // binary; the runtime is the one thing a bundled
+                                // tier may still need.
+                                visible: App.paddleOcr.downloading
+                                         || (!App.paddleOcr.tierBundled && !App.paddleOcr.tierDownloaded)
                                          || (!App.paddleOcr.runtimeFound && App.paddleOcr.canDownloadRuntime)
                                 enabled: !App.paddleOcr.downloading
                                 text: App.paddleOcr.downloading
@@ -1261,7 +1327,10 @@ Item {
                                 compact: true
                                 variant: "tonal"
                                 iconName: "edit-delete"
+                                // Only downloaded copies can go; the bundled
+                                // tier lives in the binary.
                                 visible: App.paddleOcr.hasDownloads && !App.paddleOcr.downloading
+                                         && !App.paddleOcr.tierBundled
                                 text: qsTr("Delete downloaded files")
                                 onClicked: paddleDeleteConfirm.open()
                             }

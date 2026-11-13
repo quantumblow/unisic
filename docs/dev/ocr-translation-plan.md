@@ -42,14 +42,14 @@ Environment, so a new session does not rebuild its own:
 - The tier benchmark harness lives in `paddle-tier-bench.cpp` (`notes/`), re-add it
   as a temporary CMake target when timing work needs it.
 
-## M0. Un-red the Nix CI (0.5 day, do first)
+## M0. Un-red the Nix CI (0.5 day, do first) - DONE 2026-11-13
 
 The `Nix flake` job fails on every PR, `dev` included, so a green PR is impossible
 today. The failure is not OCR: `unisic_bash_completion_test` sources
 `resources/completions/unisic.bash`, which calls `compgen`, and the bash in the Nix
 check sandbox has no `compgen` (26/27 other tests pass there).
 
-**T0.1** `tests/bash-completion.sh` gets a `compgen` shim next to the existing
+**T0.1 (done)** `tests/bash-completion.sh` gets a `compgen` shim next to the existing
 `compopt` shim: it only needs `-W <words> -- <prefix>`, so a 10-line prefix filter
 covers it and the shipped completion script stays untouched.
 
@@ -57,8 +57,9 @@ covers it and the shipped completion script stays untouched.
   (`bash -c 'enable -n compgen; source tests/bash-completion.sh ...'` in the
   container), and the Nix job goes green on the PR that carries it.
 - Files: `tests/bash-completion.sh` only.
+- Done: the shim is installed only when `type compgen` fails, so the real builtin stays under test everywhere it exists. Verified in `unisic-zh-build` with `enable -n compgen` (all 11 cases pass) and with the builtin present; the Nix job itself is the last check and needs a push.
 
-## M1. Out of the box: bundle the tiny model (2-3 days)
+## M1. Out of the box: bundle the tiny model (2-3 days) - DONE 2026-11-13
 
 The chosen direction: ship PP-OCRv6 **tiny** inside the binary so OCR works with no
 download, and keep small / medium as explicit downloads for better accuracy. tiny
@@ -72,21 +73,22 @@ repository and ~6 MB in every binary. Fetching them at build time was rejected: 
 adds a network step to configure (a fixed-output derivation for the Nix sandbox,
 one URL and hash per recipe) and breaks offline tarball builds.
 
-**T1.1** Add the three pinned files (plus the Apache-2.0 notice and PaddleOCR's
+**T1.1 (done)** Add the three pinned files (plus the Apache-2.0 notice and PaddleOCR's
 copyright) and verify them at configure time with `file(SHA256 ...)`, failing
 configure on a mismatch the way a missing dependency does.
 
 - Files: `third_party/paddleocr/tiny/`, `CMakeLists.txt`, a notice file.
 
-**T1.2** Embed through a qrc (`:/paddleocr/tiny/...`) and teach the loader to read
+**T1.2 (done)** Embed through a qrc (`:/paddleocr/tiny/...`) and teach the loader to read
 the bundled copy before the data directory. Sessions are already created from
 memory (`CreateSessionFromArray`), so no ORT change is needed.
 
-- Files: `resources/paddleocr.qrc`, `src/ocr/PaddleOcr.{h,cpp}`.
+- Files: `third_party/paddleocr/tiny/` embedded by `CMakeLists.txt`'s `qt_add_resources` (the plan named a
+  `resources/paddleocr.qrc`; the tree has no `.qrc` files and every other resource goes in the same way), `src/ocr/PaddleOcr.{h,cpp}`.
 - Acceptance: with `<AppDataLocation>/paddleocr` deleted, `recognize()` still
   returns text, and `hasDownloads()` still says "nothing downloaded".
 
-**T1.3** One "effective tier" rule, in one place: the selected tier when it is
+**T1.3 (done)** One "effective tier" rule, in one place: the selected tier when it is
 installed, otherwise the bundled tiny, otherwise no PP-OCRv6 at all. D3 is settled:
 `auto` does use the bundled tiny for Latin and Chinese, so an install with no
 download starts on PP-OCRv6 instead of Tesseract.
@@ -98,22 +100,22 @@ download starts on PP-OCRv6 instead of Tesseract.
   Delete button and no Download button.
 - Files: `src/ocr/PaddleOcr.{h,cpp}`, `qml/pages/SettingsPage.qml`, `src/Settings.h`.
 
-**T1.4** Language routing has to follow the tier: tiny does not read Japanese, so
+**T1.4 (done)** Language routing has to follow the tier: tiny does not read Japanese, so
 `supportsLanguages()` must say no to `jpn` when tiny is the effective tier, which
 puts Japanese back on Tesseract until small or medium is installed. Pin this with
 unit tests (`supportsLanguages` is testable without models).
 
 - Files: `src/ocr/PaddleOcr.cpp`, `tests/` (new or existing OCR test).
 
-**T1.5** Settings > General > Text recognition: show Included / Downloaded per
+**T1.5 (done)** Settings > General > Text recognition: show Included / Downloaded per
 tier, gate the Download and Delete buttons on that, and keep the existing download
 progress and Cancel.
 
-**T1.6** Packaging: because the model is in the binary, no manifest changes are
+**T1.6 (done)** Packaging: because the model is in the binary, no manifest changes are
 expected. Confirm each channel (AppImage, deb, rpm, Arch, Flatpak, Nix) still
 builds and reports the same gates, and record the new binary size.
 
-**T1.7** Docs and strings: `README.md` (OCR works out of the box; Small is worth
+**T1.7 (done)** Docs and strings: `README.md` (OCR works out of the box; Small is worth
 downloading), `docs/dev/packaging.md` (bundled tier, sizes, license, why not
 bundled on Windows), `docs/dev/architecture.md`, `resources/CHANGELOG.md` (EN/PL,
 current beta heading), all eight catalogs, and the F8 step text, which currently
@@ -122,6 +124,34 @@ says "SKIP (models not downloaded)" and will now PASS everywhere.
 - Acceptance: F8 `paddleocr` PASS with an empty app data dir; `ctest` green;
   `unisic --version`-style CLI smoke unaffected; AppImage rebuilt and run under
   Xvfb with a Chinese capture.
+
+**Done in this round (2026-11-13):**
+
+- Bytes: `third_party/paddleocr/tiny/` plus `LICENSE` (Apache-2.0) and `NOTICE`; sizes and SHA-256 checked by
+  `CMakeLists.txt` at configure time, embedded for Linux through `qt_add_resources` and not for Windows.
+- `PaddleOcr::effectiveTier()` is the one rule (selected when installed, else bundled tiny, else none). Routing, the
+  `MemAvailable` guard and the loader follow it; `detPath`/`recPath`/`dictPath` read the qrc copy first.
+- `supportsLanguages()` is now `effectiveTier()` + `tierSupportsLanguages()`, a pure per-tier table: tiny says no to
+  `jpn`/`jpn_vert` (also inside a mixed spec) and auto script mode keeps Tesseract when Japanese is among the installed
+  packs. Small and Medium still say yes. Pinned by `tests/PaddleOcrTest.cpp` (6 cases, 28/28 `ctest`).
+- Settings lists Tiny/Small/Medium with `Included`/`Downloaded`/`Not downloaded`, marks the tier in use, hides Download
+  for a bundled tier and hides Delete for it too; the status lines explain the fallback and say Small is worth
+  downloading. `architecture.md` has the `modelInstalled`/`ready`/`tierStates` contract.
+- Verified in `unisic-zh-build`: `ctest` 28/28, and F8 with `<AppDataLocation>/paddleocr` moved away reports
+  `paddleocr: PASS (8 glyphs; script map PASS; tiny in use)` and moves the step out of SKIP. That run ended at 100 PASS,
+  6 FAIL, 32 SKIP; the FAILs are container gaps (no WebP encoder, no portal twice, no ffmpeg twice, and
+  `edit from history` failing to save its source), not OCR. With the models installed again the same step reports
+  `small in use` on the final tree, so the tier in the line follows `effectiveTier()` as designed.
+- A real Chinese capture (a text block cropped from the previous round's screenshot) reads back correctly through the
+  embedded tiny pair with the model directory gone, and the Settings pane was screenshotted in English and Chinese in
+  every state: bundled-in-use, selected-but-not-downloaded, and no ONNX Runtime (where "in use" is correctly not claimed
+  and Download shows only the 11 MB runtime).
+- T1.6: only the AppImage was rebuilt here (164,977,144 bytes, 159.3 MB -> 165.0 MB, 10 gates ON, model names and new
+  strings found in the shipped binary, starts under Xvfb with an isolated profile; hash and the full verification log in
+  `notes/ocr-paddle-translation.md`). The `unisic-website` repo is cloned beside this one now (`unisic/unisic-website`,
+  checked 2026-11-13), but it is pinned to the released version (`src/lib/release.ts` `VERSION`, bumped by
+  `.github/workflows/follow-release.yml`) and its OCR text describes Tesseract only, so the PaddleOCR/tiny wording
+  belongs to the 0.8.10 release rather than this PR. T6.7 has the file list.
 
 **Risk worth writing down:** tiny misreads Han glyphs that small gets right
 (素材库 came back as 索材库 in the measurements), so "works out of the box" must
@@ -255,8 +285,20 @@ the Developer pane for every new path (save image, edit in editor, zoom, selecti
 translation, streaming, retry, test connection).
 
 **T6.7** i18n and website: native review of the Chinese and Polish strings added in
-this feature, and the `unisic-website` sync (README/feature page, `content/docs/**`,
-`lib/i18n/dictionaries/**`) once that repository is in the workspace.
+this feature, and the `unisic-website` sync. The site repo is cloned beside this tree and
+its layout is confirmed; it is release-scoped on purpose (`src/lib/release.ts` holds
+`VERSION` and `RELEASED`, `.github/workflows/follow-release.yml` bumps them, and its last
+commit before this round was "describe only what v0.8.9 ships"), so the OCR/PP-OCRv6 text
+ships WITH 0.8.10 as one edit, version bump included. The files that need it then:
+
+- `src/lib/i18n/*.ts` (nine catalogs: en, pl, de, es, fr, it, nl, zh-Hans, zh-Hant): the
+  comparison row `{ feature: 'OCR', notes: ['Tesseract', ...] }` and the OCR lede name
+  Tesseract only, and both need PP-OCRv6 (tiny included, small/medium downloads) plus the
+  translation feature.
+- `content/docs/capture.md` (the OCR section), `content/docs/dependencies.md` ("OCR language
+  packs": the tiers, the ONNX Runtime, which scripts stay on Tesseract), `content/docs/editor.md`
+  (the result window and Translate), `content/docs/installation.md` ("bundles ... OCR data").
+- `src/lib/components/Read.svelte` and the hero/feature copy if either names the OCR engine.
 
 ## Order and dependencies
 

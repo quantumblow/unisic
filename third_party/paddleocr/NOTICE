@@ -1,0 +1,26 @@
+PP-OCRv6 OCR models
+===================
+
+tiny/ holds the PP-OCRv6 "tiny" detection model, recognition model and
+character dictionary:
+
+    PP-OCRv6_det_tiny.onnx
+    PP-OCRv6_rec_tiny.onnx
+    ppocrv6_tiny_dict.txt
+
+Upstream project: https://github.com/PaddlePaddle/PaddleOCR
+Copyright (c) 2020 PaddlePaddle Authors. All Rights Reserved.
+License: Apache License 2.0, see LICENSE in this directory.
+
+The ONNX files are the conversions the Snow Shot OCR mirror on ModelScope
+(mgchao/SnowShotOCR) republishes from PaddleOCR's Apache-2.0 models, and the
+same mirror serves the Small and Medium tiers that Unisic downloads at
+runtime. The bytes here are unmodified: the SHA-256 pins in
+src/ocr/PaddleOcr.cpp are these files' hashes, and CMakeLists.txt checks them
+at configure time, so a changed or truncated file stops the build instead of
+shipping.
+
+Unisic embeds these three files through the qrc CMakeLists.txt builds (the
+resource paths are :/paddleocr/tiny/...). The other
+tiers are not bundled; they are downloaded on request into
+<AppDataLocation>/paddleocr/<tier>/.

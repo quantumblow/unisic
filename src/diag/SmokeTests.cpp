@@ -3042,8 +3042,12 @@ void AppContext::devTestPaddleOcr()
     if (!devBuild())
         return;
     PaddleOcr *paddle = m_ocr->paddle();
-    if (!paddle || !paddle->ready()) {
-        showToast(tr("Dev: PaddleOCR: SKIP (models not downloaded)"));
+    if (!paddle || paddle->effectiveTier().isEmpty()) {
+        showToast(tr("Dev: PaddleOCR: SKIP (no model)"));
+        return;
+    }
+    if (!paddle->ready()) {
+        showToast(tr("Dev: PaddleOCR: SKIP (no ONNX Runtime)"));
         return;
     }
     paddle->recognizeBoxes(ocrBoxTestImage(), [this](const QVector<OcrWord> &words, const QString &err) {
@@ -6423,9 +6427,10 @@ void AppContext::runSmokeTest()
         });
     });
 
-    // 3f3b) PaddleOCR (optional): the downloadable PP-OCRv6 models. Skipped
-    // when they are not installed; a real run on the same digit fixture when
-    // they are. The language-coverage table is pinned without any model.
+    // 3f3b) PaddleOCR: the bundled PP-OCRv6 tiny pair means this runs on a clean
+    // profile now; only a missing ONNX Runtime skips it. The language map is
+    // read for the tier that actually runs, because tiny cannot read Japanese:
+    // "jpn" must route to Tesseract until Small or Medium is downloaded.
     m_smokeSteps.append([this] {
         PaddleOcr *paddle = m_ocr->paddle();
         if (!paddle) {
@@ -6433,25 +6438,33 @@ void AppContext::runSmokeTest()
             smokeNext();
             return;
         }
+        const QString running = paddle->effectiveTier();
+        if (running.isEmpty()) {
+            smokeLog(QStringLiteral("paddleocr: SKIP (no model)"));
+            smokeNext();
+            return;
+        }
+        const bool japanese = PaddleOcr::tierReadsJapanese(running);
         const bool mapOk = paddle->supportsLanguages(QStringLiteral("eng"), false)
-                           && paddle->supportsLanguages(QStringLiteral("chi_sim+jpn"), false)
+                           && paddle->supportsLanguages(QStringLiteral("jpn"), false) == japanese
+                           && paddle->supportsLanguages(QStringLiteral("chi_sim+jpn"), false) == japanese
                            && !paddle->supportsLanguages(QStringLiteral("rus"), false)
                            && !paddle->supportsLanguages(QStringLiteral("ara"), false)
                            && paddle->supportsLanguages(QString(), true);
         if (!paddle->ready()) {
-            smokeLog(QStringLiteral("paddleocr: SKIP (models not downloaded; script map %1)")
+            smokeLog(QStringLiteral("paddleocr: SKIP (no ONNX Runtime; script map %1)")
                          .arg(mapOk ? QStringLiteral("PASS") : QStringLiteral("FAIL")));
             smokeNext();
             return;
         }
-        paddle->recognizeBoxes(ocrBoxTestImage(), [this, mapOk](const QVector<OcrWord> &words, const QString &err) {
+        paddle->recognizeBoxes(ocrBoxTestImage(), [this, mapOk, running](const QVector<OcrWord> &words, const QString &err) {
             if (!err.isEmpty())
                 smokeLog(QStringLiteral("paddleocr: FAIL (%1)").arg(err));
             else
-                smokeLog(QStringLiteral("paddleocr: %1 (%2 glyphs; script map %3)")
+                smokeLog(QStringLiteral("paddleocr: %1 (%2 glyphs; script map %3; %4 in use)")
                              .arg(words.size() >= 4 ? QStringLiteral("PASS") : QStringLiteral("FAIL"))
                              .arg(words.size())
-                             .arg(mapOk ? QStringLiteral("PASS") : QStringLiteral("FAIL")));
+                             .arg(mapOk ? QStringLiteral("PASS") : QStringLiteral("FAIL"), running));
             smokeNext();
         });
     });

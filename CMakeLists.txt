@@ -370,6 +370,58 @@ target_link_libraries(unisic PRIVATE
 qt_add_resources(unisic "icons" PREFIX "/" FILES resources/icons/unisic.svg)
 qt_add_resources(unisic "changelog" PREFIX "/" FILES resources/CHANGELOG.md)
 
+# PP-OCRv6 "tiny" models, embedded through the qrc so OCR works with no model
+# download on every channel. The bytes live in the repository on purpose (D1 in
+# docs/dev/ocr-translation-plan.md): fetching them at build time would put a
+# network step in configure, a URL plus hash in six packaging recipes and a
+# hole in every offline tarball build. The cost is these 6.3 MB here and in
+# every Linux binary; Windows embeds nothing, because PaddleOcr::available() is
+# false there and the bytes would be dead weight.
+#
+# Both the three files and their pins are checked HERE as well as in
+# src/ocr/PaddleOcr.cpp (which is what validates the runtime downloads): a
+# truncated checkout or a re-encoded file would otherwise ship a model that
+# cannot load and fail at recognition time in a user's hands instead of at
+# configure time in ours. See third_party/paddleocr/NOTICE for provenance.
+set(UNISIC_PADDLEOCR_TINY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/paddleocr/tiny)
+set(UNISIC_PADDLEOCR_TINY_FILES
+    ${UNISIC_PADDLEOCR_TINY_DIR}/PP-OCRv6_det_tiny.onnx
+    ${UNISIC_PADDLEOCR_TINY_DIR}/PP-OCRv6_rec_tiny.onnx
+    ${UNISIC_PADDLEOCR_TINY_DIR}/ppocrv6_tiny_dict.txt)
+function(unisic_paddleocr_pin FILE_NAME EXPECTED_BYTES EXPECTED_SHA)
+    set(_path "${UNISIC_PADDLEOCR_TINY_DIR}/${FILE_NAME}")
+    if(NOT EXISTS "${_path}")
+        message(FATAL_ERROR
+            "third_party/paddleocr/tiny/${FILE_NAME} is missing.\n"
+            "  The bundled PP-OCRv6 tiny model is part of the source tree, not a\n"
+            "  download, so a checkout without it cannot build a working OCR.\n"
+            "  Restore it with:\n"
+            "    git checkout -- third_party/paddleocr/tiny/${FILE_NAME}")
+    endif()
+    file(SIZE "${_path}" _size)
+    file(SHA256 "${_path}" _sha)
+    if(NOT _size EQUAL EXPECTED_BYTES OR NOT _sha STREQUAL EXPECTED_SHA)
+        message(FATAL_ERROR
+            "third_party/paddleocr/tiny/${FILE_NAME} does not match its pin.\n"
+            "  expected ${EXPECTED_BYTES} bytes, SHA-256 ${EXPECTED_SHA}\n"
+            "  found    ${_size} bytes, SHA-256 ${_sha}\n"
+            "  The bundled model is pinned so a changed byte can never reach a\n"
+            "  user's OCR. Restore the file from git; if the model was meant to\n"
+            "  change, update the sizes and hashes here and in kTiers[] in\n"
+            "  src/ocr/PaddleOcr.cpp in the same commit.")
+    endif()
+endfunction()
+unisic_paddleocr_pin(PP-OCRv6_det_tiny.onnx 1829618
+    f42c0fbd294d95eac1a550e131b277dac97462c8025fa4b6c3cec1b7894bd3d5)
+unisic_paddleocr_pin(PP-OCRv6_rec_tiny.onnx 4489813
+    e16e242de5937ad92609223f19bc2aff3727ee40b095f996907c24749bad251b)
+unisic_paddleocr_pin(ppocrv6_tiny_dict.txt 27156
+    c5cbe34ef40c29c4df07ed012bf96569cb69a2d2a01a07027e9f13cb832bd9cd)
+if(NOT WIN32)
+    qt_add_resources(unisic "paddleocr_tiny" PREFIX "/paddleocr/tiny"
+        BASE ${UNISIC_PADDLEOCR_TINY_DIR} FILES ${UNISIC_PADDLEOCR_TINY_FILES})
+endif()
+
 # Bundled color themes: the non-core palettes ship as the SAME JSON format the
 # user themes folder takes (one parser, one schema); core system/unisic/dark/
 # light stay hardcoded in Theme.qml (startup fallback + the mandatory palette).
@@ -682,6 +734,30 @@ if(BUILD_TESTING)
     target_compile_definitions(unisic_ocr_result_test PRIVATE UNISIC_VERSION="test")
     target_link_libraries(unisic_ocr_result_test PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Network Qt6::Test)
     add_test(NAME unisic_ocr_result_test COMMAND unisic_ocr_result_test)
+
+    # The bundled tiny tier and the tier-aware language routing. The qrc goes
+    # into this binary too, so the test proves the model is really embedded and
+    # effectiveTier() really falls back to it on an empty data dir; without the
+    # resource it would pass for the wrong reason ("no model at all").
+    # Linux only, like the feature: the model is embedded only there, and on
+    # Windows every effective-tier assertion would be about absence.
+    if(NOT WIN32)
+    qt_add_executable(unisic_paddleocr_test
+        tests/PaddleOcrTest.cpp
+        src/ocr/PaddleOcr.cpp src/ocr/PaddleOcr.h
+        src/ocr/Barcode.cpp src/ocr/Barcode.h
+        src/Settings.cpp src/Settings.h)
+    target_include_directories(unisic_paddleocr_test PRIVATE src third_party
+        external/unisic-kit/src external/unisic-kit/src/hotkeys
+        external/unisic-kit/src/actions external/unisic-kit/src/record)
+    target_compile_definitions(unisic_paddleocr_test PRIVATE UNISIC_VERSION="test")
+    target_link_libraries(unisic_paddleocr_test PRIVATE
+        Qt6::Core Qt6::Gui Qt6::Qml Qt6::Network Qt6::Concurrent Qt6::Test ZXing::ZXing)
+    qt_add_resources(unisic_paddleocr_test "paddleocr_tiny" PREFIX "/paddleocr/tiny"
+        BASE ${UNISIC_PADDLEOCR_TINY_DIR} FILES ${UNISIC_PADDLEOCR_TINY_FILES})
+    add_test(NAME unisic_paddleocr_test COMMAND unisic_paddleocr_test)
+    set_tests_properties(unisic_paddleocr_test PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    endif()
 
     qt_add_executable(unisic_shortcut_format_test
         tests/ShortcutFormatTest.cpp
