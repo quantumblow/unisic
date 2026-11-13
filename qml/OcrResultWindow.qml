@@ -670,10 +670,13 @@ Window {
             }
 
             // A translation that did not come back one line per line is still
-            // shown, in the pane; say so instead of leaving the picture bare.
+            // shown, in the pane; say so instead of leaving the picture bare. A
+            // partial (word) answer is not that case: it uses the callout on
+            // purpose, and the note above already says where it went.
             Text {
                 Layout.fillWidth: true
                 visible: resultWindow.showTranslation && App.ocrResult.translation !== ""
+                         && !App.ocrResult.translationPartialText
                          && !resultWindow.overlayAvailable && App.ocrResult.lines.length > 1
                 text: qsTr("The service did not translate line by line, so the translation is shown in the pane instead of on the picture.")
                 color: Theme.textSecondary
@@ -692,12 +695,28 @@ Window {
                 wrapMode: Text.WordWrap
             }
 
-            // A word or part of a line is translated into the pane only, on
-            // purpose: a cover over the whole line would misrepresent the page.
+            // M4.6: a word or part of a line is shown on the picture when it is
+            // readable there, and in a callout when it is not. Say which, so the
+            // answer is never mistaken for a whole-line translation.
             Text {
                 Layout.fillWidth: true
                 visible: resultWindow.showTranslation && App.ocrResult.translationPartialText
-                text: qsTr("Translated the selected text. A word or part of a line stays in the pane and is not laid over the picture.")
+                         && App.ocrResult.partialPresentation !== "pane"
+                text: App.ocrResult.partialPresentation === "callout"
+                      ? qsTr("The selection is too small for the translation to fit, so it is shown in a callout.")
+                      : qsTr("Translated the selected text on the picture.")
+                color: Theme.textSecondary
+                font.pixelSize: Theme.fontS
+                wrapMode: Text.WordWrap
+            }
+            // A word cover or a callout is a reading aid, not part of the page:
+            // Save image and Copy image keep the untouched capture, and the
+            // window says so instead of letting the file surprise the reader.
+            Text {
+                Layout.fillWidth: true
+                visible: resultWindow.showTranslation && App.ocrResult.translationPartialText
+                         && App.ocrResult.partialPresentation !== "pane"
+                text: qsTr("Word and partial-line translations are shown on screen only. Save image keeps the page.")
                 color: Theme.textSecondary
                 font.pixelSize: Theme.fontS
                 wrapMode: Text.WordWrap
@@ -1138,6 +1157,91 @@ Window {
                             // The pane owns the wheel: without this the event
                             // keeps bubbling to whatever is behind it.
                             wheel.accepted = true
+                        }
+                    }
+
+                    // M4.6: a word or partial-line answer that does not fit its
+                    // glyphs is anchored to them in a callout instead of being
+                    // squeezed onto the page. It is positioned from the image
+                    // rect and renderScale, so it follows zoom and pan; a plain
+                    // Rectangle takes no press, so the picture stays clickable
+                    // underneath. Read-only and screen only, like the cover it
+                    // replaces.
+                    Rectangle {
+                        id: partialCallout
+                        z: 10
+                        readonly property var calloutData: App.ocrResult.partialCallout
+                        readonly property bool anchored: calloutData !== undefined
+                                                         && calloutData.width !== undefined
+                                                         && calloutData.height !== undefined
+                        readonly property real anchorX: anchored
+                                                        ? imagePane.holderX
+                                                          + calloutData.x * imagePane.renderScale : 0
+                        readonly property real anchorTop: anchored
+                                                          ? imagePane.holderY
+                                                            + calloutData.y * imagePane.renderScale : 0
+                        readonly property real anchorW: anchored
+                                                        ? calloutData.width * imagePane.renderScale : 0
+                        readonly property real anchorH: anchored
+                                                        ? calloutData.height * imagePane.renderScale : 0
+                        visible: anchored
+                                 && resultWindow.showTranslation
+                                 && App.ocrResult.partialPresentation === "callout"
+                                 && preview.status === Image.Ready
+                                 && App.ocrResult.privacyNoticeHost === ""
+                        width: Math.min(320, Math.max(140, imagePane.width - 16))
+                        height: calloutColumn.implicitHeight + 2 * Theme.spacingS
+                        // Centred on the fragment, kept inside the pane.
+                        x: Math.max(8, Math.min(imagePane.width - width - 8,
+                                                anchorX + anchorW / 2 - width / 2))
+                        // Below the fragment, flipped above when the bottom
+                        // edge would clip it, and clamped either way.
+                        y: {
+                            const below = anchorTop + anchorH + 8
+                            if (below + height <= imagePane.height - 8)
+                                return below
+                            const above = anchorTop - height - 8
+                            return Math.max(8, Math.min(imagePane.height - height - 8, above))
+                        }
+                        radius: Theme.radiusM
+                        color: Theme.surfaceHi
+                        border.width: 1
+                        border.color: Theme.alpha(Theme.accent, 0.55)
+
+                        Column {
+                            id: calloutColumn
+                            x: Theme.spacingM
+                            y: Theme.spacingS
+                            width: parent.width - 2 * Theme.spacingM
+                            spacing: 2
+                            Text {
+                                width: parent.width
+                                visible: text !== ""
+                                text: partialCallout.anchored
+                                      ? partialCallout.calloutData.translation : ""
+                                color: Theme.textPrimary
+                                font.pixelSize: Theme.fontS
+                                wrapMode: Text.WordWrap
+                            }
+                            Text {
+                                width: parent.width
+                                visible: partialCallout.anchored && App.ocrResult.translating
+                                         && (partialCallout.calloutData.translation === undefined
+                                             || partialCallout.calloutData.translation === "")
+                                text: qsTr("Translating…")
+                                color: Theme.textSecondary
+                                font.pixelSize: Theme.fontS
+                                wrapMode: Text.WordWrap
+                            }
+                            Text {
+                                width: parent.width
+                                text: partialCallout.anchored
+                                      ? partialCallout.calloutData.source : ""
+                                color: Theme.textSecondary
+                                font.pixelSize: Theme.fontS
+                                elide: Text.ElideRight
+                                maximumLineCount: 2
+                            }
                         }
                     }
                 }
