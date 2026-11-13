@@ -62,6 +62,38 @@ QRect entryRect(const QVariantMap &entry)
                  entry.value(QStringLiteral("height")).toInt());
 }
 
+// One OcrWord per character, which is what both OCR engines emit: each glyph
+// owns its rect and the first glyph of a word carries spaceBefore. The width is
+// distributed evenly, so a selection resolves to a realistic character range
+// instead of the whole line.
+QVector<OcrWord> glyphWordsFor(const QStringList &lines, const QVector<QRect> &boxes)
+{
+    QVector<OcrWord> words;
+    for (int line = 0; line < lines.size() && line < boxes.size(); ++line) {
+        const QString &text = lines.at(line);
+        const QRect box = boxes.at(line);
+        const int step = qMax(1, box.width() / qMax(1, text.size()));
+        int x = box.x();
+        bool firstGlyph = true;
+        for (const QString &token : text.split(QLatin1Char(' '))) {
+            bool firstOfWord = true;
+            for (const QChar c : token) {
+                OcrWord word;
+                word.line = line;
+                word.text = QString(c);
+                word.rect = QRect(x, box.y(), step, box.height());
+                word.spaceBefore = firstOfWord && !firstGlyph;
+                firstGlyph = false;
+                firstOfWord = false;
+                words.append(word);
+                x += step;
+            }
+            x += step; // the space between two words is not a glyph
+        }
+    }
+    return words;
+}
+
 // A capture with four text lines, each with its own glyph stroke, plus the
 // translation that goes on them. The same four-line fixture the golden
 // composite test walks over.
@@ -117,6 +149,11 @@ private slots:
     void multiSelectionOrdersAndMerges();
     void wholeLineMultiSelectionPaintsCovers();
     void partialTextStaysInThePane();
+    void partialAnswerCoversOnlyItsGlyphs();
+    void longPartialAnswerShowsACallout();
+    void partialAcrossLinesShowsOneCallout();
+    void partialCalloutStreamsWithTheAnswer();
+    void screenOnlyCoverStaysOutOfTheComposite();
     void longLineIsSplitAndRejoined();
     void retriesAChunkOnceThenSucceeds();
     void partialTranslationNamesFailedLines();
@@ -539,8 +576,10 @@ void OcrResultTest::wholeLineMultiSelectionPaintsCovers()
     QCOMPARE(covers.at(1).toMap().value(QStringLiteral("sourceStart")).toInt(), 8);
 }
 
-// T4.5.2: a word or part of a line sends exactly that text, with the line as
-// context, and the answer stays in the pane: no cover over the whole line.
+// T4.5.2 + M4.6: a word or part of a line sends exactly that text, with the
+// line as context. The answer now shows on the picture: a fitted answer covers
+// the selected glyphs (screen only), and a selection crossing a line boundary
+// gets one callout because a cover cannot be split across lines.
 void OcrResultTest::partialTextStaysInThePane()
 {
     MockTranslationEndpoint server(MockTranslationEndpoint::Sse);
@@ -574,8 +613,18 @@ void OcrResultTest::partialTextStaysInThePane()
     QTRY_VERIFY_WITH_TIMEOUT(!result.translating(), 5000);
     QCOMPARE(result.translationError(), QString());
     QCOMPARE(result.translation(), QStringLiteral("Hello world"));
-    QVERIFY2(result.translatedLines().isEmpty(),
-             "a partial selection must not paint a cover over its whole line");
+    // "Hello world" fits the selected line box, so it goes over the glyphs, as
+    // one screen-only cover - never a whole-line representation.
+    QCOMPARE(result.partialFragments().size(), 1);
+    QCOMPARE(result.partialPresentation(), QStringLiteral("cover"));
+    const QVariantList covers = result.translatedLines();
+    QCOMPARE(covers.size(), 1);
+    QCOMPARE(covers.first().toMap().value(QStringLiteral("screenOnly")).toBool(), true);
+    QCOMPARE(covers.first().toMap().value(QStringLiteral("sourceStart")).toInt(), start);
+    QCOMPARE(covers.first().toMap().value(QStringLiteral("sourceLength")).toInt(), 3);
+    QVERIFY(result.partialCallout().isEmpty());
+    // Save image and Copy image keep the page: the word cover is screen only.
+    QCOMPARE(result.compositedImage(true), image);
 
     // The request carries the exact fragment plus the source line as context.
     QCOMPARE(server.bodies.size(), 1);
@@ -593,14 +642,21 @@ void OcrResultTest::partialTextStaysInThePane()
     QVERIFY2(!user.contains(QStringLiteral("Selected text: One")), qPrintable(user));
 
     // A range that crosses a line boundary but is not whole lines sends exactly
-    // that range, with both touched lines as context, and still paints nothing.
+    // that range, with both touched lines as context, and gets one callout
+    // anchored to the first fragment: covers are single-line only.
     const int crossStart = result.text().indexOf(QStringLiteral("three"));
     const int crossLength = result.text().indexOf(QStringLiteral("Second")) + 6 - crossStart;
     QVERIFY(crossLength > 0);
     result.translateRange(crossStart, crossLength);
     QVERIFY(result.translationPartialText());
-    QVERIFY(result.translatedLines().isEmpty());
+    QCOMPARE(result.partialFragments().size(), 2);
     QTRY_VERIFY_WITH_TIMEOUT(!result.translating(), 5000);
+    QCOMPARE(result.partialPresentation(), QStringLiteral("callout"));
+    QVERIFY(result.translatedLines().isEmpty());
+    QCOMPARE(result.partialCallout().value(QStringLiteral("source")).toString(),
+             QStringLiteral("three\nSecond"));
+    QCOMPARE(result.partialCallout().value(QStringLiteral("translation")).toString(),
+             QStringLiteral("Hello world"));
     const QJsonObject crossPayload =
         QJsonDocument::fromJson(server.bodies.last().mid(server.bodies.last().indexOf("\r\n\r\n") + 4))
             .object();
@@ -615,6 +671,168 @@ void OcrResultTest::partialTextStaysInThePane()
 // A line over the per-request budget is split at sentence boundaries and sent
 // as separate numbered items, but it must come back as ONE cover with the parts
 // joined: the picture has one box for it, not two.
+// M4.6: a readable partial answer covers exactly the glyphs the reader
+// selected, not the whole line, and the cover is screen only.
+void OcrResultTest::partialAnswerCoversOnlyItsGlyphs()
+{
+    QImage image(400, 120, QImage::Format_RGB32);
+    image.fill(QColor(250, 250, 245));
+    const QString line = QStringLiteral("One two three");
+    const QRect box(20, 16, 340, 28);
+    OcrResultController result;
+    result.setResult(image, glyphWordsFor({line}, {box}), QString());
+    const int start = result.text().indexOf(QStringLiteral("two"));
+    QVERIFY(start >= 0);
+    result.setPartialTranslationForPreview(start, 3, QStringLiteral("dwa"));
+
+    QCOMPARE(result.partialPresentation(), QStringLiteral("cover"));
+    QCOMPARE(result.partialFragments().size(), 1);
+    const QVariantMap fragment = result.partialFragments().first().toMap();
+    QCOMPARE(fragment.value(QStringLiteral("start")).toInt(), start);
+    QCOMPARE(fragment.value(QStringLiteral("length")).toInt(), 3);
+    // The word's own glyphs, not its line: a cover this narrow is the whole
+    // point of the change.
+    QVERIFY(entryRect(fragment).width() < box.width() / 2);
+    QVERIFY(entryRect(fragment).height() >= box.height());
+
+    const QVariantList covers = result.translatedLines();
+    QCOMPARE(covers.size(), 1);
+    const QVariantMap cover = covers.first().toMap();
+    QCOMPARE(cover.value(QStringLiteral("screenOnly")).toBool(), true);
+    QCOMPARE(cover.value(QStringLiteral("text")).toString(), QStringLiteral("dwa"));
+    QCOMPARE(cover.value(QStringLiteral("sourceStart")).toInt(), start);
+    QCOMPARE(cover.value(QStringLiteral("sourceLength")).toInt(), 3);
+    QVERIFY(cover.value(QStringLiteral("fontSize")).toInt()
+            >= OcrResultController::kMinPartialCoverPixelSize);
+    QVERIFY(!cover.value(QStringLiteral("overflow")).toBool());
+    QVERIFY(result.partialCallout().isEmpty());
+    QCOMPARE(result.compositedImage(true), image);
+    QCOMPARE(OcrResultController::composeOverlay(image, covers), image);
+}
+
+// M4.6: an answer too long to read on the selected glyphs goes to one callout
+// anchored to them, and leaves translatedLines empty so nothing is painted.
+void OcrResultTest::longPartialAnswerShowsACallout()
+{
+    QImage image(400, 120, QImage::Format_RGB32);
+    image.fill(QColor(250, 250, 245));
+    const QString line = QStringLiteral("One two three");
+    const QRect box(20, 16, 340, 28);
+    OcrResultController result;
+    result.setResult(image, glyphWordsFor({line}, {box}), QString());
+    const int start = result.text().indexOf(QStringLiteral("two"));
+    QVERIFY(start >= 0);
+    const QString answer =
+        QStringLiteral("A translation far too long to read on one three-letter word");
+    result.setPartialTranslationForPreview(start, 3, answer);
+
+    QCOMPARE(result.translation(), answer);
+    QVERIFY(result.translationPartialText());
+    QCOMPARE(result.partialPresentation(), QStringLiteral("callout"));
+    QVERIFY(result.translatedLines().isEmpty());
+    QCOMPARE(result.compositedImage(true), image);
+    const QVariantMap callout = result.partialCallout();
+    QCOMPARE(callout.value(QStringLiteral("source")).toString(), QStringLiteral("two"));
+    QCOMPARE(callout.value(QStringLiteral("translation")).toString(), answer);
+    const QRect anchor = entryRect(callout);
+    QVERIFY(anchor.width() > 0 && anchor.height() > 0);
+    QVERIFY(anchor.width() < box.width() / 2);
+    QVERIFY(anchor.intersects(box));
+}
+
+// M4.6: covers are single-line only. A selection crossing a line boundary gets
+// one callout for the whole answer, anchored at the first fragment.
+void OcrResultTest::partialAcrossLinesShowsOneCallout()
+{
+    QImage image(400, 140, QImage::Format_RGB32);
+    image.fill(QColor(250, 250, 245));
+    const QVector<QRect> boxes{QRect(20, 16, 300, 28), QRect(20, 78, 300, 28)};
+    OcrResultController result;
+    result.setResult(image,
+                     glyphWordsFor({QStringLiteral("One two"), QStringLiteral("three four")},
+                                   boxes),
+                     QString());
+    const int start = result.text().indexOf(QStringLiteral("two"));
+    const int end = result.text().indexOf(QStringLiteral("three")) + 5;
+    QVERIFY(start >= 0 && end > start);
+    result.setPartialTranslationForPreview(start, end - start, QStringLiteral("dwa trzy"));
+
+    QCOMPARE(result.partialFragments().size(), 2);
+    QCOMPARE(result.partialPresentation(), QStringLiteral("callout"));
+    QVERIFY(result.translatedLines().isEmpty());
+    const QVariantMap callout = result.partialCallout();
+    QCOMPARE(callout.value(QStringLiteral("source")).toString(), QStringLiteral("two\nthree"));
+    QCOMPARE(callout.value(QStringLiteral("translation")).toString(), QStringLiteral("dwa trzy"));
+    // Anchored to the first fragment's line, not the second one's.
+    QVERIFY(entryRect(callout).intersects(boxes.first()));
+    QVERIFY(!entryRect(callout).intersects(boxes.last()));
+}
+
+// M4.6: streaming shows the answer in the callout as it arrives; the
+// cover/callout decision runs once, at Done.
+void OcrResultTest::partialCalloutStreamsWithTheAnswer()
+{
+    MockTranslationEndpoint server(MockTranslationEndpoint::SlowSse);
+    QVERIFY(server.start());
+    Settings settings;
+    settings.setTranslationEndpoint(server.base());
+    settings.setTranslationModel(QStringLiteral("mock"));
+    settings.setTranslationTarget(QStringLiteral("Polish"));
+
+    OcrResultController result(&settings);
+    QImage image(400, 120, QImage::Format_RGB32);
+    image.fill(QColor(250, 250, 245));
+    const QRect box(20, 16, 340, 28);
+    result.setResult(image, glyphWordsFor({QStringLiteral("One two three")}, {box}), QString());
+    const int start = result.text().indexOf(QStringLiteral("two"));
+    QVERIFY(start >= 0);
+    result.translateRange(start, 3);
+    QVERIFY(result.translating());
+    QCOMPARE(result.partialPresentation(), QStringLiteral("callout"));
+    QCOMPARE(result.partialCallout().value(QStringLiteral("source")).toString(),
+             QStringLiteral("two"));
+
+    QTRY_VERIFY_WITH_TIMEOUT(result.translating()
+                                 && result.translation() == QStringLiteral("Hello"),
+                             3000);
+    QCOMPARE(result.partialCallout().value(QStringLiteral("translation")).toString(),
+             QStringLiteral("Hello"));
+
+    QTRY_VERIFY_WITH_TIMEOUT(!result.translating(), 5000);
+    QCOMPARE(result.translation(), QStringLiteral("Hello world"));
+    QCOMPARE(result.partialPresentation(), QStringLiteral("cover"));
+    QVERIFY(result.partialCallout().isEmpty());
+    QVERIFY(result.translatedLines().first().toMap()
+                .value(QStringLiteral("screenOnly")).toBool());
+}
+
+// M4.6: composeOverlay() is the Save/Copy image path, so it must skip a
+// screen-only entry instead of baking a word cover into the page.
+void OcrResultTest::screenOnlyCoverStaysOutOfTheComposite()
+{
+    QImage image(200, 80, QImage::Format_RGB32);
+    image.fill(QColor(250, 250, 245));
+    QVariantMap painted{{QStringLiteral("x"), 10},      {QStringLiteral("y"), 10},
+                        {QStringLiteral("width"), 40},  {QStringLiteral("height"), 20},
+                        {QStringLiteral("background"), QStringLiteral("#ff0000")},
+                        {QStringLiteral("foreground"), QStringLiteral("#000000")},
+                        {QStringLiteral("text"), QString()},
+                        {QStringLiteral("fontSize"), 10},
+                        {QStringLiteral("rtl"), false},
+                        {QStringLiteral("overflow"), false}};
+    QVariantMap screenOnly = painted;
+    screenOnly.insert(QStringLiteral("x"), 120);
+    screenOnly.insert(QStringLiteral("background"), QStringLiteral("#0000ff"));
+    screenOnly.insert(QStringLiteral("screenOnly"), true);
+
+    const QImage composite =
+        OcrResultController::composeOverlay(image, {painted, screenOnly});
+    QCOMPARE(composite.pixel(30, 20), qRgb(255, 0, 0));
+    QCOMPARE(composite.pixel(140, 20), qRgb(250, 250, 245));
+    // Nothing but screen-only covers means the page is handed over untouched.
+    QCOMPARE(OcrResultController::composeOverlay(image, {screenOnly}), image);
+}
+
 void OcrResultTest::longLineIsSplitAndRejoined()
 {
     MockTranslationEndpoint server(MockTranslationEndpoint::NumberedSse);

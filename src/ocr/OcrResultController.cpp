@@ -130,6 +130,40 @@ QString textOfLines(const QVariantList &lines)
     return texts.join(QLatin1Char('\n'));
 }
 
+// The overshoot a cover grows over its box, stopped halfway into the gutter
+// with a neighbour on the same row (M3): the OCR box cuts through the outer
+// glyphs, so the cover reaches them without eating the line above or the first
+// letter of the next column. `skipIndex` is the box the cover is drawn for; a
+// partial fragment passes the line box it sits in, so the fragment's own line
+// never counts as its neighbour.
+QRect paddedCoverRect(const QRect &rect, const QVector<QRect> &boxes, int skipIndex)
+{
+    const int padX = std::clamp(int(std::lround(rect.height() * 0.3)), 3, 32);
+    const int padY = 1;
+    int leftPad = padX;
+    int rightPad = padX;
+    for (int j = 0; j < boxes.size(); ++j) {
+        if (j == skipIndex)
+            continue;
+        const QRect &otherRect = boxes.at(j);
+        // Same visual row only: the box above or below is not a column
+        // neighbour, and its overshoot does not matter here.
+        if (otherRect.top() > rect.bottom() || otherRect.bottom() < rect.top())
+            continue;
+        // At most half the blank gutter, so two covers can never reach each
+        // other: each stops in the middle of the space between the boxes
+        // instead of both growing the full 30% into it.
+        if (otherRect.right() < rect.left()) {
+            const int gap = rect.left() - otherRect.right() - 1;
+            leftPad = std::min(leftPad, std::max(0, gap / 2));
+        } else if (otherRect.left() > rect.right()) {
+            const int gap = otherRect.left() - rect.right() - 1;
+            rightPad = std::min(rightPad, std::max(0, gap / 2));
+        }
+    }
+    return rect.adjusted(-leftPad, -padY, rightPad, padY);
+}
+
 } // namespace
 
 OcrResultController::OcrResultController(Settings *settings, QObject *parent)
@@ -225,13 +259,7 @@ void OcrResultController::startTranslation(int start, int length)
     if (!selected.isEmpty() && !rangeCoversWholeLines(m_lines, start, length)) {
         if (holdForPrivacy(PendingTranslation::Range, start, length))
             return;
-        QStringList context;
-        context.reserve(selected.size());
-        for (const int index : selected) {
-            context.append(
-                m_lines.at(index).toMap().value(QStringLiteral("text")).toString());
-        }
-        startPartialTranslation(m_text.mid(start, length), context.join(QLatin1Char('\n')));
+        startPartialTranslation(start, length);
         return;
     }
     if (holdForPrivacy(PendingTranslation::Range, start, length))
@@ -245,7 +273,7 @@ void OcrResultController::startLineTranslation(const QVector<int> &selected,
     // The numbered path: every selected line becomes one request item (split at
     // sentence boundaries when too long), and every answer lands on its box.
     m_translationPartialText = false;
-    m_partialContext.clear();
+    clearPartialState();
     m_translationSelectionOnly = selectionOnly;
     m_translateLines.clear();
     if (selected.isEmpty()) {
@@ -518,22 +546,36 @@ bool OcrResultController::rangeCoversWholeLines(int start, int length) const
     return rangeCoversWholeLines(m_lines, start, length);
 }
 
-void OcrResultController::startPartialTranslation(const QString &selection,
-                                                  const QString &context)
+void OcrResultController::startPartialTranslation(int start, int length)
 {
     m_translationSelectionOnly = false;
     m_translationPartialText = true;
-    m_partialContext = context;
+    m_partialStart = start;
+    m_partialLength = length;
+    m_sourceText = m_text.mid(start, length);
+    // The touched lines are the request's context, exactly as before.
+    const QVector<int> touched = selectedLineIndexes(m_lines, start, length);
+    QStringList context;
+    context.reserve(touched.size());
+    for (const int index : touched) {
+        context.append(m_lines.at(index).toMap().value(QStringLiteral("text")).toString());
+    }
+    m_partialContext = context.join(QLatin1Char('\n'));
+    rebuildPartialFragments();
     m_translateLines.clear();
     m_translateLineSource.clear();
     m_translationLineCount = 0;
-    m_sourceText = selection;
     m_translationSplitLines = 0;
     m_translating = true;
     m_translationError.clear();
     m_translation.clear();
     setTranslatedLines({});
     m_translationUnchanged = false;
+    // The answer streams into a callout from the first token: a cover would
+    // resize itself on every delta, and the final decision runs at Done.
+    m_partialPresentation = m_partialFragments.isEmpty() ? QStringLiteral("pane")
+                                                         : QStringLiteral("callout");
+    m_partialCallout = partialCalloutFor(QString());
     const quint64 seq = ++m_translationSeq;
     m_chunks.clear();
     m_items.clear();
@@ -547,6 +589,158 @@ void OcrResultController::startPartialTranslation(const QString &selection,
     m_streamTimer.stop();
     emit translationChanged();
     requestPartialText(seq);
+}
+
+// One fragment per OCR line the selection touches: the union of the selected
+// glyphs on that line, grown like a line cover and capped at the page's
+// neighbouring boxes. `start`/`length` are the source range on that line, so a
+// cover or a callout always stands for exactly the text that was selected.
+void OcrResultController::rebuildPartialFragments()
+{
+    m_partialFragments.clear();
+    if (m_partialStart < 0 || m_partialLength <= 0 || m_glyphs.isEmpty())
+        return;
+    const int selectionEnd = m_partialStart + m_partialLength;
+    const QVector<int> touched = selectedLineIndexes(m_lines, m_partialStart, m_partialLength);
+    for (const int lineIndex : touched) {
+        const QVariantMap line = m_lines.at(lineIndex).toMap();
+        const int lineStart = line.value(QStringLiteral("start")).toInt();
+        const int lineLength = line.value(QStringLiteral("length")).toInt();
+        const int start = std::max(m_partialStart, lineStart);
+        const int end = std::min(selectionEnd, lineStart + lineLength);
+        if (end <= start)
+            continue;
+        QRect glyphRect;
+        for (const Glyph &glyph : m_glyphs) {
+            if (glyph.line != lineIndex)
+                continue;
+            const int glyphEnd = glyph.start + glyph.length;
+            if (glyph.start >= end || glyphEnd <= start)
+                continue;
+            glyphRect = glyphRect.isNull() ? glyph.rect : glyphRect.united(glyph.rect);
+        }
+        if (glyphRect.isNull())
+            continue;
+        const QRect cover = paddedCoverRect(glyphRect, m_lineRects, lineIndex);
+        QVariantMap fragment;
+        fragment.insert(QStringLiteral("start"), start);
+        fragment.insert(QStringLiteral("length"), end - start);
+        fragment.insert(QStringLiteral("text"), m_text.mid(start, end - start));
+        fragment.insert(QStringLiteral("x"), cover.x());
+        fragment.insert(QStringLiteral("y"), cover.y());
+        fragment.insert(QStringLiteral("width"), cover.width());
+        fragment.insert(QStringLiteral("height"), cover.height());
+        fragment.insert(QStringLiteral("line"), lineIndex);
+        m_partialFragments.append(fragment);
+    }
+}
+
+QVariantMap OcrResultController::partialCalloutFor(const QString &translation) const
+{
+    if (m_partialFragments.isEmpty())
+        return {};
+    const QVariantMap first = m_partialFragments.first().toMap();
+    QVariantMap callout;
+    callout.insert(QStringLiteral("source"), m_text.mid(m_partialStart, m_partialLength));
+    callout.insert(QStringLiteral("translation"), translation);
+    callout.insert(QStringLiteral("x"), first.value(QStringLiteral("x")));
+    callout.insert(QStringLiteral("y"), first.value(QStringLiteral("y")));
+    callout.insert(QStringLiteral("width"), first.value(QStringLiteral("width")));
+    callout.insert(QStringLiteral("height"), first.value(QStringLiteral("height")));
+    return callout;
+}
+
+// The decision, in one place so the streaming path and the preview seam cannot
+// disagree: no fragment means the pane; more than one means one callout; one
+// fragment is a cover only when the fitted size clears the readability floor,
+// otherwise a callout anchored to it.
+void OcrResultController::applyPartialAnswer(const QString &answer)
+{
+    setTranslatedLines({});
+    m_partialCallout.clear();
+    m_translation = answer;
+    m_translationError.clear();
+    m_translationUnchanged = translationLooksUnchanged(m_sourceText, answer);
+    if (m_partialFragments.isEmpty()) {
+        m_partialPresentation = QStringLiteral("pane");
+    } else if (m_partialFragments.size() > 1 || answer.isEmpty()) {
+        // Covers are single-line only: splitting a model answer across lines is
+        // guesswork, so a selection crossing a line boundary gets one callout.
+        m_partialPresentation = QStringLiteral("callout");
+        m_partialCallout = partialCalloutFor(answer);
+    } else {
+        QString joined;
+        QVariantList map = translatedLineMap(m_partialFragments, {answer}, m_image, &joined,
+                                             false);
+        if (!map.isEmpty()) {
+            QVariantMap cover = map.first().toMap();
+            const int fitted = cover.value(QStringLiteral("fontSize")).toInt();
+            if (fitted >= kMinPartialCoverPixelSize
+                && !cover.value(QStringLiteral("overflow")).toBool()) {
+                // Screen only: Save image and Copy image keep the page.
+                cover.insert(QStringLiteral("screenOnly"), true);
+                map[0] = cover;
+                setTranslatedLines(map);
+                m_partialPresentation = QStringLiteral("cover");
+                m_translation = joined;
+            }
+        }
+        if (m_partialPresentation != QStringLiteral("cover")) {
+            m_partialPresentation = QStringLiteral("callout");
+            m_partialCallout = partialCalloutFor(answer);
+        }
+    }
+    emit translationChanged();
+    if (!answer.isEmpty())
+        emit translationReady();
+}
+
+void OcrResultController::clearPartialState()
+{
+    m_partialStart = -1;
+    m_partialLength = 0;
+    m_partialFragments.clear();
+    m_partialPresentation = QStringLiteral("pane");
+    m_partialCallout.clear();
+    m_partialContext.clear();
+}
+
+void OcrResultController::setPartialTranslationForPreview(int start, int length,
+                                                         const QString &answer)
+{
+    if (m_text.isEmpty() || start < 0 || length <= 0 || start + length > m_text.size())
+        return;
+    clearPrivacyNotice();
+    ++m_translationSeq;
+    if (m_translator)
+        m_translator->cancel();
+    m_translating = false;
+    m_streamTimer.stop();
+    m_streamText.clear();
+    m_items.clear();
+    m_itemTranslations.clear();
+    m_chunks.clear();
+    m_chunkIndex = 0;
+    m_chunkRetried.clear();
+    m_failedLines.clear();
+    m_lastChunkError.clear();
+    m_wholeTextRetried = false;
+    m_translationSelectionOnly = false;
+    m_translationPartialText = true;
+    m_partialStart = start;
+    m_partialLength = length;
+    m_sourceText = m_text.mid(start, length);
+    const QVector<int> touched = selectedLineIndexes(m_lines, start, length);
+    QStringList context;
+    for (const int index : touched)
+        context.append(m_lines.at(index).toMap().value(QStringLiteral("text")).toString());
+    m_partialContext = context.join(QLatin1Char('\n'));
+    rebuildPartialFragments();
+    m_translateLines.clear();
+    m_translateLineSource.clear();
+    m_translationLineCount = 0;
+    m_translationSplitLines = 0;
+    applyPartialAnswer(answer);
 }
 
 void OcrResultController::requestPartialText(quint64 seq)
@@ -582,17 +776,14 @@ void OcrResultController::requestPartialText(quint64 seq)
                 }
                 m_translating = false;
                 m_translationError = error;
+                m_translation.clear();
+                setTranslatedLines({});
+                clearPartialState();
                 emit translationChanged();
                 return;
             }
             m_translating = false;
-            m_translation = text;
-            m_translationError.clear();
-            setTranslatedLines({});
-            m_translationUnchanged = translationLooksUnchanged(m_sourceText, m_translation);
-            emit translationChanged();
-            if (!m_translation.isEmpty())
-                emit translationReady();
+            applyPartialAnswer(text);
         });
 }
 
@@ -871,6 +1062,10 @@ void OcrResultController::refreshStreamingPane()
     if (text == m_translation)
         return;
     m_translation = text;
+    // A partial answer shows in its callout while the request is still open;
+    // the cover/callout decision itself runs once, at Done.
+    if (m_translationPartialText && m_partialPresentation == QLatin1String("callout"))
+        m_partialCallout.insert(QStringLiteral("translation"), text);
     emit translationChanged();
 }
 
@@ -883,6 +1078,7 @@ void OcrResultController::failTranslation(quint64 seq, const QString &error)
     m_streamTimer.stop();
     m_translation.clear();
     setTranslatedLines({});
+    clearPartialState();
     m_translationError = error;
     emit translationChanged();
 }
@@ -902,7 +1098,7 @@ void OcrResultController::cancelTranslation()
         m_translating = false;
         m_streamText.clear();
         m_translationPartialText = false;
-        m_partialContext.clear();
+        clearPartialState();
         // A partial answer is not a translation: drop it instead of leaving
         // half a page on screen after Cancel.
         m_translation.clear();
@@ -922,7 +1118,7 @@ void OcrResultController::setTranslationForPreview(const QStringList &translated
     m_translating = false;
     m_translationError.clear();
     m_translationPartialText = false;
-    m_partialContext.clear();
+    clearPartialState();
     m_streamTimer.stop();
     m_streamText.clear();
     m_items.clear();
@@ -978,7 +1174,7 @@ void OcrResultController::setResult(const QImage &image, const QVector<OcrWord> 
     m_translationError.clear();
     m_translating = false;
     m_translationPartialText = false;
-    m_partialContext.clear();
+    clearPartialState();
     clearPrivacyNotice();
     m_selectedLines.clear();
     m_selectionAnchor = -1;
@@ -1171,7 +1367,8 @@ QVector<QStringList> OcrResultController::chunkLines(const QStringList &lines, i
 
 QVariantList OcrResultController::translatedLineMap(const QVariantList &lines,
                                                     const QStringList &translated,
-                                                    const QImage &image, QString *text)
+                                                    const QImage &image, QString *text,
+                                                    bool padCover)
 {
     // Convert once: sampleLineColors() would otherwise deep-copy a 4K capture
     // for every line box.
@@ -1203,36 +1400,9 @@ QVariantList OcrResultController::translatedLineMap(const QVariantList &lines,
         const QString value = i < translated.size() ? translated.at(i) : QString();
         if (i)
             joined += QLatin1Char('\n');
-        // The OCR box cuts through the outer glyphs (a wider letter pokes past
-        // it), so the cover grows a little - more sideways than up and down, so
-        // it reaches the last letter without eating the line above. On a
-        // multi-column page the sideways growth stops in the middle of the
-        // gutter to a neighbour on the same row: 30% of a tall line is wide
-        // enough to reach into the next column and hide its first letter.
-        const int padX = std::clamp(int(std::lround(rect.height() * 0.3)), 3, 32);
-        const int padY = 1;
-        int leftPad = padX;
-        int rightPad = padX;
-        for (int j = 0; j < boxes.size(); ++j) {
-            if (j == i)
-                continue;
-            const QRect &otherRect = boxes.at(j);
-            // Same visual row only: the box above or below is not a column
-            // neighbour, and its overshoot does not matter here.
-            if (otherRect.top() > rect.bottom() || otherRect.bottom() < rect.top())
-                continue;
-            // At most half the blank gutter, so two covers can never reach
-            // each other: each stops in the middle of the space between the
-            // boxes instead of both growing the full 30% into it.
-            if (otherRect.right() < rect.left()) {
-                const int gap = rect.left() - otherRect.right() - 1;
-                leftPad = std::min(leftPad, std::max(0, gap / 2));
-            } else if (otherRect.left() > rect.right()) {
-                const int gap = otherRect.left() - rect.right() - 1;
-                rightPad = std::min(rightPad, std::max(0, gap / 2));
-            }
-        }
-        const QRect cover = rect.adjusted(-leftPad, -padY, rightPad, padY);
+        // A partial fragment already carries its padded rect (it had to cap at
+        // the page's neighbours), so it must not be grown a second time.
+        const QRect cover = padCover ? paddedCoverRect(rect, boxes, i) : rect;
         const LineColors colors = sampleLineColors(source, cover);
         // The ONE font decision for this cover, in image pixels: the window
         // scales it and the composite draws at it, so the saved picture cannot
@@ -1362,6 +1532,17 @@ QImage OcrResultController::composeOverlay(const QImage &image, const QVariantLi
 {
     if (image.isNull() || translatedLines.isEmpty())
         return image;
+    // A word cover is screen only: it must never be baked into a saved or
+    // copied picture. If every entry is screen only, the page is untouched.
+    bool paints = false;
+    for (const QVariant &value : translatedLines) {
+        if (!value.toMap().value(QStringLiteral("screenOnly")).toBool()) {
+            paints = true;
+            break;
+        }
+    }
+    if (!paints)
+        return image;
     QImage out = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
     QPainter painter(&out);
     painter.setRenderHint(QPainter::Antialiasing, true);
@@ -1370,6 +1551,8 @@ QImage OcrResultController::composeOverlay(const QImage &image, const QVariantLi
 
     for (const QVariant &value : translatedLines) {
         const QVariantMap entry = value.toMap();
+        if (entry.value(QStringLiteral("screenOnly")).toBool())
+            continue;
         const QRect cover(entry.value(QStringLiteral("x")).toInt(),
                           entry.value(QStringLiteral("y")).toInt(),
                           entry.value(QStringLiteral("width")).toInt(),

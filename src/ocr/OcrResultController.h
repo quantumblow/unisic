@@ -89,9 +89,19 @@ class OcrResultController : public QObject
     // pane is one native TextEdit selection and cannot hold a non-adjacent set.
     Q_PROPERTY(QVariantList selectedLines READ selectedLines NOTIFY selectionChanged)
     // True when the last/current translation was the exact selected text
-    // (a word or part of a line), not whole lines: the answer is in the pane and
-    // must not paint a cover over the line it came from.
+    // (a word or part of a line), not whole lines: the answer is laid over the
+    // selection when it fits and in a callout when it does not, and never in the
+    // saved picture.
     Q_PROPERTY(bool translationPartialText READ translationPartialText NOTIFY translationChanged)
+    // M4.6: where a partial answer went. "pane" when the selection has no glyph
+    // box (a QR payload), "cover" when the answer fits the selected glyphs in
+    // place, "callout" when it does not and the window anchors a box to them.
+    Q_PROPERTY(QString partialPresentation READ partialPresentation NOTIFY translationChanged)
+    // The callout's content and anchor, in IMAGE pixels: { source, translation,
+    // x, y, width, height }, where the geometry is the first selected
+    // fragment's padded rect. Empty in the other two presentations, so a stale
+    // anchor can never be shown.
+    Q_PROPERTY(QVariantMap partialCallout READ partialCallout NOTIFY translationChanged)
     // A one-line confirmation the window shows in place (Copied, Saved ...,
     // Opened in the editor): the app's toasts live in the MAIN window, which
     // the result window can be covering while the user works in it. Cleared
@@ -142,6 +152,13 @@ public:
     int translationChunksDone() const { return std::min(m_chunkIndex, int(m_chunks.size())); }
     bool translationUnchanged() const { return m_translationUnchanged; }
     bool translationPartialText() const { return m_translationPartialText; }
+    QString partialPresentation() const { return m_partialPresentation; }
+    QVariantMap partialCallout() const { return m_partialCallout; }
+    // One entry per OCR line the partial selection touches: { start, length,
+    // text, x, y, width, height, line }, the padded cover rect and the source
+    // range it stands for. One entry means the answer can go over the glyphs;
+    // more than one always means a callout.
+    QVariantList partialFragments() const { return m_partialFragments; }
     QVariantList selectedLines() const;
     bool hasLineSelection() const { return !m_selectedLines.isEmpty(); }
     int selectedLineCount() const { return m_selectedLines.size(); }
@@ -187,6 +204,11 @@ public:
     // network, so the window's Save/Copy image, Edit in editor, zoom and split
     // can be exercised by hand. Cancels any translation in flight.
     void setTranslationForPreview(const QStringList &translated);
+    // Developer/smoke path for a word or partial line: applies `answer` to
+    // [start, length) exactly as a finished request would, so the cover/callout
+    // decision and the window can be checked without a network. Cancels any
+    // translation in flight.
+    void setPartialTranslationForPreview(int start, int length, const QString &answer);
 
     // The picture at source resolution: the untouched capture for the Original
     // layer, or the covers with their fitted text for the Translation layer.
@@ -208,6 +230,10 @@ public:
     static int fittedPixelSize(const QString &text, const QSize &box, int maxPixelSize,
                                bool *fits = nullptr);
     static constexpr int kMinFitPixelSize = 5;
+    // The smallest fitted size a partial answer may be laid over the selected
+    // glyphs at, in image pixels. Below this a word cover is a smear, so the
+    // answer goes to a callout instead.
+    static constexpr int kMinPartialCoverPixelSize = 10;
     // True when the line reads right to left (first strong character is
     // Arabic/Hebrew/...): the cover aligns its text to the right edge like the
     // pane does, instead of left-aligning an RTL run.
@@ -241,7 +267,8 @@ public:
     // [start, length) range in that text, so clicking a translated line on the
     // picture selects exactly its translation in the pane.
     static QVariantList translatedLineMap(const QVariantList &lines, const QStringList &translated,
-                                          const QImage &image, QString *text);
+                                          const QImage &image, QString *text,
+                                          bool padCover = true);
     // Comparing with whitespace squashed: a service that echoes the input often
     // re-wraps or re-spaces it, and that is still "unchanged" to the reader.
     static bool translationLooksUnchanged(const QString &source, const QString &translation);
@@ -302,6 +329,14 @@ private:
     int m_selectionAnchor = -1;
     bool m_translationPartialText = false;
     QString m_partialContext;
+    // M4.6: the pane selection a partial translation came from, the per-line
+    // fragments it resolves to, and where the answer went. `m_partialRange`
+    // is [m_partialStart, m_partialStart + m_partialLength) in `text`.
+    int m_partialStart = -1;
+    int m_partialLength = 0;
+    QVariantList m_partialFragments;
+    QString m_partialPresentation = QStringLiteral("pane");
+    QVariantMap m_partialCallout;
     // What the held first-send notice should run once the user answers.
     enum class PendingTranslation { None, Range, SelectedLines };
     PendingTranslation m_privacyPending = PendingTranslation::None;
@@ -346,10 +381,15 @@ private:
     void requestWholeText(quint64 seq);
     // The numbered path: `selected` are the source lines, empty means all.
     void startLineTranslation(const QVector<int> &selected, bool selectionOnly);
-    // T4.5.2: the exact selected text, with the touched lines as context, pane
-    // only.
-    void startPartialTranslation(const QString &selection, const QString &context);
+    // M4.6: the exact [start, length) selection, its per-line fragments and the
+    // cover/callout decision. Streaming goes to the callout; at Done the answer
+    // moves to a cover when the fitted size clears kMinPartialCoverPixelSize.
+    void startPartialTranslation(int start, int length);
     void requestPartialText(quint64 seq);
+    void rebuildPartialFragments();
+    void applyPartialAnswer(const QString &answer);
+    void clearPartialState();
+    QVariantMap partialCalloutFor(const QString &translation) const;
     void setSelectedLines(const QVector<int> &lines);
     void finishLineTranslation();
     QString failedLinesSummary() const;
