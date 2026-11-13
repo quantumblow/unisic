@@ -491,6 +491,11 @@ hit-testing inside the text), and a word request carries its line as context.
   FAILs are still the known container gaps; the desktop row below stays open.
 - All 8 new strings are translated in the eight catalogs; CHANGELOG EN/PL has
   the M4.5 entry.
+- AppImage rebuilt from `feat/ocr-m4` for the real-machine pass: 175,229,432
+  bytes, sha256
+  `15fd9669cd8735712c18dccd944dbc1ff7a18ab6360d0f2a2eb1eb4db91f45e4`, 10 gates
+  ON, the new source strings are in the binary, `--version` answers 0.8.9, and
+  it starts under an isolated offscreen profile and exits cleanly on SIGTERM.
 
 ## M5. The other scripts' recognizers (5-8 days, D5 settled: own round)
 
