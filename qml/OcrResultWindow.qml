@@ -1189,7 +1189,7 @@ Window {
                                  && App.ocrResult.partialPresentation === "callout"
                                  && preview.status === Image.Ready
                                  && App.ocrResult.privacyNoticeHost === ""
-                        width: Math.min(320, Math.max(140, imagePane.width - 16))
+                        width: Math.max(80, Math.min(320, imagePane.width - 16))
                         height: calloutColumn.implicitHeight + 2 * Theme.spacingS
                         // Centred on the fragment, kept inside the pane.
                         x: Math.max(8, Math.min(imagePane.width - width - 8,
