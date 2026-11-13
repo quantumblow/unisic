@@ -785,14 +785,14 @@ for `translate.svg` (submodule bump).
   encoder, portal twice, ffmpeg twice). The overlay toolbar itself needs a real
   screen, so the entry-point acceptance lines are in the manual pass below,
   unticked.
-- AppImage rebuilt from `ea1bbf8` with `UNISIC_BUILD_NUMBER=20261113` in
+- AppImage rebuilt from `e8637c3` with `UNISIC_BUILD_NUMBER=20261113` in
   `unisic-appimage-env:latest`: 175,258,104 bytes, sha256
-  `73d298e4bea097d8fd28ea69770292ff59f091fb39607d94623f542ccc1c0817`, release
-  flavor (no Developer pane), 10 gates ON, the new strings (`OCR region…`,
-  `Copy text (OCR)`, `Translation is not set up`) found in the shipped binary,
-  `--version` answers 0.8.9, and it starts under an isolated offscreen profile
-  and exits cleanly on SIGTERM. `dist/SHA256SUMS` regenerated; `dist/` is
-  gitignored.
+  `23b6b2a6888be99893c89db8c59803b7daf8bffa6b52c6918cac28ac8fb4fdfc`, release
+  flavor (no Developer pane), 10 gates ON, the new strings and the reviewed
+  Simplified Chinese labels (`OCR 区域`, `OCR（文字识别）`, `文本翻译`, with no
+  `OCR 区域…`) found in the embedded catalogs, `--version` answers 0.8.9, and it
+  starts under an isolated offscreen profile and exits cleanly on SIGTERM.
+  `dist/SHA256SUMS` regenerated; `dist/` is gitignored.
 
 ## M5. The other scripts' recognizers (5-8 days, D5 settled: own round)
 
