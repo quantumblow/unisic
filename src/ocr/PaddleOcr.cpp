@@ -164,6 +164,15 @@ QString modelRoot()
 {
     return appDataDir() + QStringLiteral("/paddleocr");
 }
+// The tier that ships inside the binary through the qrc built from
+// third_party/paddleocr/tiny/ (see CMakeLists.txt). Only
+// the smallest one: 6.3 MB is affordable in every build, 31 MB is not. See
+// third_party/paddleocr/NOTICE for provenance and CMakeLists.txt for the pins.
+constexpr const char *kBundledTier = "tiny";
+QString bundledPath(const QString &tier, const char *name)
+{
+    return QStringLiteral(":/paddleocr/") + tier + QLatin1Char('/') + QLatin1String(name);
+}
 
 // ---------------------------------------------------------------- ORT glue
 
@@ -450,12 +459,10 @@ bool PaddleOcr::Impl::ensureLoaded(const QString &tier, QString *error)
     close(det);
     close(rec);
     dict.clear();
-    const TierPin *pin = tierPin(tier);
-    const QString dir = PaddleOcr::modelDir(tier);
-    if (!openSession(dir + QLatin1Char('/') + QLatin1String(pin->files[0].name), det, error)
-        || !openSession(dir + QLatin1Char('/') + QLatin1String(pin->files[1].name), rec, error))
+    if (!openSession(PaddleOcr::detPath(tier), det, error)
+        || !openSession(PaddleOcr::recPath(tier), rec, error))
         return false;
-    QFile dictFile(dir + QLatin1Char('/') + QLatin1String(pin->files[2].name));
+    QFile dictFile(PaddleOcr::dictPath(tier));
     if (!dictFile.open(QIODevice::ReadOnly)) {
         *error = PaddleOcr::tr("Cannot read OCR dictionary %1: %2")
                      .arg(dictFile.fileName(), dictFile.errorString());
@@ -820,24 +827,67 @@ QString PaddleOcr::tier() const
     return tierId(tierPin(m_settings ? m_settings->paddleTier() : QStringLiteral("small")));
 }
 
+QString PaddleOcr::bundledTier()
+{
+    // Read the qrc, not a constant: on Windows nothing is embedded (the bytes
+    // would be dead weight, PaddleOcr::available() is false there) and this
+    // has to come back empty rather than promise files that are not there.
+    const QString id = QString::fromLatin1(kBundledTier);
+    return bundledComplete(id) ? id : QString();
+}
+
+bool PaddleOcr::bundledComplete(const QString &tier)
+{
+    for (const FilePin &f : tierPin(tier)->files) {
+        const QFileInfo fi(bundledPath(tier, f.name));
+        if (!fi.exists() || fi.size() != f.bytes)
+            return false;
+    }
+    return true;
+}
+
+bool PaddleOcr::downloadedComplete(const QString &tier)
+{
+    for (const FilePin &f : tierPin(tier)->files) {
+        const QFileInfo fi(modelDir(tier) + QLatin1Char('/') + QLatin1String(f.name));
+        if (!fi.exists() || fi.size() != f.bytes)
+            return false;
+    }
+    return true;
+}
+
 QString PaddleOcr::modelDir(const QString &tier)
 {
     return modelRoot() + QLatin1Char('/') + tier;
 }
 
+QString PaddleOcr::modelFilePath(const QString &tier, int index)
+{
+    // One rule for every reader: a copy embedded in the binary wins over the
+    // data directory. For tiny that is always the qrc (an older install's
+    // downloaded copy is unused, and deleteDownloads() still removes it); for
+    // small and medium there is no qrc file, so this is the downloaded path and
+    // nothing changes.
+    const FilePin &f = tierPin(tier)->files[index];
+    const QString embedded = bundledPath(tier, f.name);
+    if (QFileInfo::exists(embedded))
+        return embedded;
+    return modelDir(tier) + QLatin1Char('/') + QLatin1String(f.name);
+}
+
 QString PaddleOcr::detPath(const QString &tier)
 {
-    return modelDir(tier) + QLatin1Char('/') + QLatin1String(tierPin(tier)->files[0].name);
+    return modelFilePath(tier, 0);
 }
 
 QString PaddleOcr::recPath(const QString &tier)
 {
-    return modelDir(tier) + QLatin1Char('/') + QLatin1String(tierPin(tier)->files[1].name);
+    return modelFilePath(tier, 1);
 }
 
 QString PaddleOcr::dictPath(const QString &tier)
 {
-    return modelDir(tier) + QLatin1Char('/') + QLatin1String(tierPin(tier)->files[2].name);
+    return modelFilePath(tier, 2);
 }
 
 bool PaddleOcr::runtimeFound()
@@ -861,19 +911,59 @@ bool PaddleOcr::canDownloadRuntime() const
 
 bool PaddleOcr::modelInstalled() const
 {
-    const TierPin *pin = tierPin(tier());
-    for (const FilePin &f : pin->files) {
-        const QFileInfo fi(modelDir(tier()) + QLatin1Char('/') + QLatin1String(f.name));
-        if (!fi.exists() || fi.size() != f.bytes)
-            return false;
+    // The SELECTED tier, from either source: shipped in the binary (tiny) or
+    // present in the data directory (any tier). Routing asks effectiveTier().
+    return bundledComplete(tier()) || downloadedComplete(tier());
+}
+
+QString PaddleOcr::effectiveTier() const
+{
+    // THE effective-tier rule, in one place (D3): the selected tier when it is
+    // installed, otherwise the bundled tiny, otherwise no PP-OCRv6 at all. It is
+    // what routing, the memory guard and the loader all follow; Settings still
+    // shows the selected tier and says which one is really running.
+    const QString selected = tier();
+    if (bundledComplete(selected) || downloadedComplete(selected))
+        return selected;
+    return bundledTier();
+}
+
+bool PaddleOcr::tierBundled() const
+{
+    return bundledComplete(tier());
+}
+
+bool PaddleOcr::tierDownloaded() const
+{
+    return downloadedComplete(tier());
+}
+
+QVariantList PaddleOcr::tierStates() const
+{
+    QVariantList out;
+    for (const TierPin &t : kTiers) {
+        const QString id = QString::fromLatin1(t.id);
+        QVariantMap entry;
+        entry.insert(QStringLiteral("id"), id);
+        // These tokens are stable and untranslated: the wording lives in QML,
+        // so the catalogs translate it like any other string.
+        entry.insert(QStringLiteral("state"),
+                     bundledComplete(id)      ? QStringLiteral("included")
+                     : downloadedComplete(id) ? QStringLiteral("downloaded")
+                                              : QStringLiteral("missing"));
+        out.append(entry);
     }
-    return true;
+    return out;
 }
 
 bool PaddleOcr::hasDownloads() const
 {
-    return QFile::exists(detPath(tier())) || QFile::exists(recPath(tier()))
-           || QFile::exists(dictPath(tier()));
+    // Disk only, so the bundled tier never reports files the user could delete.
+    const QString dir = modelDir(tier());
+    for (const FilePin &f : tierPin(tier())->files)
+        if (QFile::exists(dir + QLatin1Char('/') + QLatin1String(f.name)))
+            return true;
+    return false;
 }
 
 QString PaddleOcr::downloadSizeText()
@@ -881,24 +971,59 @@ QString PaddleOcr::downloadSizeText()
     qint64 bytes = 0;
     if (!runtimeFound() && canDownloadRuntime())
         bytes += kRuntimeBytes;
-    const TierPin *pin = tierPin(tier());
-    for (const FilePin &f : pin->files) {
-        const QFileInfo fi(modelDir(tier()) + QLatin1Char('/') + QLatin1String(f.name));
-        if (!fi.exists() || fi.size() != f.bytes)
-            bytes += f.bytes;
+    // A bundled tier is already inside the binary; download() fetches nothing
+    // for it, so the size must not advertise 6 MB that will not be downloaded.
+    if (!bundledComplete(tier())) {
+        for (const FilePin &f : tierPin(tier())->files) {
+            const QFileInfo fi(modelDir(tier()) + QLatin1Char('/') + QLatin1String(f.name));
+            if (!fi.exists() || fi.size() != f.bytes)
+                bytes += f.bytes;
+        }
     }
     return QLocale().formattedDataSize(bytes, 0, QLocale::DataSizeTraditionalFormat);
 }
 
+bool PaddleOcr::tierReadsJapanese(const QString &tier)
+{
+    // PP-OCRv6 tiny's dictionary has 6,904 entries and no kana at all (small and
+    // medium carry 15,565 Han plus the kana), so it cannot read Japanese. Tested
+    // with the bundled files: "jpn" must stay on Tesseract until Small or Medium
+    // is downloaded.
+    return tier != QLatin1String("tiny");
+}
+
 bool PaddleOcr::supportsLanguages(const QString &langs, bool autoScript) const
 {
-    if (autoScript)
-        return true;
+    // Routing follows the tier that will actually run, not the one in the
+    // picker: with tiny bundled, a fresh install runs tiny while Settings still
+    // says Small.
+    const QString running = effectiveTier();
+    return !running.isEmpty() && tierSupportsLanguages(running, langs, autoScript);
+}
+
+bool PaddleOcr::tierSupportsLanguages(const QString &tier, const QString &langs, bool autoScript)
+{
+    if (tier.isEmpty())
+        return false; // no PP-OCRv6 model at all
+    const QStringList parts = langs.split(QLatin1Char('+'), Qt::SkipEmptyParts);
+    const bool japanese = parts.contains(QStringLiteral("jpn"))
+                          || parts.contains(QStringLiteral("jpn_vert"));
+    if (autoScript) {
+        // PP-OCRv6 has no script detection (that is Tesseract's osd), so "auto"
+        // hands it every installed pack at once. With a tier that cannot read
+        // kana and Japanese installed, the page MIGHT be Japanese, so auto stays
+        // on Tesseract there instead of misreading it; Latin and Chinese still
+        // go to Paddle for an install without a Japanese pack (D3).
+        return tierReadsJapanese(tier) || !japanese;
+    }
+    if (japanese && !tierReadsJapanese(tier))
+        return false;
     // PP-OCRv6 reads Chinese (simplified and traditional), Japanese and 48
     // Latin-script languages. Everything else is still Tesseract's job: the v6
     // recogniser would output confident-looking garbage for Cyrillic/Arabic/
     // Korean/Indic/Thai text. Keep this list in step with the scripts in
-    // OcrEngine::scriptCodeTable().
+    // OcrEngine::scriptCodeTable(). "jpn"/"jpn_vert" are handled above, because
+    // whether they are readable depends on the tier.
     static const QSet<QString> notInV6 = {
         QStringLiteral("ara"), QStringLiteral("fas"), QStringLiteral("urd"), QStringLiteral("pus"),
         QStringLiteral("uig"), QStringLiteral("snd"), QStringLiteral("ckb"), QStringLiteral("heb"),
@@ -912,9 +1037,8 @@ bool PaddleOcr::supportsLanguages(const QString &langs, bool autoScript) const
         QStringLiteral("mkd"), QStringLiteral("bel"), QStringLiteral("kaz"), QStringLiteral("kir"),
         QStringLiteral("mon"), QStringLiteral("tgk"), QStringLiteral("kat"), QStringLiteral("hye"),
         QStringLiteral("amh"), QStringLiteral("tir"), QStringLiteral("chi_sim_vert"),
-        QStringLiteral("chi_tra_vert"), QStringLiteral("jpn_vert"),
+        QStringLiteral("chi_tra_vert"),
     };
-    const QStringList parts = langs.split(QLatin1Char('+'), Qt::SkipEmptyParts);
     for (const QString &p : parts)
         if (notInV6.contains(p))
             return false;
@@ -1006,11 +1130,14 @@ void PaddleOcr::download()
         m_queue << -1;
     }
     const TierPin *pin = tierPin(m_downloadTier);
-    for (int i = 0; i < 3; ++i) {
-        const QFileInfo fi(modelDir(m_downloadTier) + QLatin1Char('/')
-                           + QLatin1String(pin->files[i].name));
-        if (!fi.exists() || fi.size() != pin->files[i].bytes)
-            m_queue << i;
+    // A bundled tier is in the binary already; only the runtime can be missing.
+    if (!bundledComplete(m_downloadTier)) {
+        for (int i = 0; i < 3; ++i) {
+            const QFileInfo fi(modelDir(m_downloadTier) + QLatin1Char('/')
+                               + QLatin1String(pin->files[i].name));
+            if (!fi.exists() || fi.size() != pin->files[i].bytes)
+                m_queue << i;
+        }
     }
     if (m_queue.isEmpty()) {
         emit stateChanged();
@@ -1179,16 +1306,23 @@ void PaddleOcr::recognize(const QImage &img, Result cb)
         cb({}, tr("No image to recognize"));
         return;
     }
-    if (!runtimeFound() || !modelInstalled()) {
+    if (!runtimeFound()) {
+        cb({}, tr("PaddleOCR needs ONNX Runtime. Install the onnxruntime package, then try again."));
+        return;
+    }
+    // The tier that will actually run, not the one in the picker: with tiny
+    // bundled those differ on an install that picked Small and never downloaded
+    // it, and both the memory guard and the loader have to follow the real one.
+    const QString running = effectiveTier();
+    if (running.isEmpty()) {
         cb({}, tr("PaddleOCR models are not downloaded - see Settings > General"));
         return;
     }
-    if (const QString memory = memoryError(tier()); !memory.isEmpty()) {
+    if (const QString memory = memoryError(running); !memory.isEmpty()) {
         cb({}, memory);
         return;
     }
     auto impl = m_impl;
-    const QString selected = tier();
     auto *fw = new QFutureWatcher<RunOut>(this);
     connect(fw, &QFutureWatcher<RunOut>::finished, this, [this, fw, cb] {
         const RunOut r = fw->result();
@@ -1197,7 +1331,7 @@ void PaddleOcr::recognize(const QImage &img, Result cb)
             m_idle->start();
         cb(r.text, r.error);
     });
-    fw->setFuture(QtConcurrent::run([impl, img, selected] { return impl->run(img, selected, true); }));
+    fw->setFuture(QtConcurrent::run([impl, img, running] { return impl->run(img, running, true); }));
 }
 
 void PaddleOcr::recognizeBoxes(const QImage &img, BoxResult cb)
@@ -1206,16 +1340,20 @@ void PaddleOcr::recognizeBoxes(const QImage &img, BoxResult cb)
         cb({}, tr("No image to recognize"));
         return;
     }
-    if (!runtimeFound() || !modelInstalled()) {
+    if (!runtimeFound()) {
+        cb({}, tr("PaddleOCR needs ONNX Runtime. Install the onnxruntime package, then try again."));
+        return;
+    }
+    const QString running = effectiveTier();
+    if (running.isEmpty()) {
         cb({}, tr("PaddleOCR models are not downloaded - see Settings > General"));
         return;
     }
-    if (const QString memory = memoryError(tier()); !memory.isEmpty()) {
+    if (const QString memory = memoryError(running); !memory.isEmpty()) {
         cb({}, memory);
         return;
     }
     auto impl = m_impl;
-    const QString selected = tier();
     auto *fw = new QFutureWatcher<RunOut>(this);
     connect(fw, &QFutureWatcher<RunOut>::finished, this, [this, fw, cb] {
         const RunOut r = fw->result();
@@ -1224,5 +1362,5 @@ void PaddleOcr::recognizeBoxes(const QImage &img, BoxResult cb)
             m_idle->start();
         cb(r.words, r.error);
     });
-    fw->setFuture(QtConcurrent::run([impl, img, selected] { return impl->run(img, selected, false); }));
+    fw->setFuture(QtConcurrent::run([impl, img, running] { return impl->run(img, running, false); }));
 }

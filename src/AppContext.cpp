@@ -1986,9 +1986,17 @@ QString AppContext::systemDiagnostics() const
     if (PaddleOcr *paddle = m_ocr->paddle()) {
         L << QStringLiteral("PaddleOCR runtime: %1")
                  .arg(paddle->runtimeFound() ? paddle->runtimeInfo() : QStringLiteral("not installed"));
-        L << QStringLiteral("PaddleOCR model (%1): %2")
-                 .arg(paddle->tier(), paddle->modelInstalled() ? QStringLiteral("installed")
-                                                               : QStringLiteral("not installed"));
+        // Selected and effective differ on a fresh install: the picker defaults
+        // to small while the bundled tiny is what runs.
+        const QString running = paddle->effectiveTier();
+        L << QStringLiteral("PaddleOCR model: %1 selected (%2), %3")
+                 .arg(paddle->tier(),
+                      paddle->tierDownloaded() ? QStringLiteral("downloaded")
+                      : paddle->tierBundled() ? QStringLiteral("included")
+                                              : QStringLiteral("not installed"),
+                      running.isEmpty() ? QStringLiteral("nothing to run")
+                      : paddle->ready() ? running + QStringLiteral(" in use")
+                                        : running + QStringLiteral(" available, needs ONNX Runtime"));
     }
     L << QString() << QStringLiteral("[Log]");
     const QString lf = DiagLog::logFilePath();

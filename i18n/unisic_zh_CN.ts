@@ -19,14 +19,14 @@
         <translation>无法将 %1 移到回收站，文件仍在磁盘上</translation>
     </message>
     <message>
-        <location line="+3150"/>
+        <location line="+3157"/>
         <location line="+1883"/>
         <location line="+20"/>
         <source>Copied to clipboard</source>
         <translation>已复制到剪贴板</translation>
     </message>
     <message>
-        <location line="-4554"/>
+        <location line="-4561"/>
         <location line="+47"/>
         <source>Nothing to recognize</source>
         <translation>没有可识别的内容</translation>
@@ -83,14 +83,14 @@
         <translation>Dev: 形状编辑：%1</translation>
     </message>
     <message>
-        <location filename="../src/AppContext.cpp" line="+5171"/>
+        <location filename="../src/AppContext.cpp" line="+5178"/>
         <location filename="../src/diag/SmokeTests.cpp" line="+810"/>
-        <location line="+2463"/>
+        <location line="+2467"/>
         <source>Quit</source>
         <translation>退出</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="-2451"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-2455"/>
         <source>Dev: language: %1</source>
         <translation>Dev: 语言：%1</translation>
     </message>
@@ -105,17 +105,17 @@
         <translation>Dev: OCR 文本框：%1（%2 个字形）</translation>
     </message>
     <message>
-        <location line="+286"/>
+        <location line="+290"/>
         <source>Dev: played capture sound &apos;%1&apos;</source>
         <translation>Dev: 已播放截图音效 “%1”</translation>
     </message>
     <message>
-        <location line="-1143"/>
+        <location line="-1147"/>
         <source>Dev: capture on release: %1</source>
         <translation>Dev: 释放时截图：%1</translation>
     </message>
     <message>
-        <location filename="../src/AppContext.cpp" line="-6026"/>
+        <location filename="../src/AppContext.cpp" line="-6033"/>
         <source>Opened a terminal to install the update.</source>
         <translation>已打开终端以安装更新。</translation>
     </message>
@@ -169,12 +169,12 @@
         <translation>录制单个窗口需要窗口选择器，而此桌面不提供该功能，请改为录制屏幕或区域。</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="+1292"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="+1296"/>
         <source>no screen</source>
         <translation>无屏幕</translation>
     </message>
     <message>
-        <location filename="../src/AppContext.cpp" line="+355"/>
+        <location filename="../src/AppContext.cpp" line="+362"/>
         <source>No log file was opened for this run</source>
         <translation>本次运行没有打开日志文件</translation>
     </message>
@@ -204,7 +204,7 @@
         <translation>已找到，OCR 会自动识别每张截图的文字体系。</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="-2569"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-2573"/>
         <source>Dev: custom theme: %1</source>
         <translation>Dev: 自定义主题：%1</translation>
     </message>
@@ -214,7 +214,7 @@
         <translation>Dev: 诊断信息已复制（%1 个字符）</translation>
     </message>
     <message>
-        <location line="+1913"/>
+        <location line="+1917"/>
         <source>Dev: OCR auto language: %1 (installed: %2; %3; map: %4)</source>
         <translation>Dev: OCR 自动语言：%1（已安装：%2；%3；映射：%4）</translation>
     </message>
@@ -458,7 +458,7 @@
         <translation>已上传，链接已复制</translation>
     </message>
     <message>
-        <location line="-3293"/>
+        <location line="-3300"/>
         <source>Unisic %1 is available - updating automatically</source>
         <translation>Unisic %1 已发布，正在自动更新</translation>
     </message>
@@ -529,7 +529,7 @@
         <translation>将在 %1 秒后开始录制…</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="-4586"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-4590"/>
         <source>Dev: clipboard paste: %1</source>
         <translation>Dev: 剪贴板粘贴：%1</translation>
     </message>
@@ -755,12 +755,11 @@
         <translation>开发者：翻译覆盖层：%1</translation>
     </message>
     <message>
-        <location line="+10"/>
         <source>Dev: PaddleOCR: SKIP (models not downloaded)</source>
-        <translation>开发者：PaddleOCR：跳过（模型未下载）</translation>
+        <translation type="vanished">开发者：PaddleOCR：跳过（模型未下载）</translation>
     </message>
     <message>
-        <location line="+5"/>
+        <location line="+19"/>
         <source>Dev: PaddleOCR: FAIL (%1)</source>
         <translation>开发者：PaddleOCR：失败（%1）</translation>
     </message>
@@ -830,7 +829,7 @@
         <translation>Dev: 原生快捷键：%1</translation>
     </message>
     <message>
-        <location line="+1489"/>
+        <location line="+1498"/>
         <source>Dev: scrolling hand-off: %1</source>
         <translation>Dev: 滚动交接：%1</translation>
     </message>
@@ -840,7 +839,7 @@
         <translation>Dev: 滚动拼接：%1</translation>
     </message>
     <message>
-        <location filename="../src/AppContext.cpp" line="+394"/>
+        <location filename="../src/AppContext.cpp" line="+401"/>
         <source>recording</source>
         <translation>录像</translation>
     </message>
@@ -865,7 +864,7 @@
         <translation>主窗口可见</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="-4071"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-4084"/>
         <source>Dev: OCR highlight + redact: FAIL (%1)</source>
         <translation>Dev: OCR 高亮与涂黑：失败（%1）</translation>
     </message>
@@ -885,7 +884,7 @@
         <translation>Dev: 样式预设：%1</translation>
     </message>
     <message>
-        <location line="+183"/>
+        <location line="+187"/>
         <source>Dev: auto-redact pattern: FAIL (%1)</source>
         <translation>Dev: 自动涂黑规则：失败（%1）</translation>
     </message>
@@ -1065,7 +1064,7 @@
         <translation>无法保存到 %1</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="-3535"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-3539"/>
         <source>Dev: hide while capturing: %1</source>
         <translation>Dev: 截图时隐藏：%1</translation>
     </message>
@@ -1192,13 +1191,13 @@
         <translation>无法编码截图</translation>
     </message>
     <message>
-        <location line="-2067"/>
+        <location line="-2074"/>
         <location line="+1"/>
         <source>Selection is too small for scrolling capture</source>
         <translation>选区太小，无法进行滚动截图</translation>
     </message>
     <message>
-        <location line="+741"/>
+        <location line="+748"/>
         <location line="+11"/>
         <source>Found.</source>
         <translation>已找到。</translation>
@@ -1336,7 +1335,17 @@
         <translation>Dev: 安装器更新：失败（%1）</translation>
     </message>
     <message>
-        <location line="+974"/>
+        <location line="+192"/>
+        <source>Dev: PaddleOCR: SKIP (no model)</source>
+        <translation>开发者：PaddleOCR：跳过（没有模型）</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Dev: PaddleOCR: SKIP (no ONNX Runtime)</source>
+        <translation>开发者：PaddleOCR：跳过（没有 ONNX Runtime）</translation>
+    </message>
+    <message>
+        <location line="+782"/>
         <source>memory only</source>
         <translation>仅在内存中</translation>
     </message>
@@ -1717,7 +1726,7 @@
         <translation>已从 %1 移除 Unisic 快捷键</translation>
     </message>
     <message>
-        <location filename="../src/diag/SmokeTests.cpp" line="+1553"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="+1562"/>
         <source>Dev: desktop shortcuts: %1</source>
         <translation>Dev: 桌面快捷键：%1</translation>
     </message>
@@ -1759,12 +1768,12 @@
         <translation>开始/保存即时回放</translation>
     </message>
     <message>
-        <location line="-4175"/>
+        <location line="-4182"/>
         <source>No monitor named %1. Connected: %2</source>
         <translation>没有名为 %1 的显示器。已连接的显示器：%2</translation>
     </message>
     <message>
-        <location line="+614"/>
+        <location line="+621"/>
         <source>Missing from this install. The Tesseract &quot;osd&quot; pack is required for OCR script detection.</source>
         <translation>当前安装缺少该组件。OCR 书写系统检测需要 Tesseract 的 “osd” 语言包。</translation>
     </message>
@@ -1816,7 +1825,7 @@
     </message>
     <message>
         <location line="+51"/>
-        <location filename="../src/diag/SmokeTests.cpp" line="-1582"/>
+        <location filename="../src/diag/SmokeTests.cpp" line="-1591"/>
         <source>Capture monitor</source>
         <translation>截取显示器</translation>
     </message>
@@ -4516,7 +4525,7 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
 <context>
     <name>PaddleOcr</name>
     <message>
-        <location filename="../src/ocr/PaddleOcr.cpp" line="+368"/>
+        <location filename="../src/ocr/PaddleOcr.cpp" line="+416"/>
         <source>Cannot read OCR model %1: %2</source>
         <translation>无法读取 OCR 模型 %1：%2</translation>
     </message>
@@ -4526,7 +4535,7 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>OCR 模型 %1 为空</translation>
     </message>
     <message>
-        <location line="+47"/>
+        <location line="+45"/>
         <source>Cannot read OCR dictionary %1: %2</source>
         <translation>无法读取 OCR 字典 %1：%2</translation>
     </message>
@@ -4546,7 +4555,7 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>PaddleOCR 识别模型与其字典不匹配</translation>
     </message>
     <message>
-        <location line="+319"/>
+        <location line="+436"/>
         <source>ONNX Runtime %1 is too old, %2 or newer is needed</source>
         <translation>ONNX Runtime %1 版本过旧，需要 %2 或更高版本</translation>
     </message>
@@ -4562,11 +4571,13 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
     </message>
     <message>
         <location line="+28"/>
+        <location line="+183"/>
+        <location line="+34"/>
         <source>PaddleOCR needs ONNX Runtime. Install the onnxruntime package, then try again.</source>
         <translation>PaddleOCR 需要 ONNX Runtime。请安装 onnxruntime 软件包后重试。</translation>
     </message>
     <message>
-        <location line="+47"/>
+        <location line="-167"/>
         <location line="+21"/>
         <location line="+39"/>
         <source>Cannot write %1: %2</source>
@@ -4599,18 +4610,18 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
     </message>
     <message>
         <location line="+42"/>
-        <location line="+23"/>
+        <location line="+34"/>
         <source>No image to recognize</source>
         <translation>没有可识别的图像</translation>
     </message>
     <message>
-        <location line="-19"/>
-        <location line="+23"/>
+        <location line="-22"/>
+        <location line="+31"/>
         <source>PaddleOCR models are not downloaded - see Settings &gt; General</source>
         <translation>PaddleOCR 模型尚未下载，请到“设置 &gt; 通用”下载</translation>
     </message>
     <message>
-        <location filename="../src/ocr/PaddleOcr.cpp" line="128"/>
+        <location line="-1220"/>
         <source>PaddleOCR needs about %1 GB of free memory and %2 GB is free - close something and try again</source>
         <translation>PaddleOCR 需要约 %1 GB 可用内存，当前仅有 %2 GB，请关闭一些程序后重试</translation>
     </message>
@@ -5034,41 +5045,41 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>关闭</translation>
     </message>
     <message>
-        <location line="+56"/>
+        <location line="+78"/>
         <location line="+873"/>
         <source>General</source>
         <translation>通用</translation>
     </message>
     <message>
         <location line="-872"/>
-        <location line="+2996"/>
+        <location line="+3037"/>
         <source>Appearance</source>
         <translation>外观</translation>
     </message>
     <message>
-        <location line="-2997"/>
+        <location line="-3038"/>
         <source>Editor</source>
         <translation>编辑器</translation>
     </message>
     <message>
         <location line="+0"/>
-        <location line="+1673"/>
+        <location line="+1714"/>
         <source>Recording</source>
         <translation>录制</translation>
     </message>
     <message>
-        <location line="-1672"/>
+        <location line="-1713"/>
         <source>Hotkeys</source>
         <translation>快捷键</translation>
     </message>
     <message>
         <location line="+2"/>
-        <location line="+3828"/>
+        <location line="+3869"/>
         <source>Developer</source>
         <translation>开发者</translation>
     </message>
     <message>
-        <location line="-3812"/>
+        <location line="-3853"/>
         <source>System Theme</source>
         <translation>系统主题</translation>
     </message>
@@ -5171,12 +5182,12 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
     </message>
     <message>
         <location line="+159"/>
-        <location line="+3230"/>
+        <location line="+3271"/>
         <source>Language</source>
         <translation>语言</translation>
     </message>
     <message>
-        <location line="-3229"/>
+        <location line="-3270"/>
         <source>Language of the Unisic interface.</source>
         <translation>Unisic 界面的语言。</translation>
     </message>
@@ -5192,7 +5203,7 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
     </message>
     <message>
         <location line="-882"/>
-        <location line="+2687"/>
+        <location line="+2728"/>
         <source>Notifications</source>
         <translation>通知</translation>
     </message>
@@ -5520,8 +5531,8 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>有新版本 %1 可用</translation>
     </message>
     <message>
-        <location line="-230"/>
-        <location line="+242"/>
+        <location line="-233"/>
+        <location line="+245"/>
         <location line="+931"/>
         <source>Downloading… %1%</source>
         <translation>正在下载… %1%</translation>
@@ -6186,12 +6197,37 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
         <translation>GIF 最长时长</translation>
     </message>
     <message>
-        <location line="-1681"/>
+        <location line="-1722"/>
         <source>Capture</source>
         <translation>截图</translation>
     </message>
     <message>
-        <location line="-9"/>
+        <location line="-46"/>
+        <source>Included</source>
+        <translation>内置</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Downloaded</source>
+        <translation>已下载</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Not downloaded</source>
+        <translation>未下载</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>%1: %2, in use</source>
+        <translation>%1：%2，正在使用</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>%1: %2</source>
+        <translation>%1：%2</translation>
+    </message>
+    <message>
+        <location line="+27"/>
         <source>Default input</source>
         <translation>默认输入</translation>
     </message>
@@ -6228,7 +6264,27 @@ Starred (favorite) captures in the selection are kept - un-star them first.</sou
     sudo chown -R $USER %1</translation>
     </message>
     <message>
-        <location line="+405"/>
+        <location line="+281"/>
+        <source>Auto uses PaddleOCR when it can run and falls back to the built-in Tesseract otherwise. Tiny is included with Unisic, so Auto starts on PaddleOCR for Chinese and Latin text without a download; Japanese stays on Tesseract until Small or Medium is downloaded. PaddleOCR reads Chinese, Japanese and Latin-script text more accurately; Tesseract still covers the other scripts. Both run on this computer and nothing is uploaded.</source>
+        <translation>自动：PaddleOCR 可运行时使用它，否则使用内置的 Tesseract。极小号已内置在 Unisic 中，因此无需下载模型，自动模式即可用 PaddleOCR 识别中文和拉丁文字；在下载小号或中号之前，日文仍由 Tesseract 处理。PaddleOCR 对中文、日文和拉丁文字更准确；Tesseract 仍负责其他文字。两者都在本机运行，不会上传任何内容。</translation>
+    </message>
+    <message>
+        <location line="+17"/>
+        <source>Tiny (6 MB, included)</source>
+        <translation>极小号（6 MB，内置）</translation>
+    </message>
+    <message>
+        <location line="+43"/>
+        <source>The selected model is not downloaded yet, so Tiny (included) is in use for now.</source>
+        <translation>所选档位尚未下载，目前使用内置的极小号。</translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Tiny is included, so no model download is needed. It reads Chinese and Latin text; Small reads Japanese too and is more accurate.</source>
+        <translation>极小号已内置，无需下载模型。它可识别中文和拉丁文字；小号还能识别日文，也更准确。</translation>
+    </message>
+    <message>
+        <location line="+96"/>
         <source>Detect languages automatically</source>
         <translation>自动检测语言</translation>
     </message>
@@ -6712,7 +6768,7 @@ Applies to the next capture.</source>
         <translation>录制前倒计时</translation>
     </message>
     <message>
-        <location line="-1485"/>
+        <location line="-1526"/>
         <source>More about %1</source>
         <translation>关于 %1 的更多信息</translation>
     </message>
@@ -6722,7 +6778,7 @@ Applies to the next capture.</source>
         <translation>设置面板</translation>
     </message>
     <message>
-        <location line="+585"/>
+        <location line="+626"/>
         <source>Detects the script and recognizes with the matching language pack.</source>
         <translation>检测书写系统，并用匹配的语言包进行识别。</translation>
     </message>
@@ -6742,7 +6798,7 @@ Applies to the next capture.</source>
         <translation>打开更新日志</translation>
     </message>
     <message>
-        <location line="-1361"/>
+        <location line="-1424"/>
         <source>Flatpak installs are updated by Flatpak - Unisic does not check on its own.</source>
         <translation>Flatpak 安装的版本由 Flatpak 更新，Unisic 不会自行检查。</translation>
     </message>
@@ -6752,7 +6808,7 @@ Applies to the next capture.</source>
         <translation>这份副本来自 AUR，由你的 AUR 助手更新，因此 Unisic 不会自行检查。</translation>
     </message>
     <message>
-        <location line="+3392"/>
+        <location line="+3455"/>
         <source>A zoomed pixel grid follows the cursor with the hovered pixel highlighted, plus its position and colour - so a selection edge lands on exactly the pixel you mean. Scroll on the overlay to zoom it in and out; scroll all the way out to hide the loupe. Purely visual and never captured into the image.</source>
         <translation>放大的像素网格会跟随光标，高亮当前悬停的像素，并显示其位置和颜色，这样选区边缘就能准确落在你想要的那个像素上。在覆盖层上滚动可以放大或缩小网格，一直缩小到底则隐藏放大镜。它只用于显示，绝不会被截取进图像。</translation>
     </message>
@@ -6852,7 +6908,12 @@ Applies to the next capture.</source>
         <translation>统计</translation>
     </message>
     <message>
-        <location line="+2"/>
+        <location line="-382"/>
+        <source>Tiny is included with Unisic, so PaddleOCR works without a model download; it reads Chinese and Latin text but not Japanese, and it is the least accurate. Small is the recommended download: it also reads Japanese, and it takes about a second per page on a 4-core CPU. Medium is the most accurate and the largest, and holds about 1 GB of memory while it is loaded. Downloaded tiers are checked against their pinned SHA-256 and run offline. Until a downloaded tier is present, Tiny (included) does the work and this list says which one is in use.</source>
+        <translation>极小号已内置在 Unisic 中，因此 PaddleOCR 无需下载模型即可使用；它可识别中文和拉丁文字，但不支持日文，精度也最低。推荐下载小号：它同时支持日文，在 4 核 CPU 上每页约需一秒。中号最准确、体积也最大，加载后约占用 1 GB 内存。下载的档位会按固定的 SHA-256 校验，并完全离线运行。在下载其他档位之前，由内置的极小号负责识别，这个列表会显示正在使用的是哪个档位。</translation>
+    </message>
+    <message>
+        <location line="+384"/>
         <source>Screenshots taken</source>
         <translation>截图数量</translation>
     </message>
@@ -7193,7 +7254,7 @@ Applies to the next capture.</source>
         <translation>全局快捷键</translation>
     </message>
     <message>
-        <location line="-3575"/>
+        <location line="-3638"/>
         <source>Delete the background removal files?</source>
         <translation>删除背景移除文件？</translation>
     </message>
@@ -7209,7 +7270,7 @@ Applies to the next capture.</source>
         <translation>删除</translation>
     </message>
     <message>
-        <location line="+884"/>
+        <location line="+906"/>
         <source>Support Unisic</source>
         <translation>支持 Unisic</translation>
     </message>
@@ -7224,7 +7285,7 @@ Applies to the next capture.</source>
         <translation>在 Ko-fi 上捐赠</translation>
     </message>
     <message>
-        <location line="+656"/>
+        <location line="+697"/>
         <source>Shorten the link</source>
         <translation>缩短链接</translation>
     </message>
@@ -7321,8 +7382,8 @@ Applies to the next capture.</source>
         <translation>ONNX Runtime：未安装，将随模型一起下载</translation>
     </message>
     <message>
-        <location line="-1170"/>
-        <location line="+1173"/>
+        <location line="-1211"/>
+        <location line="+1214"/>
         <source>ONNX Runtime: not installed - install the onnxruntime package from your distribution</source>
         <translation>ONNX Runtime：未安装，请从发行版安装 onnxruntime 软件包</translation>
     </message>
@@ -7337,13 +7398,13 @@ Applies to the next capture.</source>
         <translation>模型：未下载</translation>
     </message>
     <message>
-        <location line="-1150"/>
-        <location line="+1173"/>
+        <location line="-1153"/>
+        <location line="+1176"/>
         <source>Download (%1)</source>
         <translation>下载（%1）</translation>
     </message>
     <message>
-        <location line="-2189"/>
+        <location line="-2252"/>
         <source>Delete the PaddleOCR models?</source>
         <translation>删除 PaddleOCR 模型？</translation>
     </message>
@@ -7359,7 +7420,7 @@ Applies to the next capture.</source>
         sudo chown -R $USER %1</translation>
     </message>
     <message>
-        <location line="+952"/>
+        <location line="+974"/>
         <source>Text recognition (OCR)</source>
         <translation>文字识别（OCR）</translation>
     </message>
@@ -7374,12 +7435,11 @@ Applies to the next capture.</source>
         <translation>使用哪个引擎读取截图中的文字。</translation>
     </message>
     <message>
-        <location line="+1"/>
         <source>Auto uses PaddleOCR when its models are downloaded and falls back to the built-in Tesseract otherwise. PaddleOCR reads Chinese, Japanese and Latin-script text more accurately; Tesseract still covers the other scripts. Both run on this computer and nothing is uploaded.</source>
-        <translation>自动：已下载模型时使用 PaddleOCR，否则使用内置的 Tesseract。PaddleOCR 对中文、日文和拉丁文字更准确；Tesseract 仍负责其他文字。两者都在本机运行，不会上传任何内容。</translation>
+        <translation type="vanished">自动：已下载模型时使用 PaddleOCR，否则使用内置的 Tesseract。PaddleOCR 对中文、日文和拉丁文字更准确；Tesseract 仍负责其他文字。两者都在本机运行，不会上传任何内容。</translation>
     </message>
     <message>
-        <location line="+4"/>
+        <location line="+5"/>
         <source>Auto (PaddleOCR)</source>
         <translation>自动（PaddleOCR）</translation>
     </message>
@@ -7404,22 +7464,23 @@ Applies to the next capture.</source>
         <translation>模型大小与准确率之间的取舍。</translation>
     </message>
     <message>
-        <location line="+1"/>
         <source>Small is the recommended default: it reads Chinese (simplified and traditional), Japanese and 48 Latin-script languages in one model and takes about a second per page on a 4-core CPU. Tiny is for slow machines and cannot read Japanese; medium is the most accurate and the largest download, and holds about 1 GB of memory while it is loaded. The files are downloaded once, checked against their pinned SHA-256, and run offline.</source>
-        <translation>小号是推荐的默认选择：一个模型即可识别中文（简体和繁体）、日文以及 48 种拉丁语系语言，在 4 核 CPU 上每页约需一秒。极小号适合较慢的机器，但不支持日文；中号最准确，下载也最大，加载后约占用 1 GB 内存。模型只需下载一次，会按固定的 SHA-256 校验，然后完全离线运行。</translation>
+        <translation type="vanished">小号是推荐的默认选择：一个模型即可识别中文（简体和繁体）、日文以及 48 种拉丁语系语言，在 4 核 CPU 上每页约需一秒。极小号适合较慢的机器，但不支持日文；中号最准确，下载也最大，加载后约占用 1 GB 内存。模型只需下载一次，会按固定的 SHA-256 校验，然后完全离线运行。</translation>
     </message>
     <message>
-        <location line="+4"/>
+        <location line="-956"/>
         <source>Tiny (6 MB)</source>
         <translation>极小号（6 MB）</translation>
     </message>
     <message>
-        <location line="+0"/>
+        <location line="+1"/>
+        <location line="+960"/>
         <source>Small (31 MB)</source>
         <translation>小号（31 MB）</translation>
     </message>
     <message>
-        <location line="+0"/>
+        <location line="-959"/>
+        <location line="+959"/>
         <source>Medium (139 MB)</source>
         <translation>中号（139 MB）</translation>
     </message>
@@ -7429,18 +7490,16 @@ Applies to the next capture.</source>
         <translation>ONNX Runtime：未安装，将随模型一起下载</translation>
     </message>
     <message>
-        <location line="+3"/>
         <source>PaddleOCR model: downloaded</source>
-        <translation>PaddleOCR 模型：已下载</translation>
+        <translation type="vanished">PaddleOCR 模型：已下载</translation>
     </message>
     <message>
-        <location line="+0"/>
         <source>PaddleOCR model: not downloaded</source>
-        <translation>PaddleOCR 模型：未下载</translation>
+        <translation type="vanished">PaddleOCR 模型：未下载</translation>
     </message>
     <message>
-        <location line="+30"/>
-        <location line="+1173"/>
+        <location line="+71"/>
+        <location line="+1176"/>
         <source>Cancel</source>
         <translation>取消</translation>
     </message>
