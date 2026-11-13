@@ -127,6 +127,58 @@ Window {
         resultWindow.selectPaneRange(entry.start, entry.length)
     }
 
+    // The source-text range the current pane selection stands for. On the
+    // Original layer the selection IS source text; on the Translation layer
+    // every translated cover carries the source range it came from, so a
+    // selection made there can still re-translate exactly those source lines.
+    function selectedSourceRange() {
+        if (textEdit.selectedText.length === 0)
+            return { start: -1, length: 0 }
+        if (!resultWindow.showTranslation)
+            return { start: textEdit.selectionStart, length: textEdit.selectedText.length }
+        let start = -1
+        let end = -1
+        const list = App.ocrResult.translatedLines
+        for (let i = 0; i < list.length; ++i) {
+            const entry = list[i]
+            if (textEdit.selectionStart >= entry.start + entry.length
+                    || textEdit.selectionEnd <= entry.start)
+                continue
+            if (entry.sourceStart === undefined || entry.sourceStart < 0)
+                continue
+            start = start < 0 ? entry.sourceStart : Math.min(start, entry.sourceStart)
+            end = Math.max(end, entry.sourceStart + entry.sourceLength)
+        }
+        return start >= 0 ? { start: start, length: end - start }
+                          : { start: -1, length: 0 }
+    }
+
+    // How many recognized lines the Translate button would send. The label
+    // says "selection" only when a selection really maps onto line boxes, so
+    // it can never promise a narrower request than the one that goes out.
+    readonly property int selectedLineCount: {
+        const range = resultWindow.selectedSourceRange()
+        if (range.length <= 0)
+            return 0
+        let count = 0
+        const lines = App.ocrResult.lines
+        for (let i = 0; i < lines.length; ++i) {
+            const line = lines[i]
+            if (range.start < line.start + line.length
+                    && range.start + range.length > line.start)
+                ++count
+        }
+        return count
+    }
+
+    function translateFromPane() {
+        const range = resultWindow.selectedSourceRange()
+        if (range.length > 0)
+            App.ocrResult.translateRange(range.start, range.length)
+        else
+            App.ocrResult.translate()
+    }
+
     onVisibleChanged: {
         if (visible)
             textEdit.forceActiveFocus()
@@ -238,7 +290,7 @@ Window {
                 Text {
                     Layout.fillWidth: true
                     text: !resultWindow.showTranslation
-                          ? qsTr("Click a line on the picture to select it, or select text in the pane.")
+                          ? qsTr("Click a line on the picture to select it, or select text in the pane to translate those lines only.")
                           : resultWindow.overlayAvailable
                             ? qsTr("Click a translated line on the picture to select it, or select text in the pane.")
                             : qsTr("Translated text. Select it below or copy it all.")
@@ -287,7 +339,7 @@ Window {
                             return
                         App.settings.translationTarget = picked
                         if (App.ocrResult.translation.length > 0)
-                            App.ocrResult.translate()
+                            resultWindow.translateFromPane()
                     }
                 }
                 // Translation controls stay together on the left, the view
@@ -298,12 +350,17 @@ Window {
                 UButton {
                     compact: true
                     variant: "tonal"
-                    text: App.ocrResult.translating ? qsTr("Translating…") : qsTr("Translate")
+                    text: App.ocrResult.translating ? qsTr("Translating…")
+                                                    : resultWindow.selectedLineCount > 0
+                                                      ? qsTr("Translate selection")
+                                                      : qsTr("Translate all")
                     accessibleDescription: App.ocrResult.canTranslate
-                                           ? qsTr("Translate the recognized text")
+                                           ? (resultWindow.selectedLineCount > 0
+                                              ? qsTr("Translate only the selected lines")
+                                              : qsTr("Translate the recognized text"))
                                            : qsTr("Configure translation in Settings > General")
                     enabled: !App.ocrResult.translating
-                    onClicked: App.ocrResult.translate()
+                    onClicked: resultWindow.translateFromPane()
                 }
                 UButton {
                     compact: true
@@ -456,6 +513,17 @@ Window {
                 visible: resultWindow.showTranslation && App.ocrResult.translation !== ""
                          && !resultWindow.overlayAvailable && App.ocrResult.lines.length > 1
                 text: qsTr("The service did not translate line by line, so the translation is shown in the pane instead of on the picture.")
+                color: Theme.textSecondary
+                font.pixelSize: Theme.fontS
+                wrapMode: Text.WordWrap
+            }
+
+            // A selection-only translation is not the whole page: say so, or
+            // the reader may think the rest was translated and came back empty.
+            Text {
+                Layout.fillWidth: true
+                visible: resultWindow.showTranslation && App.ocrResult.translationSelectionOnly
+                text: qsTr("Only the selected lines are translated. Press Translate all to send the rest.")
                 color: Theme.textSecondary
                 font.pixelSize: Theme.fontS
                 wrapMode: Text.WordWrap

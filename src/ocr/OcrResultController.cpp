@@ -115,6 +115,18 @@ int colorDistance(QRgb a, QRgb b)
            + std::abs(qBlue(a) - qBlue(b));
 }
 
+// The exact string the pane shows for a set of line boxes. m_text is built the
+// same way, so translating all lines and translating the same lines as a
+// selection produce the same source text.
+QString textOfLines(const QVariantList &lines)
+{
+    QStringList texts;
+    texts.reserve(lines.size());
+    for (const QVariant &value : lines)
+        texts.append(value.toMap().value(QStringLiteral("text")).toString());
+    return texts.join(QLatin1Char('\n'));
+}
+
 } // namespace
 
 OcrResultController::OcrResultController(Settings *settings, QObject *parent)
@@ -168,6 +180,16 @@ QString OcrResultController::translationTarget() const
 
 void OcrResultController::translate()
 {
+    startTranslation(-1, 0);
+}
+
+void OcrResultController::translateRange(int start, int length)
+{
+    startTranslation(start, length);
+}
+
+void OcrResultController::startTranslation(int start, int length)
+{
     if (m_text.isEmpty()) {
         m_translationError = tr("No text to translate");
         emit translationChanged();
@@ -180,6 +202,31 @@ void OcrResultController::translate()
     }
     if (m_translating)
         return;
+
+    // A selection becomes the recognized lines it touches. The pane translates
+    // whole lines because that is the unit the numbered prompt and the covers
+    // work in; a selection of one word still sends its whole line. A selection
+    // that maps to no line box (a QR payload has none) is ignored, which keeps
+    // translateRange() a safe "translate what I selected" for every result.
+    QVector<int> selected;
+    if (start >= 0 && length > 0)
+        selected = selectedLineIndexes(m_lines, start, length);
+    m_translationSelectionOnly = !selected.isEmpty();
+    m_translateLines.clear();
+    if (selected.isEmpty()) {
+        m_translateLines = m_lines;
+    } else {
+        m_translateLines.reserve(selected.size());
+        for (const int index : selected)
+            m_translateLines.append(m_lines.at(index));
+    }
+    m_translationLineCount = m_translateLines.size();
+    m_sourceText = textOfLines(m_translateLines);
+    // A result without line geometry (a QR payload) has nothing to map onto,
+    // so the whole text is still the only sensible request.
+    if (m_translateLines.isEmpty())
+        m_sourceText = m_text;
+
     m_translating = true;
     m_translationError.clear();
     m_translation.clear();
@@ -191,13 +238,13 @@ void OcrResultController::translate()
     m_chunks.clear();
     m_translatedChunks.clear();
     m_chunkIndex = 0;
-    if (m_lines.size() > 1) {
+    if (m_translateLines.size() > 1) {
         // Numbered requests, one per chunk, so every translation comes back
         // with the line box it belongs to. A model that merges or splits lines
         // gives a count mismatch and the whole-text request takes over.
         QStringList texts;
-        texts.reserve(m_lines.size());
-        for (const QVariant &value : m_lines)
+        texts.reserve(m_translateLines.size());
+        for (const QVariant &value : m_translateLines)
             texts.append(value.toMap().value(QStringLiteral("text")).toString());
         m_chunks = chunkLines(texts);
         requestNextLineChunk(seq);
@@ -215,9 +262,9 @@ void OcrResultController::requestNextLineChunk(quint64 seq)
         for (const QStringList &chunk : m_translatedChunks)
             translated += chunk;
         QString text;
-        setTranslatedLines(translatedLineMap(m_lines, translated, m_image, &text));
+        setTranslatedLines(translatedLineMap(m_translateLines, translated, m_image, &text));
         m_translation = text;
-        m_translationUnchanged = translationLooksUnchanged(m_text, m_translation);
+        m_translationUnchanged = translationLooksUnchanged(m_sourceText, m_translation);
         m_translating = false;
         emit translationChanged();
         if (!m_translation.isEmpty())
@@ -253,7 +300,7 @@ void OcrResultController::requestWholeText(quint64 seq)
 {
     if (seq != m_translationSeq)
         return;
-    m_translator->translate(m_text, translationTarget(),
+    m_translator->translate(m_sourceText, translationTarget(),
                             [this, seq](const QString &text, const QString &error) {
         if (seq != m_translationSeq)
             return;
@@ -270,23 +317,23 @@ void OcrResultController::requestWholeText(quint64 seq)
         // service ignored the numbering but translated line by line): map it
         // back onto the picture with the same tolerant parser instead of
         // leaving the covers empty.
-        if (m_lines.size() > 1) {
+        if (m_translateLines.size() > 1) {
             const QStringList rows =
-                Translator::parseNumberedLines(text, int(m_lines.size()), nullptr);
-            if (rows.size() == m_lines.size()) {
+                Translator::parseNumberedLines(text, int(m_translateLines.size()), nullptr);
+            if (rows.size() == m_translateLines.size()) {
                 QString joined;
-                const QVariantList map = translatedLineMap(m_lines, rows, m_image, &joined);
+                const QVariantList map = translatedLineMap(m_translateLines, rows, m_image, &joined);
                 m_translation = joined;
                 setTranslatedLines(map);
             }
         }
-        m_translationUnchanged = translationLooksUnchanged(m_text, m_translation);
-        if (m_lines.size() == 1) {
+        m_translationUnchanged = translationLooksUnchanged(m_sourceText, m_translation);
+        if (m_translateLines.size() == 1) {
             // One line box: the whole translation is that line's translation,
             // so the overlay works without a numbered round trip.
             QString joined;
             const QVariantList map =
-                translatedLineMap(m_lines, QStringList{text}, m_image, &joined);
+                translatedLineMap(m_translateLines, QStringList{text}, m_image, &joined);
             if (joined == text)
                 setTranslatedLines(map);
         }
@@ -327,10 +374,14 @@ void OcrResultController::setTranslationForPreview(const QStringList &translated
         m_translator->cancel();
     m_translating = false;
     m_translationError.clear();
+    m_translateLines = m_lines;
+    m_sourceText = m_text;
+    m_translationSelectionOnly = false;
+    m_translationLineCount = m_translateLines.size();
     QString joined;
-    setTranslatedLines(translatedLineMap(m_lines, translated, m_image, &joined));
+    setTranslatedLines(translatedLineMap(m_translateLines, translated, m_image, &joined));
     m_translation = joined;
-    m_translationUnchanged = translationLooksUnchanged(m_text, m_translation);
+    m_translationUnchanged = translationLooksUnchanged(m_sourceText, m_translation);
     emit translationChanged();
     if (!m_translation.isEmpty())
         emit translationReady();
@@ -345,6 +396,10 @@ void OcrResultController::setResult(const QImage &image, const QVector<OcrWord> 
     m_translation.clear();
     setTranslatedLines({});
     m_translationUnchanged = false;
+    m_translateLines.clear();
+    m_sourceText.clear();
+    m_translationSelectionOnly = false;
+    m_translationLineCount = 0;
     m_chunks.clear();
     m_translatedChunks.clear();
     m_chunkIndex = 0;
@@ -534,13 +589,19 @@ QVariantList OcrResultController::translatedLineMap(const QVariantList &lines,
     // Convert the input boxes once: the neighbour scan below is per line and
     // would otherwise convert the whole list of maps for every cover.
     QVector<QRect> boxes;
+    QVector<int> sourceStarts;
+    QVector<int> sourceLengths;
     boxes.reserve(lines.size());
+    sourceStarts.reserve(lines.size());
+    sourceLengths.reserve(lines.size());
     for (const QVariant &value : lines) {
         const QVariantMap line = value.toMap();
         boxes.append(QRect(line.value(QStringLiteral("x")).toInt(),
                            line.value(QStringLiteral("y")).toInt(),
                            line.value(QStringLiteral("width")).toInt(),
                            line.value(QStringLiteral("height")).toInt()));
+        sourceStarts.append(line.value(QStringLiteral("start")).toInt());
+        sourceLengths.append(line.value(QStringLiteral("length")).toInt());
     }
     for (int i = 0; i < boxes.size(); ++i) {
         const QRect rect = boxes.at(i);
@@ -587,6 +648,11 @@ QVariantList OcrResultController::translatedLineMap(const QVariantList &lines,
         entry.insert(QStringLiteral("text"), value);
         entry.insert(QStringLiteral("start"), int(joined.size()));
         entry.insert(QStringLiteral("length"), value.size());
+        // The range in the SOURCE text this cover came from, so a selection
+        // made on the Translation layer can be mapped back to the source
+        // lines and re-translated without guessing.
+        entry.insert(QStringLiteral("sourceStart"), sourceStarts.at(i));
+        entry.insert(QStringLiteral("sourceLength"), sourceLengths.at(i));
         entry.insert(QStringLiteral("x"), cover.x());
         entry.insert(QStringLiteral("y"), cover.y());
         entry.insert(QStringLiteral("width"), cover.width());
@@ -677,6 +743,24 @@ int OcrResultController::lineIndexAt(const QVariantList &lines, const QPointF &i
             return i;
     }
     return -1;
+}
+
+QVector<int> OcrResultController::selectedLineIndexes(const QVariantList &lines, int start,
+                                                      int length)
+{
+    QVector<int> selected;
+    if (start < 0 || length <= 0)
+        return selected;
+    const int end = start + length;
+    selected.reserve(8);
+    for (int i = 0; i < lines.size(); ++i) {
+        const QVariantMap line = lines.at(i).toMap();
+        const int lineStart = line.value(QStringLiteral("start")).toInt();
+        const int lineLength = line.value(QStringLiteral("length")).toInt();
+        if (start < lineStart + lineLength && end > lineStart)
+            selected.append(i);
+    }
+    return selected;
 }
 
 QImage OcrResultController::composeOverlay(const QImage &image, const QVariantList &translatedLines)

@@ -106,6 +106,7 @@ class OcrResultTest : public QObject
 private slots:
     void rangesMatchTheText();
     void payloadWithoutGeometry();
+    void selectionMapsToWholeLines();
     void translatedLinesIndexThePane();
     void lineColorsFollowThePicture();
     void longPagesSplitIntoRequests();
@@ -174,6 +175,48 @@ void OcrResultTest::payloadWithoutGeometry()
 // The overlay's click-to-select behaves exactly like the original boxes, so the
 // per-line translation ranges have to index the string the pane shows, and the
 // cover has to be filled with the page colour of that line.
+// "Translate the selection" sends whole recognized lines, so the selection has
+// to be widened to the boxes it touches - never narrowed to the characters the
+// pointer crossed, and never spilled onto the line after it. The reverse map
+// (sourceStart/sourceLength on a cover) is what lets a selection made on the
+// Translation layer find those same source lines again.
+void OcrResultTest::selectionMapsToWholeLines()
+{
+    const QVariantList lines{
+        QVariantMap{{QStringLiteral("text"), QStringLiteral("One")},
+                    {QStringLiteral("start"), 0}, {QStringLiteral("length"), 3},
+                    {QStringLiteral("x"), 10}, {QStringLiteral("y"), 10},
+                    {QStringLiteral("width"), 60}, {QStringLiteral("height"), 16}},
+        QVariantMap{{QStringLiteral("text"), QStringLiteral("Two")},
+                    {QStringLiteral("start"), 4}, {QStringLiteral("length"), 3},
+                    {QStringLiteral("x"), 10}, {QStringLiteral("y"), 40},
+                    {QStringLiteral("width"), 60}, {QStringLiteral("height"), 16}},
+        QVariantMap{{QStringLiteral("text"), QStringLiteral("Three")},
+                    {QStringLiteral("start"), 8}, {QStringLiteral("length"), 5},
+                    {QStringLiteral("x"), 10}, {QStringLiteral("y"), 70},
+                    {QStringLiteral("width"), 70}, {QStringLiteral("height"), 16}},
+    };
+    QCOMPARE(OcrResultController::selectedLineIndexes(lines, 0, 1), QVector<int>{0});
+    QCOMPARE(OcrResultController::selectedLineIndexes(lines, 2, 3), (QVector<int>{0, 1}));
+    // Only the newline between two lines: no box, so the caller sends it all.
+    QVERIFY(OcrResultController::selectedLineIndexes(lines, 3, 1).isEmpty());
+    QCOMPARE(OcrResultController::selectedLineIndexes(lines, 8, 5), QVector<int>{2});
+    QVERIFY(OcrResultController::selectedLineIndexes(lines, -1, 0).isEmpty());
+    QVERIFY(OcrResultController::selectedLineIndexes(lines, 0, 0).isEmpty());
+
+    QImage image(200, 100, QImage::Format_RGB32);
+    image.fill(QColor(250, 250, 245));
+    QString joined;
+    const QVariantList map = OcrResultController::translatedLineMap(
+        lines, {QStringLiteral("Jeden"), QStringLiteral("Dwa"), QStringLiteral("Trzy")},
+        image, &joined);
+    QCOMPARE(map.size(), 3);
+    QCOMPARE(map.at(0).toMap().value(QStringLiteral("sourceStart")).toInt(), 0);
+    QCOMPARE(map.at(1).toMap().value(QStringLiteral("sourceStart")).toInt(), 4);
+    QCOMPARE(map.at(1).toMap().value(QStringLiteral("sourceLength")).toInt(), 3);
+    QCOMPARE(map.at(2).toMap().value(QStringLiteral("sourceStart")).toInt(), 8);
+}
+
 void OcrResultTest::translatedLinesIndexThePane()
 {
     QImage image(160, 80, QImage::Format_RGB32);

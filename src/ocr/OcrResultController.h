@@ -43,7 +43,9 @@ class OcrResultController : public QObject
     Q_PROPERTY(QString translation READ translation NOTIFY translationChanged)
     // The same translation split back onto the line boxes, so the picture can
     // show it in place of the original text: { text, x, y, width, height,
-    // start, length, background, foreground, fontSize, rtl, overflow }. Empty
+    // start, length, sourceStart, sourceLength, background, foreground,
+    // fontSize, rtl, overflow }. `start`/`length` index the joined translation
+    // and `sourceStart`/`sourceLength` the source line it came from. Empty
     // when the picture has no line geometry (a QR payload) or when the service
     // did not keep the line numbering; the pane then shows the whole text.
     // `fontSize` is the size the C++ fit chose for the box, in IMAGE pixels:
@@ -54,6 +56,13 @@ class OcrResultController : public QObject
     Q_PROPERTY(QString translationError READ translationError NOTIFY translationChanged)
     Q_PROPERTY(bool canTranslate READ canTranslate NOTIFY translationChanged)
     Q_PROPERTY(QString translationTarget READ translationTarget NOTIFY translationChanged)
+    // True when the last/current translation covers only the lines the user
+    // selected in the pane, so the window can say so instead of implying the
+    // rest of the page was translated too.
+    Q_PROPERTY(bool translationSelectionOnly READ translationSelectionOnly NOTIFY translationChanged)
+    // How many recognized lines the last/current translation covers. 0 before
+    // the first Translate.
+    Q_PROPERTY(int translationLineCount READ translationLineCount NOTIFY translationChanged)
     // True when a successful answer is the recognized text itself (a service
     // that echoed the input, often for a language pair it handles badly). The
     // window says so instead of presenting the source as a translation.
@@ -80,6 +89,8 @@ public:
     QString translationError() const { return m_translationError; }
     bool canTranslate() const;
     QString translationTarget() const;
+    bool translationSelectionOnly() const { return m_translationSelectionOnly; }
+    int translationLineCount() const { return m_translationLineCount; }
     bool translationUnchanged() const { return m_translationUnchanged; }
     QString statusText() const { return m_statusText; }
     bool statusIsError() const { return m_statusIsError; }
@@ -88,6 +99,11 @@ public:
     // Translates the current text with the OpenAI-compatible endpoint from
     // Settings. One request at a time; a new OCR result cancels it.
     Q_INVOKABLE void translate();
+    // Translates only the recognized lines whose [start, start+length) range
+    // in `text` overlaps the selection. A selection covering no line (or an
+    // empty one) falls back to the whole text, like translate(). The pane sends
+    // whole lines, not the partial line the pointer happened to cross.
+    Q_INVOKABLE void translateRange(int start, int length);
     Q_INVOKABLE void cancelTranslation();
     // Developer/smoke path: lay `translated` (one entry per line box, exactly
     // what a service answer produces) onto the picture without touching the
@@ -121,6 +137,10 @@ public:
     static bool lineIsRtl(const QString &text);
     // Index of the entry whose rect holds `imagePoint`, or -1.
     static int lineIndexAt(const QVariantList &lines, const QPointF &imagePoint);
+    // Indices of the line boxes whose [start, start+length) range overlaps the
+    // same range of the source text. Empty when the selection touches no box
+    // (a QR payload or a selection of only the newline between two lines).
+    static QVector<int> selectedLineIndexes(const QVariantList &lines, int start, int length);
     // Draws the covers onto a copy of `image` at its own resolution.
     static QImage composeOverlay(const QImage &image, const QVariantList &translatedLines);
 
@@ -177,6 +197,14 @@ private:
     bool m_translationUnchanged = false;
     QString m_translationError;
     bool m_translating = false;
+    // The line boxes the current translation covers (all of m_lines, or the
+    // selection) and the text they join to. Every request and every map uses
+    // these instead of m_lines/m_text, so a selection translation can never
+    // place a cover on a line it did not send.
+    QVariantList m_translateLines;
+    QString m_sourceText;
+    bool m_translationSelectionOnly = false;
+    int m_translationLineCount = 0;
     QString m_statusText;
     bool m_statusIsError = false;
     QTimer m_statusTimer;
@@ -190,6 +218,7 @@ private:
 
     void requestNextLineChunk(quint64 seq);
     void requestWholeText(quint64 seq);
+    void startTranslation(int start, int length);
     void failTranslation(quint64 seq, const QString &error);
     // One place that assigns m_translatedLines, so the cover hit-test rects
     // can never describe a different list than the one the window draws.
