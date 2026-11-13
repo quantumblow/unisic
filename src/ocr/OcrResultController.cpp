@@ -213,31 +213,40 @@ void OcrResultController::startTranslation(int start, int length)
     if (m_translating)
         return;
 
-    // T4.3: the text is about to leave this machine. A local endpoint never
-    // asks; any other host asks once, and the answer is remembered per host so
-    // only a changed endpoint asks again. Nothing is sent while it waits.
-    if (m_settings) {
-        const QUrl endpoint = Translator::endpointUrl(m_settings->translationEndpoint());
-        if (!Translator::isLocalEndpoint(endpoint)
-            && endpoint.host() != m_settings->translationPrivacyHost()) {
-            m_privacyNoticeHost = endpoint.host();
-            m_privacyStart = start;
-            m_privacyLength = length;
-            emit privacyNoticeChanged();
-            emit privacyNoticeRequested();
-            return;
-        }
-    }
-
-    // A selection becomes the recognized lines it touches. The pane translates
-    // whole lines because that is the unit the numbered prompt and the covers
-    // work in; a selection of one word still sends its whole line. A selection
-    // that maps to no line box (a QR payload has none) is ignored, which keeps
-    // translateRange() a safe "translate what I selected" for every result.
+    // A selection becomes the recognized lines it touches. When it is exactly
+    // those whole lines, the numbered request and the picture covers still
+    // apply. Anything shorter (a word, part of a line) is sent as that exact
+    // text with its line as context and must not paint a cover (T4.5.2). A
+    // selection that maps to no line box (a QR payload has none) is ignored,
+    // which keeps translateRange() a safe "translate what I selected".
     QVector<int> selected;
     if (start >= 0 && length > 0)
         selected = selectedLineIndexes(m_lines, start, length);
-    m_translationSelectionOnly = !selected.isEmpty();
+    if (!selected.isEmpty() && !rangeCoversWholeLines(m_lines, start, length)) {
+        if (holdForPrivacy(PendingTranslation::Range, start, length))
+            return;
+        QStringList context;
+        context.reserve(selected.size());
+        for (const int index : selected) {
+            context.append(
+                m_lines.at(index).toMap().value(QStringLiteral("text")).toString());
+        }
+        startPartialTranslation(m_text.mid(start, length), context.join(QLatin1Char('\n')));
+        return;
+    }
+    if (holdForPrivacy(PendingTranslation::Range, start, length))
+        return;
+    startLineTranslation(selected, !selected.isEmpty());
+}
+
+void OcrResultController::startLineTranslation(const QVector<int> &selected,
+                                               bool selectionOnly)
+{
+    // The numbered path: every selected line becomes one request item (split at
+    // sentence boundaries when too long), and every answer lands on its box.
+    m_translationPartialText = false;
+    m_partialContext.clear();
+    m_translationSelectionOnly = selectionOnly;
     m_translateLines.clear();
     if (selected.isEmpty()) {
         m_translateLines = m_lines;
@@ -320,8 +329,26 @@ void OcrResultController::startTranslation(int start, int length)
     requestWholeText(seq);
 }
 
+bool OcrResultController::holdForPrivacy(PendingTranslation kind, int start, int length)
+{
+    if (!m_settings)
+        return false;
+    const QUrl endpoint = Translator::endpointUrl(m_settings->translationEndpoint());
+    if (endpoint.host().isEmpty() || Translator::isLocalEndpoint(endpoint)
+        || endpoint.host() == m_settings->translationPrivacyHost())
+        return false;
+    m_privacyNoticeHost = endpoint.host();
+    m_privacyPending = kind;
+    m_privacyStart = start;
+    m_privacyLength = length;
+    emit privacyNoticeChanged();
+    emit privacyNoticeRequested();
+    return true;
+}
+
 void OcrResultController::clearPrivacyNotice()
 {
+    m_privacyPending = PendingTranslation::None;
     if (m_privacyNoticeHost.isEmpty())
         return;
     m_privacyNoticeHost.clear();
@@ -337,16 +364,238 @@ void OcrResultController::confirmPrivacyNotice()
         return;
     if (m_settings)
         m_settings->setTranslationPrivacyHost(host);
+    const PendingTranslation kind = m_privacyPending;
     const int start = m_privacyStart;
     const int length = m_privacyLength;
     clearPrivacyNotice();
-    startTranslation(start, length);
+    if (kind == PendingTranslation::SelectedLines)
+        translateSelectedLines();
+    else
+        startTranslation(start, length);
 }
 
 void OcrResultController::cancelPrivacyNotice()
 {
     clearPrivacyNotice();
 }
+
+QVariantList OcrResultController::selectedLines() const
+{
+    QVariantList out;
+    out.reserve(m_selectedLines.size());
+    for (const int index : m_selectedLines)
+        out.append(index);
+    return out;
+}
+
+void OcrResultController::setSelectedLines(const QVector<int> &lines)
+{
+    QVector<int> next;
+    next.reserve(lines.size());
+    for (const int index : lines) {
+        if (index < 0 || index >= m_lines.size() || next.contains(index))
+            continue;
+        next.append(index);
+    }
+    std::sort(next.begin(), next.end());
+    if (next == m_selectedLines)
+        return;
+    m_selectedLines = next;
+    emit selectionChanged();
+}
+
+void OcrResultController::selectLine(int index)
+{
+    if (index < 0 || index >= m_lines.size())
+        return;
+    m_selectionAnchor = index;
+    setSelectedLines({index});
+}
+
+void OcrResultController::toggleLine(int index)
+{
+    if (index < 0 || index >= m_lines.size())
+        return;
+    QVector<int> next = m_selectedLines;
+    if (next.contains(index)) {
+        next.removeAll(index);
+        m_selectionAnchor = next.isEmpty() ? -1 : next.last();
+    } else {
+        next.append(index);
+        m_selectionAnchor = index;
+    }
+    setSelectedLines(next);
+}
+
+void OcrResultController::extendLineSelection(int index)
+{
+    if (index < 0 || index >= m_lines.size())
+        return;
+    if (m_selectionAnchor < 0 || m_selectionAnchor >= m_lines.size()) {
+        selectLine(index);
+        return;
+    }
+    const int lo = std::min(m_selectionAnchor, index);
+    const int hi = std::max(m_selectionAnchor, index);
+    QVector<int> next;
+    next.reserve(hi - lo + 1);
+    for (int i = lo; i <= hi; ++i)
+        next.append(i);
+    setSelectedLines(next);
+}
+
+void OcrResultController::selectAllLines()
+{
+    if (m_lines.isEmpty())
+        return;
+    QVector<int> next;
+    next.reserve(m_lines.size());
+    for (int i = 0; i < m_lines.size(); ++i)
+        next.append(i);
+    m_selectionAnchor = 0;
+    setSelectedLines(next);
+}
+
+void OcrResultController::clearLineSelection()
+{
+    m_selectionAnchor = -1;
+    setSelectedLines({});
+}
+
+QString OcrResultController::selectionText() const
+{
+    QStringList texts;
+    texts.reserve(m_selectedLines.size());
+    for (const int index : m_selectedLines) {
+        if (index < 0 || index >= m_lines.size())
+            continue;
+        texts.append(m_lines.at(index).toMap().value(QStringLiteral("text")).toString());
+    }
+    return texts.join(QLatin1Char('\n'));
+}
+
+void OcrResultController::translateSelectedLines()
+{
+    if (m_selectedLines.isEmpty()) {
+        translate();
+        return;
+    }
+    if (m_text.isEmpty()) {
+        m_translationError = tr("No text to translate");
+        emit translationChanged();
+        return;
+    }
+    if (!canTranslate()) {
+        m_translationError = tr("Set the translation endpoint and model in Settings > General");
+        emit translationChanged();
+        return;
+    }
+    if (m_translating)
+        return;
+    if (holdForPrivacy(PendingTranslation::SelectedLines, -1, 0))
+        return;
+    startLineTranslation(m_selectedLines, true);
+}
+
+bool OcrResultController::rangeCoversWholeLines(const QVariantList &lines, int start, int length)
+{
+    if (start < 0 || length <= 0 || lines.isEmpty())
+        return false;
+    const QVector<int> touched = selectedLineIndexes(lines, start, length);
+    if (touched.isEmpty())
+        return false;
+    const QVariantMap first = lines.at(touched.first()).toMap();
+    const QVariantMap last = lines.at(touched.last()).toMap();
+    if (first.value(QStringLiteral("start")).toInt() != start)
+        return false;
+    return start + length
+           == last.value(QStringLiteral("start")).toInt()
+                  + last.value(QStringLiteral("length")).toInt();
+}
+
+bool OcrResultController::rangeCoversWholeLines(int start, int length) const
+{
+    return rangeCoversWholeLines(m_lines, start, length);
+}
+
+void OcrResultController::startPartialTranslation(const QString &selection,
+                                                  const QString &context)
+{
+    m_translationSelectionOnly = false;
+    m_translationPartialText = true;
+    m_partialContext = context;
+    m_translateLines.clear();
+    m_translateLineSource.clear();
+    m_translationLineCount = 0;
+    m_sourceText = selection;
+    m_translationSplitLines = 0;
+    m_translating = true;
+    m_translationError.clear();
+    m_translation.clear();
+    setTranslatedLines({});
+    m_translationUnchanged = false;
+    const quint64 seq = ++m_translationSeq;
+    m_chunks.clear();
+    m_items.clear();
+    m_itemTranslations.clear();
+    m_chunkIndex = 0;
+    m_chunkRetried.clear();
+    m_failedLines.clear();
+    m_lastChunkError.clear();
+    m_wholeTextRetried = false;
+    m_streamText.clear();
+    m_streamTimer.stop();
+    emit translationChanged();
+    requestPartialText(seq);
+}
+
+void OcrResultController::requestPartialText(quint64 seq)
+{
+    if (seq != m_translationSeq)
+        return;
+    m_streamText.clear();
+    m_streamTimer.stop();
+    m_translator->translateStreaming(
+        Translator::partialPrompt(translationTarget()),
+        Translator::partialRequest(m_partialContext, m_sourceText),
+        [this, seq](const QString &partial) {
+            if (seq != m_translationSeq)
+                return;
+            m_streamText += partial;
+            if (!m_streamTimer.isActive())
+                m_streamTimer.start();
+        },
+        [this, seq](const QString &text, const QString &error, bool retryable) {
+            if (seq != m_translationSeq)
+                return;
+            m_streamText.clear();
+            m_streamTimer.stop();
+            if (!error.isEmpty()) {
+                // The same single retry every other request path gets.
+                if (retryable && !m_wholeTextRetried) {
+                    m_wholeTextRetried = true;
+                    QTimer::singleShot(kChunkRetryDelayMs, this, [this, seq] {
+                        if (seq == m_translationSeq)
+                            requestPartialText(seq);
+                    });
+                    return;
+                }
+                m_translating = false;
+                m_translationError = error;
+                emit translationChanged();
+                return;
+            }
+            m_translating = false;
+            m_translation = text;
+            m_translationError.clear();
+            setTranslatedLines({});
+            m_translationUnchanged = translationLooksUnchanged(m_sourceText, m_translation);
+            emit translationChanged();
+            if (!m_translation.isEmpty())
+                emit translationReady();
+        });
+}
+
 
 void OcrResultController::requestNextLineChunk(quint64 seq)
 {
@@ -652,6 +901,8 @@ void OcrResultController::cancelTranslation()
     if (m_translating) {
         m_translating = false;
         m_streamText.clear();
+        m_translationPartialText = false;
+        m_partialContext.clear();
         // A partial answer is not a translation: drop it instead of leaving
         // half a page on screen after Cancel.
         m_translation.clear();
@@ -670,6 +921,8 @@ void OcrResultController::setTranslationForPreview(const QStringList &translated
         m_translator->cancel();
     m_translating = false;
     m_translationError.clear();
+    m_translationPartialText = false;
+    m_partialContext.clear();
     m_streamTimer.stop();
     m_streamText.clear();
     m_items.clear();
@@ -724,7 +977,12 @@ void OcrResultController::setResult(const QImage &image, const QVector<OcrWord> 
     m_streamTimer.stop();
     m_translationError.clear();
     m_translating = false;
+    m_translationPartialText = false;
+    m_partialContext.clear();
     clearPrivacyNotice();
+    m_selectedLines.clear();
+    m_selectionAnchor = -1;
+    emit selectionChanged();
     m_image = image;
     m_lines.clear();
     m_lineRects.clear();

@@ -34,11 +34,14 @@ Working today:
   by line with Cancel mid-stream, a line too long for one request is split at a
   sentence boundary and rejoined into its one cover, a failed chunk gets one retry
   and then leaves the finished lines with the failed range named, and the button
-  plus one dot per chunk show "Translating… 2/3". Known gap found in the
-  2026-11-13 X11 pass: the text pane is one native `TextEdit` selection, so Copy
-  cannot take several non-adjacent ranges, and Translate widens any selection to
-  the whole OCR line, so double-clicking a word translates its line. M4.5 is
-  that refinement.
+  plus one dot per chunk show "Translating… 2/3". Since M4.5: the line boxes
+  take Ctrl+click (toggle) and Shift+click (range) into a controller-owned set,
+  Copy selection takes those lines in document order, Translate selection sends
+  them through the numbered path, and a word or part of a line (a pane
+  double-click, or a selection across part of two lines) translates that exact
+  text with its line as context into the pane only, with no cover over the whole
+  line. The chosen lines are tinted under the pane text, the boxes report their
+  selected state, Ctrl+A picks all lines and Esc clears the set first.
 - Translation: any OpenAI-compatible `/chat/completions`, numbered-line prompts,
   SSE streaming with a buffered fallback, a request token budget (and long lines
   split at sentence boundaries), tolerant parsing, whole-text fallback,
@@ -48,15 +51,16 @@ Working today:
   answer or the service's error verbatim), the first Translate to a non-local
   host asks once and remembers the answer per host, and settings export leaves
   upload credentials and the translation key out unless explicitly included.
-- Verified: 28/28 `ctest` (M4 grew `TranslatorTest` to 23 cases, `OcrResultTest`
-  to 20, and `UploadUrlTest` with the export-secrets case). F8 baseline from M2:
+- Verified: 28/28 `ctest` (M4 and M4.5 grew `TranslatorTest` to 24 cases,
+  `OcrResultTest` to 23, and `UploadUrlTest` with the export-secrets case). F8 baseline from M2:
   `ocr result` / `ocr result image` / `translation` / `translation overlay` /
   `paddleocr` all PASS with models present; M3 adds `translation stream`; M4 adds
   `translation connection`, `translation privacy`, `settings secrets` and the
-  secrets half of `settings round-trip`. All of them PASS in an offscreen dev
-  build; none has been run on a desktop yet. Tiers measured (tiny 0.09-0.13 s and
-  ~0.4 GB, small 0.20-0.27 s and ~0.6 GB, medium 0.52-0.68 s and ~1.2 GB per
-  1600x1000 page), tier switch reloads without a restart.
+  secrets half of `settings round-trip`; M4.5 adds `translation selection`. All
+  of them PASS in an offscreen dev build; none has been run on a desktop yet.
+  Tiers measured (tiny 0.09-0.13 s and ~0.4 GB, small 0.20-0.27 s and ~0.6 GB,
+  medium 0.52-0.68 s and ~1.2 GB per 1600x1000 page), tier switch reloads without
+  a restart.
 
 Environment, so a new session does not rebuild its own:
 
@@ -414,16 +418,16 @@ the no-optional-dependencies rule does not allow for one string.
 - All 24 new strings are translated in the eight catalogs; CHANGELOG EN/PL has
   the M4 entry.
 
-## M4.5. Result window: multi-select and word translation (2-3 days, after M4)
+## M4.5. Result window: multi-select and word translation (2-3 days, after M4) - DONE 2026-11-13
 
-Deferred from the 2026-11-13 Ubuntu X11 pass. Both gaps come from the same
+Deferred from the 2026-11-13 Ubuntu X11 pass. Both gaps came from the same
 design as M3, not from a defect in it: the text pane is one native `TextEdit`
-selection, and `translateRange()` deliberately widens a character selection to
-the recognized lines so the numbered request can put a translation on each
-cover. This round adds the two missing interactions without changing the M3
+selection, and `translateRange()` deliberately widened a character selection to
+the recognized lines so the numbered request could put a translation on each
+cover. This round added the two missing interactions without changing the M3
 line-overlay contract.
 
-**T4.5.1 (open) Multi-select for Copy and Translate**
+**T4.5.1 (done) Multi-select for Copy and Translate**
 
 - Ctrl+click a line box on the picture toggles that line in the selection set;
   Shift+click extends from the anchor; a plain click resets to one line. The
@@ -436,11 +440,19 @@ line-overlay contract.
 - Keyboard: Ctrl+A selects all lines, Esc clears the set; the picture boxes and
   the pane bands share one state. Accessibility: each box reports selected or
   not selected.
-- Acceptance: Ctrl+click two non-adjacent lines and Copy selection yields
-  exactly those two texts in order; Translate selection covers exactly those two
-  lines; the set survives a zoom, a pan and Original/Translation switching.
+- Acceptance met: `OcrResultTest::multiSelectionOrdersAndMerges` pins replace,
+  toggle, Shift range, order/`selectionText`, Ctrl+A and clear;
+  `wholeLineMultiSelectionPaintsCovers` proves two non-adjacent lines go out
+  alone and paint exactly their two covers. The set lives in the controller, so
+  zoom, pan and Original/Translation switching cannot reset it; a pane drag
+  clears it because that is the partial-text path.
+- Implementation: `OcrResultController::selectedLines/toggleLine/extendLineSelection/
+  selectAllLines/clearLineSelection/selectionText/translateSelectedLines` plus
+  `selectionChanged`; the window tints bands from `positionToRectangle`, maps a
+  translated cover back to its source line through `sourceStart`, and reports
+  `Accessible.selected` on both delegate kinds.
 
-**T4.5.2 (open) Word and partial-text translation**
+**T4.5.2 (done) Word and partial-text translation**
 
 - Classify the selection before sending. Whole lines keep the numbered path and
   the picture covers. Anything shorter (a double-clicked word, part of a line)
@@ -450,12 +462,16 @@ line-overlay contract.
   the page.
 - The window says which mode ran ("Translated the selected text" for the pane,
   the existing overlay note for whole lines).
-- Acceptance: double-click a word and Translate sends only that word plus its
-  line as context, and the pane shows that word's translation; a whole-line
-  multi-line selection still paints covers; a range that crosses a line boundary
-  does not expand to the rest of either line.
+- Acceptance met: `partialTextStaysInThePane` sends the word "two" with
+  "Context: One two three" and "Selected text: two", asserts no cover, and
+  repeats for a range crossing a line boundary without expanding either line;
+  `TranslatorTest::partialTextPromptKeepsTheContext` pins the prompt/request
+  shape. `OcrResultController::rangeCoversWholeLines` is the one classifier.
+- Implementation: `Translator::partialPrompt()`/`partialRequest()`,
+  `OcrResultController::startPartialTranslation()`/`requestPartialText()` with
+  the same one-retry rule, `translationPartialText` for the window note.
 
-**T4.5.3 (open) Tests, F8, strings**
+**T4.5.3 (done) Tests, F8, strings**
 
 - `OcrResultTest`: range classification (whole line vs partial), multi-range
   order and merge, and the exact-text request/prompt.
@@ -463,11 +479,18 @@ line-overlay contract.
   of the existing synthetic result.
 - Eight catalogs and a CHANGELOG EN/PL entry under the current beta heading.
 
-Two choices to settle at the start of the round: whether Ctrl+click also works
-inside the text pane (it means custom hit-testing, not a native selection) and
-whether a word request should carry its line as context or translate the word
-alone. The plan above proposes line-box Ctrl+click and context-assisted word
-translation.
+Two choices settled at the start of the round as proposed: Ctrl+click works on
+the picture's line boxes (the pane keeps its native selection, so no custom
+hit-testing inside the text), and a word request carries its line as context.
+
+**Done in this round (2026-11-13):**
+
+- `ctest` 28/28 in `unisic-zh-build` (`TranslatorTest` 24 cases, `OcrResultTest`
+  23, `UploadUrlTest` unchanged).
+- F8 in an offscreen dev build: `translation selection` PASS, and the run's four
+  FAILs are still the known container gaps; the desktop row below stays open.
+- All 8 new strings are translated in the eight catalogs; CHANGELOG EN/PL has
+  the M4.5 entry.
 
 ## M5. The other scripts' recognizers (5-8 days, D5 settled: own round)
 

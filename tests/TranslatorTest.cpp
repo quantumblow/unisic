@@ -27,6 +27,7 @@ private slots:
     void rejectsUnnumberedTranslation();
     void parsesSseFrames();
     void partialNumberedLinesFillThePane();
+    void partialTextPromptKeepsTheContext();
     void estimatesTokensByScript();
     void splitsLongLinesAtSentenceBoundaries();
     void chunksWithinTokenBudget();
@@ -230,6 +231,22 @@ void TranslatorTest::partialNumberedLinesFillThePane()
     // is normal, and the strict parser is what decides success.
     QCOMPARE(Translator::parseNumberedLinesPartial(
                  QStringLiteral("1. One\n2. Two"), 3).size(), 2);
+}
+
+void TranslatorTest::partialTextPromptKeepsTheContext()
+{
+    const QString prompt = Translator::partialPrompt(QStringLiteral("German"));
+    QVERIFY(prompt.contains(QStringLiteral("German")));
+    QVERIFY(prompt.contains(QStringLiteral("only the text under")));
+    QVERIFY(prompt.contains(QStringLiteral("Context")));
+    // The exact fragment and the whole line travel in the user message, and the
+    // context is clearly labelled apart from the text to translate.
+    const QString request =
+        Translator::partialRequest(QStringLiteral("One two three"), QStringLiteral("two"));
+    QVERIFY(request.contains(QStringLiteral("Context: One two three")));
+    QVERIFY(request.contains(QStringLiteral("Selected text: two")));
+    QVERIFY(request.indexOf(QStringLiteral("Selected text:"))
+            > request.indexOf(QStringLiteral("Context:")));
 }
 
 void TranslatorTest::estimatesTokensByScript()

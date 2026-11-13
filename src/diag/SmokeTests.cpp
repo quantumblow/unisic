@@ -3446,6 +3446,69 @@ void AppContext::devTestSettingsSecrets()
               !result.startsWith(QLatin1String("PASS")));
 }
 
+// M4.5: the result window's two new interactions, without a network. The
+// controller's selection model, the whole-line/partial classification and the
+// exact-text prompt are what the window and the request path branch on.
+static QString translationSelectionCheck()
+{
+    const QString prompt = Translator::partialPrompt(QStringLiteral("Polish"));
+    if (!prompt.contains(QLatin1String("Polish"))
+        || !prompt.contains(QLatin1String("only the text under")))
+        return QStringLiteral("FAIL (partial prompt)");
+    const QString request =
+        Translator::partialRequest(QStringLiteral("One two two"), QStringLiteral("two"));
+    if (!request.contains(QLatin1String("Context: One two two"))
+        || !request.contains(QLatin1String("Selected text: two")))
+        return QStringLiteral("FAIL (partial request)");
+
+    OcrResultController result;
+    QVector<OcrWord> words;
+    const QStringList texts{QStringLiteral("One"), QStringLiteral("Two"),
+                            QStringLiteral("Three")};
+    for (int i = 0; i < texts.size(); ++i) {
+        OcrWord word;
+        word.line = i;
+        word.text = texts.at(i);
+        word.rect = QRect(10, 10 + i * 30, 100, 20);
+        words.append(word);
+    }
+    result.setResult(QImage(140, 120, QImage::Format_RGB32), words, QString());
+    if (result.lines().size() != 3)
+        return QStringLiteral("FAIL (synthetic result)");
+
+    result.selectLine(2);
+    result.toggleLine(0);
+    if (result.selectedLines() != (QVariantList{0, 2})
+        || result.selectionText() != QLatin1String("One\nThree"))
+        return QStringLiteral("FAIL (multi-select order)");
+    result.selectLine(0);
+    result.extendLineSelection(2);
+    if (result.selectedLines() != (QVariantList{0, 1, 2}))
+        return QStringLiteral("FAIL (shift range)");
+    result.clearLineSelection();
+    if (result.selectedLines().size() != 0)
+        return QStringLiteral("FAIL (clear)");
+    result.selectAllLines();
+    if (result.selectedLines().size() != 3)
+        return QStringLiteral("FAIL (select all)");
+
+    // Whole lines keep the numbered path; a sub-range does not.
+    if (!OcrResultController::rangeCoversWholeLines(result.lines(), 0, 3)
+        || !OcrResultController::rangeCoversWholeLines(result.lines(), 4, 9)
+        || OcrResultController::rangeCoversWholeLines(result.lines(), 1, 2))
+        return QStringLiteral("FAIL (whole-line classification)");
+    return QStringLiteral("PASS (multi-select order, whole-line classification, partial prompt)");
+}
+
+void AppContext::devTestTranslationSelection()
+{
+    if (!devBuild())
+        return;
+    const QString result = translationSelectionCheck();
+    showToast(tr("Dev: translation selection: %1").arg(result),
+              !result.startsWith(QLatin1String("PASS")));
+}
+
 // ---- the result window's picture (composite, fitted text, hit test) --------
 //
 // Its own synthetic capture, not ocrBoxTestImage(): these checks are about the
@@ -7155,6 +7218,13 @@ void AppContext::runSmokeTest()
     // other host is asked for and named in the notice.
     m_smokeSteps.append([this] {
         smokeLog(QStringLiteral("translation privacy: ") + translationPrivacyCheck());
+        smokeNext();
+    });
+
+    // 3f3e1c) Multi-select and word translation (M4.5): the line-box set, the
+    // whole-line/partial decision and the exact-text prompt. No endpoint.
+    m_smokeSteps.append([this] {
+        smokeLog(QStringLiteral("translation selection: ") + translationSelectionCheck());
         smokeNext();
     });
 

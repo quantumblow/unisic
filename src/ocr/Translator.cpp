@@ -63,6 +63,24 @@ QString Translator::numberedPrompt(const QString &target)
         .arg(target);
 }
 
+QString Translator::partialPrompt(const QString &target)
+{
+    return QStringLiteral(
+               "You are a translation engine. The user selected part of a line from a screenshot. "
+               "Translate into %1 only the text under \"Selected text\". The whole line is given "
+               "under \"Context\" so the fragment's meaning is clear; use it, but do not translate "
+               "or repeat the context, and do not add words that are not in the selected text. "
+               "Keep the selected text's own punctuation. Return only the translation of the "
+               "selected text, with no explanation, notes, quotation marks or quotation of the "
+               "context.")
+        .arg(target);
+}
+
+QString Translator::partialRequest(const QString &context, const QString &selection)
+{
+    return QStringLiteral("Context: %1\nSelected text: %2").arg(context, selection);
+}
+
 QString Translator::numberedRequest(const QStringList &lines)
 {
     QStringList numbered;

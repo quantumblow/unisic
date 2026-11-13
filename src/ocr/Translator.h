@@ -56,6 +56,11 @@ public:
     // caller falls back to the whole text.
     static QString numberedPrompt(const QString &target);
     static QString numberedRequest(const QStringList &lines);
+    // T4.5.2: a word or part of a line. The whole source line travels as
+    // context so the model can resolve the fragment, but only the fragment is
+    // translated; the answer stays in the pane and never paints a cover.
+    static QString partialPrompt(const QString &target);
+    static QString partialRequest(const QString &context, const QString &selection);
     // `expected` numbered lines or nothing, with `error` explaining a count or
     // numbering mismatch. Empty and blank lines are dropped before counting.
     static QStringList parseNumberedLines(const QString &text, int expected, QString *error);

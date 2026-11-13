@@ -113,6 +113,9 @@ private slots:
     void selectionMapsToWholeLines();
     void streamingFillsThePaneAndCancelStopsIt();
     void privacyNoticeAsksOncePerRemoteHost();
+    void multiSelectionOrdersAndMerges();
+    void wholeLineMultiSelectionPaintsCovers();
+    void partialTextStaysInThePane();
     void longLineIsSplitAndRejoined();
     void retriesAChunkOnceThenSucceeds();
     void partialTranslationNamesFailedLines();
@@ -288,6 +291,9 @@ void OcrResultTest::streamingFillsThePaneAndCancelStopsIt()
 void OcrResultTest::privacyNoticeAsksOncePerRemoteHost()
 {
     Settings settings;
+    // QtTest's config outlives the run, and confirming the notice writes the
+    // approved host: start from a clean slate or the second run asks nothing.
+    settings.setTranslationPrivacyHost(QString());
     settings.setTranslationEndpoint(QStringLiteral("https://api.example.test/v1"));
     settings.setTranslationModel(QStringLiteral("mock"));
 
@@ -351,6 +357,181 @@ void OcrResultTest::privacyNoticeAsksOncePerRemoteHost()
     QVERIFY(localResult.privacyNoticeHost().isEmpty());
     QTRY_VERIFY_WITH_TIMEOUT(!localResult.translating(), 5000);
     QCOMPARE(localResult.translation(), QStringLiteral("Hello world"));
+}
+
+// T4.5.1: the line-box set is a controller model: plain click replaces,
+// Ctrl+click toggles, Shift+click extends from the anchor, Ctrl+A takes all,
+// Esc (clearLineSelection) empties it, and Copy order is document order.
+void OcrResultTest::multiSelectionOrdersAndMerges()
+{
+    OcrResultController result;
+    QVector<OcrWord> words;
+    const QStringList texts{QStringLiteral("One"), QStringLiteral("Two"),
+                            QStringLiteral("Three"), QStringLiteral("Four")};
+    for (int i = 0; i < texts.size(); ++i) {
+        OcrWord word;
+        word.line = i;
+        word.text = texts.at(i);
+        word.rect = QRect(10, 10 + i * 30, 100, 20);
+        words.append(word);
+    }
+    result.setResult(QImage(160, 160, QImage::Format_RGB32), words, QString());
+    QCOMPARE(result.lines().size(), 4);
+
+    result.selectLine(2);
+    QCOMPARE(result.selectedLines(), QVariantList{2});
+    result.toggleLine(0);
+    QCOMPARE(result.selectedLines(), (QVariantList{0, 2}));
+    QCOMPARE(result.selectionText(), QStringLiteral("One\nThree"));
+    result.toggleLine(2);
+    QCOMPARE(result.selectedLines(), QVariantList{0});
+
+    // Shift extends from the anchor (the last toggled line).
+    result.selectLine(0);
+    result.extendLineSelection(2);
+    QCOMPARE(result.selectedLines(), (QVariantList{0, 1, 2}));
+    QCOMPARE(result.selectionText(), QStringLiteral("One\nTwo\nThree"));
+
+    result.selectAllLines();
+    QCOMPARE(result.selectedLines(), (QVariantList{0, 1, 2, 3}));
+    result.clearLineSelection();
+    QVERIFY(result.selectedLines().isEmpty());
+    QVERIFY(result.selectionText().isEmpty());
+
+    // An invalid index never enters the set.
+    result.selectLine(9);
+    QVERIFY(result.selectedLines().isEmpty());
+
+    // Whole-line classification: the exact union is whole, one character short
+    // or a partial start is not.
+    const QVariantList lines = result.lines();
+    QVERIFY(OcrResultController::rangeCoversWholeLines(lines, 0, 3));
+    // The exact text of lines 1..2 is "Two\nThree" = 9 characters.
+    QVERIFY(OcrResultController::rangeCoversWholeLines(lines, 4, 9));
+    QVERIFY(!OcrResultController::rangeCoversWholeLines(lines, 5, 8));
+    QVERIFY(!OcrResultController::rangeCoversWholeLines(lines, 0, 2));
+    QVERIFY(!OcrResultController::rangeCoversWholeLines(lines, -1, 0));
+}
+
+// T4.5.1: whole-line multi-select still uses the numbered request and paints
+// only the chosen lines' covers; the lines between them are not sent.
+void OcrResultTest::wholeLineMultiSelectionPaintsCovers()
+{
+    MockTranslationEndpoint server(MockTranslationEndpoint::NumberedSse);
+    QVERIFY(server.start());
+    Settings settings;
+    settings.setTranslationEndpoint(server.base());
+    settings.setTranslationModel(QStringLiteral("mock"));
+    settings.setTranslationTarget(QStringLiteral("Polish"));
+
+    OcrResultController result(&settings);
+    QVector<OcrWord> words;
+    const QStringList texts{QStringLiteral("One"), QStringLiteral("Two"),
+                            QStringLiteral("Three")};
+    for (int i = 0; i < texts.size(); ++i) {
+        OcrWord word;
+        word.line = i;
+        word.text = texts.at(i);
+        word.rect = QRect(10, 10 + i * 30, 120, 20);
+        words.append(word);
+    }
+    QImage image(180, 120, QImage::Format_RGB32);
+    image.fill(QColor(250, 250, 245));
+    result.setResult(image, words, QString());
+
+    result.selectLine(0);
+    result.toggleLine(2);
+    QCOMPARE(result.selectedLines(), (QVariantList{0, 2}));
+    result.translateSelectedLines();
+    QTRY_VERIFY_WITH_TIMEOUT(!result.translating(), 5000);
+    QCOMPARE(result.translationError(), QString());
+    QVERIFY(result.translationSelectionOnly());
+    QVERIFY(!result.translationPartialText());
+    QCOMPARE(result.translatedLines().size(), 2);
+    QCOMPARE(result.translation(), QStringLiteral("Translated part 1\nTranslated part 2"));
+    // Only the two chosen lines went out; the one between them did not.
+    QCOMPARE(server.bodies.size(), 1);
+    const QByteArray &request = server.bodies.first();
+    QVERIFY(request.contains("1. One"));
+    QVERIFY(request.contains("2. Three"));
+    QVERIFY(!request.contains("Two"));
+    // The covers keep the source lines they came from.
+    const QVariantList covers = result.translatedLines();
+    QCOMPARE(covers.at(0).toMap().value(QStringLiteral("sourceStart")).toInt(), 0);
+    QCOMPARE(covers.at(1).toMap().value(QStringLiteral("sourceStart")).toInt(), 8);
+}
+
+// T4.5.2: a word or part of a line sends exactly that text, with the line as
+// context, and the answer stays in the pane: no cover over the whole line.
+void OcrResultTest::partialTextStaysInThePane()
+{
+    MockTranslationEndpoint server(MockTranslationEndpoint::Sse);
+    QVERIFY(server.start());
+    Settings settings;
+    settings.setTranslationEndpoint(server.base());
+    settings.setTranslationModel(QStringLiteral("mock"));
+    settings.setTranslationTarget(QStringLiteral("Polish"));
+
+    OcrResultController result(&settings);
+    QVector<OcrWord> words;
+    const QStringList texts{QStringLiteral("One two three"), QStringLiteral("Second line")};
+    for (int i = 0; i < texts.size(); ++i) {
+        OcrWord word;
+        word.line = i;
+        word.text = texts.at(i);
+        word.rect = QRect(10, 10 + i * 30, 150, 20);
+        words.append(word);
+    }
+    QImage image(200, 100, QImage::Format_RGB32);
+    image.fill(QColor(250, 250, 245));
+    result.setResult(image, words, QString());
+
+    const int start = result.text().indexOf(QStringLiteral("two"));
+    QVERIFY(start >= 0);
+    result.translateRange(start, 3);
+    QCOMPARE(result.translationLineCount(), 0);
+    QVERIFY(result.translationPartialText());
+    QVERIFY(!result.translationSelectionOnly());
+    QVERIFY(result.translating());
+    QTRY_VERIFY_WITH_TIMEOUT(!result.translating(), 5000);
+    QCOMPARE(result.translationError(), QString());
+    QCOMPARE(result.translation(), QStringLiteral("Hello world"));
+    QVERIFY2(result.translatedLines().isEmpty(),
+             "a partial selection must not paint a cover over its whole line");
+
+    // The request carries the exact fragment plus the source line as context.
+    QCOMPARE(server.bodies.size(), 1);
+    const QByteArray &request = server.bodies.first();
+    const int bodyStart = int(request.indexOf("\r\n\r\n")) + 4;
+    const QJsonObject payload = QJsonDocument::fromJson(request.mid(bodyStart)).object();
+    const QJsonArray messages = payload.value(QStringLiteral("messages")).toArray();
+    QVERIFY(messages.size() >= 2);
+    const QString system = messages.at(0).toObject().value(QStringLiteral("content")).toString();
+    const QString user = messages.last().toObject().value(QStringLiteral("content")).toString();
+    QVERIFY2(system.contains(QStringLiteral("Polish")), qPrintable(system));
+    QVERIFY2(system.contains(QStringLiteral("only the text under")), qPrintable(system));
+    QVERIFY2(user.contains(QStringLiteral("Context: One two three")), qPrintable(user));
+    QVERIFY2(user.contains(QStringLiteral("Selected text: two")), qPrintable(user));
+    QVERIFY2(!user.contains(QStringLiteral("Selected text: One")), qPrintable(user));
+
+    // A range that crosses a line boundary but is not whole lines sends exactly
+    // that range, with both touched lines as context, and still paints nothing.
+    const int crossStart = result.text().indexOf(QStringLiteral("three"));
+    const int crossLength = result.text().indexOf(QStringLiteral("Second")) + 6 - crossStart;
+    QVERIFY(crossLength > 0);
+    result.translateRange(crossStart, crossLength);
+    QVERIFY(result.translationPartialText());
+    QVERIFY(result.translatedLines().isEmpty());
+    QTRY_VERIFY_WITH_TIMEOUT(!result.translating(), 5000);
+    const QJsonObject crossPayload =
+        QJsonDocument::fromJson(server.bodies.last().mid(server.bodies.last().indexOf("\r\n\r\n") + 4))
+            .object();
+    const QString crossUser = crossPayload.value(QStringLiteral("messages")).toArray().last()
+                                  .toObject().value(QStringLiteral("content")).toString();
+    QVERIFY2(crossUser.contains(QStringLiteral("Context: One two three\nSecond line")),
+             qPrintable(crossUser));
+    QVERIFY2(crossUser.contains(QStringLiteral("Selected text: three\nSecond")),
+             qPrintable(crossUser));
 }
 
 // A line over the per-request budget is split at sentence boundaries and sent

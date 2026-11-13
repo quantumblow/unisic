@@ -436,6 +436,9 @@ public:
     Q_INVOKABLE void devTestTranslationConnection();
     Q_INVOKABLE void devTestTranslationPrivacy();
     Q_INVOKABLE void devTestSettingsSecrets();
+    // M4.5: the line-box multi-selection and the exact-text (word/partial line)
+    // translation path.
+    Q_INVOKABLE void devTestTranslationSelection();
     Q_INVOKABLE void devTestPaddleOcr();
     Q_INVOKABLE void devTestClipboardPaste();
     Q_INVOKABLE void devTestCaptureDelay();

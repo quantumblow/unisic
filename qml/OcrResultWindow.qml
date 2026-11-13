@@ -35,6 +35,10 @@ Window {
     // so neither pane squeezes the picture into a strip.
     readonly property bool sideBySide: width >= 820
     property bool showTranslation: false
+    // Set while the picture drives the pane's native selection, so a
+    // cursorPositionChanged from our own select() call does not clear the
+    // line-box multi-selection (a real drag in the pane does clear it).
+    property bool syncingPaneSelection: false
     // Translation over the picture needs one translation per recognized line;
     // a service that merged or split lines leaves this empty and the whole text
     // stays in the pane instead.
@@ -107,23 +111,68 @@ Window {
     // One place for "a line on the picture selects its range in the pane", so
     // the original boxes and the translated covers behave the same.
     function selectPaneRange(start, length) {
+        resultWindow.syncingPaneSelection = true
         textEdit.select(start, start + length)
+        resultWindow.syncingPaneSelection = false
         textEdit.forceActiveFocus()
         const r = textEdit.positionToRectangle(start)
         textFlick.contentY = Math.max(0, r.y - 24)
     }
 
+    // The source line behind a translated cover. The cover map can skip a line
+    // whose chunk failed, so a cover's index is not a source line index; the
+    // source range it carries is the link.
+    function sourceLineOfCover(entry) {
+        if (!entry || entry.sourceStart === undefined || entry.sourceStart < 0)
+            return -1
+        const lines = App.ocrResult.lines
+        for (let i = 0; i < lines.length; ++i) {
+            if (entry.sourceStart >= lines[i].start
+                    && entry.sourceStart < lines[i].start + lines[i].length)
+                return i
+        }
+        return -1
+    }
+
     // A click on the picture, resolved through the pane's own hit test (image
     // coordinates), so Original and Translation select the same way at any zoom.
-    function clickPicture(px, py) {
+    // Plain: one line. Ctrl: add or remove it from the set. Shift: a range from
+    // the anchor. The pane keeps its native selection for the partial-text
+    // translation path (T4.5.2).
+    function clickPicture(px, py, modifiers) {
         const index = imagePane.lineIndexAt(px, py)
-        if (index < 0)
+        if (index < 0) {
+            if (!(modifiers & Qt.ControlModifier))
+                App.ocrResult.clearLineSelection()
             return
+        }
         const entry = resultWindow.showTranslation
                       ? App.ocrResult.translatedLines[index]
                       : App.ocrResult.lines[index]
         if (!entry)
             return
+        const sourceIndex = resultWindow.showTranslation
+                            ? resultWindow.sourceLineOfCover(entry) : index
+        if (modifiers & Qt.ControlModifier) {
+            if (sourceIndex >= 0)
+                App.ocrResult.toggleLine(sourceIndex)
+            return
+        }
+        if (modifiers & Qt.ShiftModifier) {
+            if (sourceIndex < 0)
+                return
+            App.ocrResult.extendLineSelection(sourceIndex)
+            const lines = App.ocrResult.selectedLines
+            if (lines.length > 0) {
+                const first = App.ocrResult.lines[lines[0]]
+                const last = App.ocrResult.lines[lines[lines.length - 1]]
+                resultWindow.selectPaneRange(first.start,
+                                             last.start + last.length - first.start)
+            }
+            return
+        }
+        if (sourceIndex >= 0)
+            App.ocrResult.selectLine(sourceIndex)
         resultWindow.selectPaneRange(entry.start, entry.length)
     }
 
@@ -155,10 +204,30 @@ Window {
                           : { start: -1, length: 0 }
     }
 
-    // How many recognized lines the Translate button would send. The label
-    // says "selection" only when a selection really maps onto line boxes, so
-    // it can never promise a narrower request than the one that goes out.
+    // The chosen lines as a lookup object for the delegates. Rebuilt whenever
+    // the controller's list changes, so a box and a cover share one state.
+    readonly property var selectedLineSet: {
+        const set = {}
+        const list = App.ocrResult.selectedLines
+        for (let i = 0; i < list.length; ++i)
+            set[list[i]] = true
+        return set
+    }
+
+    // True when the pane selection is not exactly whole lines: it translates
+    // that exact text into the pane and must not cover the line it came from.
+    readonly property bool partialSelection: {
+        const range = resultWindow.selectedSourceRange()
+        return range.length > 0
+               && !App.ocrResult.rangeCoversWholeLines(range.start, range.length)
+    }
+
+    // How many recognized lines the Translate button would send. A line-box set
+    // wins over the native selection (they are separate models); otherwise the
+    // selection is widened to the boxes it touches, exactly like M3.
     readonly property int selectedLineCount: {
+        if (App.ocrResult.selectedLines.length > 0)
+            return App.ocrResult.selectedLines.length
         const range = resultWindow.selectedSourceRange()
         if (range.length <= 0)
             return 0
@@ -180,7 +249,9 @@ Window {
         // Switch to the Translation layer before the first row arrives, or a
         // streaming answer would keep showing the source text until the end.
         resultWindow.showTranslation = true
-        if (range.length > 0)
+        if (App.ocrResult.selectedLines.length > 0)
+            App.ocrResult.translateSelectedLines()
+        else if (range.length > 0)
             App.ocrResult.translateRange(range.start, range.length)
         else
             App.ocrResult.translate()
@@ -192,9 +263,27 @@ Window {
     }
     onClosing: App.ocrResult.cancelTranslation()
 
+    // Esc clears the line-box set first and closes only when there is none, so
+    // picking several lines never traps the user in the window.
     Shortcut {
         sequence: "Esc"
-        onActivated: resultWindow.close()
+        onActivated: {
+            if (App.ocrResult.selectedLines.length > 0)
+                App.ocrResult.clearLineSelection()
+            else
+                resultWindow.close()
+        }
+    }
+    // Ctrl+A means "all lines" here: the same set the picture boxes use, and the
+    // native pane selection follows so Copy/Ctrl+C agree.
+    Shortcut {
+        sequence: "Ctrl+A"
+        onActivated: {
+            resultWindow.syncingPaneSelection = true
+            textEdit.selectAll()
+            resultWindow.syncingPaneSelection = false
+            App.ocrResult.selectAllLines()
+        }
     }
 
     Connections {
@@ -302,9 +391,9 @@ Window {
                 Text {
                     Layout.fillWidth: true
                     text: !resultWindow.showTranslation
-                          ? qsTr("Click a line on the picture to select it, or select text in the pane to translate those lines only.")
+                          ? qsTr("Click a line on the picture to select it, Ctrl+click to add lines, Shift+click for a range, or select text in the pane to translate that text.")
                           : resultWindow.overlayAvailable
-                            ? qsTr("Click a translated line on the picture to select it, or select text in the pane.")
+                            ? qsTr("Click a translated line on the picture to select it, Ctrl+click to add lines, or select text in the pane.")
                             : qsTr("Translated text. Select it below or copy it all.")
                     color: Theme.textSecondary
                     font.pixelSize: Theme.fontS
@@ -372,9 +461,11 @@ Window {
                             ? qsTr("Translate selection")
                             : qsTr("Translate all")
                     accessibleDescription: App.ocrResult.canTranslate
-                                           ? (resultWindow.selectedLineCount > 0
-                                              ? qsTr("Translate only the selected lines")
-                                              : qsTr("Translate the recognized text"))
+                                           ? (resultWindow.partialSelection
+                                              ? qsTr("Translate only the selected text")
+                                              : resultWindow.selectedLineCount > 0
+                                                ? qsTr("Translate only the selected lines")
+                                                : qsTr("Translate the recognized text"))
                                            : qsTr("Configure translation in Settings > General")
                     enabled: !App.ocrResult.translating
                     onClicked: resultWindow.translateFromPane()
@@ -390,10 +481,17 @@ Window {
                 UButton {
                     compact: true
                     variant: "tonal"
-                    enabled: textEdit.selectedText.length > 0
+                    // The line-box set wins: Copy selection takes those lines in
+                    // document order. With no set it copies the native pane
+                    // selection, partial text included.
+                    enabled: App.ocrResult.selectedLines.length > 0
+                             || textEdit.selectedText.length > 0
                     text: qsTr("Copy selection")
                     onClicked: {
-                        textEdit.copy()
+                        if (App.ocrResult.selectedLines.length > 0)
+                            App.copyText(App.ocrResult.selectionText())
+                        else
+                            textEdit.copy()
                         App.ocrResult.setStatusText(qsTr("Copied"), false)
                     }
                 }
@@ -541,6 +639,17 @@ Window {
                 Layout.fillWidth: true
                 visible: resultWindow.showTranslation && App.ocrResult.translationSelectionOnly
                 text: qsTr("Only the selected lines are translated. Press Translate all to send the rest.")
+                color: Theme.textSecondary
+                font.pixelSize: Theme.fontS
+                wrapMode: Text.WordWrap
+            }
+
+            // A word or part of a line is translated into the pane only, on
+            // purpose: a cover over the whole line would misrepresent the page.
+            Text {
+                Layout.fillWidth: true
+                visible: resultWindow.showTranslation && App.ocrResult.translationPartialText
+                text: qsTr("Translated the selected text. A word or part of a line stays in the pane and is not laid over the picture.")
                 color: Theme.textSecondary
                 font.pixelSize: Theme.fontS
                 wrapMode: Text.WordWrap
@@ -772,14 +881,24 @@ Window {
                                     z: 2
                                     required property var modelData
                                     required property int index
+                                    // The line-box set (Ctrl/Shift clicks) wins
+                                    // over the native selection when it is not
+                                    // empty; otherwise a pane selection still
+                                    // tints the boxes it touches.
                                     readonly property bool picked:
-                                        textEdit.selectionStart < modelData.start + modelData.length
-                                        && textEdit.selectionEnd > modelData.start
+                                        App.ocrResult.selectedLines.length > 0
+                                        ? resultWindow.selectedLineSet[index] === true
+                                        : (textEdit.selectionStart < modelData.start + modelData.length
+                                           && textEdit.selectionEnd > modelData.start)
                                     readonly property bool hovered:
                                         imagePane.hoverIndex === index
                                         && !resultWindow.showTranslation
                                     visible: preview.status === Image.Ready
                                              && !resultWindow.showTranslation
+                                    Accessible.role: Accessible.ListItem
+                                    Accessible.name: modelData.text
+                                    Accessible.description: qsTr("Recognized line on the picture")
+                                    Accessible.selected: picked
                                     x: modelData.x * imagePane.renderScale
                                     y: modelData.y * imagePane.renderScale
                                     width: Math.max(1, modelData.width * imagePane.renderScale)
@@ -811,10 +930,22 @@ Window {
                                     // overshoot pad in image pixels; half a
                                     // pixel keeps the scaled edge covered.
                                     readonly property real pad: 0.5
+                                    // A cover stands for a source line; the set
+                                    // stores source indices, so map back before
+                                    // asking whether it is picked.
+                                    readonly property int sourceIndex:
+                                        resultWindow.sourceLineOfCover(modelData)
                                     readonly property bool picked:
-                                        textEdit.selectionStart < modelData.start + modelData.length
-                                        && textEdit.selectionEnd > modelData.start
+                                        App.ocrResult.selectedLines.length > 0
+                                        ? (sourceIndex >= 0
+                                           && resultWindow.selectedLineSet[sourceIndex] === true)
+                                        : (textEdit.selectionStart < modelData.start + modelData.length
+                                           && textEdit.selectionEnd > modelData.start)
                                     readonly property bool hovered: imagePane.hoverIndex === index
+                                    Accessible.role: Accessible.ListItem
+                                    Accessible.name: modelData.text
+                                    Accessible.description: qsTr("Translated line on the picture")
+                                    Accessible.selected: picked
                                     x: modelData.x * imagePane.renderScale - pad
                                     y: modelData.y * imagePane.renderScale - pad
                                     width: Math.max(1, modelData.width * imagePane.renderScale
@@ -933,7 +1064,7 @@ Window {
                         }
                         onReleased: (m) => {
                             if (!panning)
-                                resultWindow.clickPicture(m.x, m.y)
+                                resultWindow.clickPicture(m.x, m.y, m.modifiers)
                             panning = false
                         }
                         onExited: imagePane.hoverIndex = -1
@@ -1093,6 +1224,38 @@ Window {
                             }
                         }
 
+                        // One tinted band per chosen line, behind the text.
+                        // The pane is one native TextEdit selection, so a
+                        // non-adjacent set can only be drawn here; the picture
+                        // boxes and these bands share the controller's list.
+                        Repeater {
+                            model: resultWindow.showTranslation ? [] : App.ocrResult.selectedLines
+                            delegate: Rectangle {
+                                required property var modelData
+                                readonly property var sourceLine: App.ocrResult.lines[modelData]
+                                visible: sourceLine !== undefined && textEdit.text.length > 0
+                                x: 0
+                                width: textFlick.width
+                                y: sourceLine
+                                   ? textEdit.positionToRectangle(sourceLine.start).y : 0
+                                height: {
+                                    // Read the text so a layer switch re-measures.
+                                    const current = textEdit.text
+                                    if (!sourceLine || current.length === 0)
+                                        return 0
+                                    const first = textEdit.positionToRectangle(sourceLine.start)
+                                    const last = textEdit.positionToRectangle(
+                                                     sourceLine.start
+                                                     + Math.max(0, sourceLine.length - 1))
+                                    return Math.max(first.height,
+                                                    last.y + last.height - first.y)
+                                }
+                                color: Theme.alpha(Theme.accent, 0.16)
+                                radius: 2
+                                z: -1
+                            }
+                        }
+
                         TextEdit {
                             id: textEdit
                             width: textFlick.width
@@ -1112,6 +1275,16 @@ Window {
                             Accessible.role: Accessible.StaticText
                             Accessible.name: qsTr("Recognized text")
                             Accessible.description: qsTr("Selectable text. Ctrl and the mouse wheel change its size.")
+                            // Selecting text in the pane is the partial-text
+                            // path: it is a different model from the line-box
+                            // set, so a real pane drag clears that set. The
+                            // picture's own select() call is guarded.
+                            onSelectedTextChanged: {
+                                if (!resultWindow.syncingPaneSelection
+                                        && textEdit.selectedText.length > 0
+                                        && App.ocrResult.selectedLines.length > 0)
+                                    App.ocrResult.clearLineSelection()
+                            }
                         }
                     }
 

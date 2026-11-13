@@ -83,6 +83,15 @@ class OcrResultController : public QObject
     // that echoed the input, often for a language pair it handles badly). The
     // window says so instead of presenting the source as a translation.
     Q_PROPERTY(bool translationUnchanged READ translationUnchanged NOTIFY translationChanged)
+    // The lines the user picked on the picture (Ctrl+click toggles, Shift+click
+    // ranges, plain click replaces, Ctrl+A all, Esc clears). Indices into
+    // `lines`, in document order. This is a controller model on purpose: the
+    // pane is one native TextEdit selection and cannot hold a non-adjacent set.
+    Q_PROPERTY(QVariantList selectedLines READ selectedLines NOTIFY selectionChanged)
+    // True when the last/current translation was the exact selected text
+    // (a word or part of a line), not whole lines: the answer is in the pane and
+    // must not paint a cover over the line it came from.
+    Q_PROPERTY(bool translationPartialText READ translationPartialText NOTIFY translationChanged)
     // A one-line confirmation the window shows in place (Copied, Saved ...,
     // Opened in the editor): the app's toasts live in the MAIN window, which
     // the result window can be covering while the user works in it. Cleared
@@ -115,6 +124,10 @@ public:
     }
     int translationChunksDone() const { return std::min(m_chunkIndex, int(m_chunks.size())); }
     bool translationUnchanged() const { return m_translationUnchanged; }
+    bool translationPartialText() const { return m_translationPartialText; }
+    QVariantList selectedLines() const;
+    bool hasLineSelection() const { return !m_selectedLines.isEmpty(); }
+    int selectedLineCount() const { return m_selectedLines.size(); }
     QString statusText() const { return m_statusText; }
     bool statusIsError() const { return m_statusIsError; }
     Q_INVOKABLE void setStatusText(const QString &text, bool error = false);
@@ -124,9 +137,27 @@ public:
     Q_INVOKABLE void translate();
     // Translates only the recognized lines whose [start, start+length) range
     // in `text` overlaps the selection. A selection covering no line (or an
-    // empty one) falls back to the whole text, like translate(). The pane sends
-    // whole lines, not the partial line the pointer happened to cross.
+    // empty one) falls back to the whole text, like translate(). A selection
+    // that is exactly whole lines keeps the numbered request and the picture
+    // covers; anything shorter (a word, part of a line) translates that exact
+    // text with its line as context and only fills the pane (T4.5.2).
     Q_INVOKABLE void translateRange(int start, int length);
+    // Multi-select (T4.5.1): the chosen whole lines, in document order.
+    Q_INVOKABLE void selectLine(int index);
+    Q_INVOKABLE void toggleLine(int index);
+    Q_INVOKABLE void extendLineSelection(int index);
+    Q_INVOKABLE void selectAllLines();
+    Q_INVOKABLE void clearLineSelection();
+    // The chosen lines' texts joined with one newline, in document order. Empty
+    // when the set is empty; the window falls back to the native pane selection.
+    Q_INVOKABLE QString selectionText() const;
+    // Translates the chosen lines through the numbered path (and covers). Does
+    // nothing when the set is empty; translate() then handles the pane.
+    Q_INVOKABLE void translateSelectedLines();
+    // True when [start, start+length) is exactly the union of the whole lines it
+    // touches, the condition for the numbered request and the covers.
+    static bool rangeCoversWholeLines(const QVariantList &lines, int start, int length);
+    Q_INVOKABLE bool rangeCoversWholeLines(int start, int length) const;
     Q_INVOKABLE void cancelTranslation();
     // The first-send privacy notice: Translate stops before any request when
     // the endpoint is not localhost and this host has not been approved yet.
@@ -206,6 +237,7 @@ signals:
     void resultChanged();
     void translationChanged();
     void statusTextChanged();
+    void selectionChanged();
     void privacyNoticeChanged();
     // A new notice is waiting; the window opens its dialog.
     void privacyNoticeRequested();
@@ -246,6 +278,15 @@ private:
     QString m_statusText;
     bool m_statusIsError = false;
     QTimer m_statusTimer;
+    // Multi-select over the line boxes, and the line a Shift+click extends
+    // from. Both reset with a new result.
+    QVector<int> m_selectedLines;
+    int m_selectionAnchor = -1;
+    bool m_translationPartialText = false;
+    QString m_partialContext;
+    // What the held first-send notice should run once the user answers.
+    enum class PendingTranslation { None, Range, SelectedLines };
+    PendingTranslation m_privacyPending = PendingTranslation::None;
     // One line can be split into several request items (T3.3), so a chunk is a
     // list of item indices rather than a list of lines. `m_itemTranslations`
     // is parallel to m_items; assembling per line is what puts the parts back
@@ -280,8 +321,18 @@ private:
     int m_privacyStart = -1;
     int m_privacyLength = 0;
     void clearPrivacyNotice();
+    // True when the text would leave the machine and this host has not been
+    // approved yet; the request is held and the window asked.
+    bool holdForPrivacy(PendingTranslation kind, int start, int length);
     void requestNextLineChunk(quint64 seq);
     void requestWholeText(quint64 seq);
+    // The numbered path: `selected` are the source lines, empty means all.
+    void startLineTranslation(const QVector<int> &selected, bool selectionOnly);
+    // T4.5.2: the exact selected text, with the touched lines as context, pane
+    // only.
+    void startPartialTranslation(const QString &selection, const QString &context);
+    void requestPartialText(quint64 seq);
+    void setSelectedLines(const QVector<int> &lines);
     void finishLineTranslation();
     QString failedLinesSummary() const;
     void startTranslation(int start, int length);
