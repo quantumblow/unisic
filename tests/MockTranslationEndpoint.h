@@ -25,6 +25,7 @@ public:
         NumberedSse,  // one "N. Translated part N" line per requested item
         FailOnceNumberedSse, // 500 once, then numbered SSE (retry test)
         FailSecondChunk,     // numbered SSE for "line 0".., 500 for "line 40"..
+        Silent,              // accepts the request and never answers (timeout test)
     };
 
     explicit MockTranslationEndpoint(Mode mode, QObject *parent = nullptr)
@@ -155,6 +156,10 @@ private:
                 writeJson(socket, 500, R"({"error":{"message":"server is down"}})");
             else
                 sendNumbered(socket, request);
+            break;
+        case Silent:
+            // Hold the connection open: the probe's own hard timeout must end
+            // it, not the server. The socket closes when the server destructs.
             break;
         }
     }

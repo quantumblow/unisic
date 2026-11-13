@@ -74,6 +74,11 @@ class OcrResultController : public QObject
     Q_PROPERTY(int translationChunkCount READ translationChunkCount NOTIFY translationChanged)
     Q_PROPERTY(int translationChunkIndex READ translationChunkIndex NOTIFY translationChanged)
     Q_PROPERTY(int translationChunksDone READ translationChunksDone NOTIFY translationChanged)
+    // Set when Translate is held back for the once-per-host first-send privacy
+    // notice: the non-local host the text would go to. Empty otherwise, and
+    // never set for 127.0.0.1 / localhost / ::1. The window shows the notice
+    // and calls confirmPrivacyNotice() or cancelPrivacyNotice().
+    Q_PROPERTY(QString privacyNoticeHost READ privacyNoticeHost NOTIFY privacyNoticeChanged)
     // True when a successful answer is the recognized text itself (a service
     // that echoed the input, often for a language pair it handles badly). The
     // window says so instead of presenting the source as a translation.
@@ -123,6 +128,12 @@ public:
     // whole lines, not the partial line the pointer happened to cross.
     Q_INVOKABLE void translateRange(int start, int length);
     Q_INVOKABLE void cancelTranslation();
+    // The first-send privacy notice: Translate stops before any request when
+    // the endpoint is not localhost and this host has not been approved yet.
+    // Confirm remembers the host and runs the held request; cancel drops it.
+    QString privacyNoticeHost() const { return m_privacyNoticeHost; }
+    Q_INVOKABLE void confirmPrivacyNotice();
+    Q_INVOKABLE void cancelPrivacyNotice();
     // Developer/smoke path: lay `translated` (one entry per line box, exactly
     // what a service answer produces) onto the picture without touching the
     // network, so the window's Save/Copy image, Edit in editor, zoom and split
@@ -195,6 +206,9 @@ signals:
     void resultChanged();
     void translationChanged();
     void statusTextChanged();
+    void privacyNoticeChanged();
+    // A new notice is waiting; the window opens its dialog.
+    void privacyNoticeRequested();
     // A new translation finished; the window switches to the Translation view.
     void translationReady();
 
@@ -260,6 +274,12 @@ private:
     quint64 m_translationSeq = 0;
     int m_chunkIndex = 0;
 
+    // The once-per-host first-send notice (T4.3): the held request and the host
+    // it would go to, empty when nothing is waiting.
+    QString m_privacyNoticeHost;
+    int m_privacyStart = -1;
+    int m_privacyLength = 0;
+    void clearPrivacyNotice();
     void requestNextLineChunk(quint64 seq);
     void requestWholeText(quint64 seq);
     void finishLineTranslation();

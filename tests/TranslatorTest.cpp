@@ -34,6 +34,10 @@ private slots:
     void fallsBackWhenStreamIsRejected();
     void parsesJsonBodyWhenStreamIgnored();
     void cancelsMidStream();
+    void localEndpointsStayOnThisMachine();
+    void testConnectionReportsTheAnswer();
+    void testConnectionReturnsTheServiceErrorVerbatim();
+    void testConnectionTimesOut();
 };
 
 void TranslatorTest::initTestCase()
@@ -411,6 +415,95 @@ void TranslatorTest::cancelsMidStream()
     QTest::qWait(700);
     QVERIFY(!done);
     QCOMPARE(deltas.join(QString()), QStringLiteral("Hello"));
+}
+
+void TranslatorTest::localEndpointsStayOnThisMachine()
+{
+    QVERIFY(Translator::isLocalEndpoint(QUrl(QStringLiteral("http://127.0.0.1:11434/v1"))));
+    QVERIFY(Translator::isLocalEndpoint(Translator::endpointUrl(
+        QStringLiteral("http://localhost:11434"))));
+    QVERIFY(Translator::isLocalEndpoint(QUrl(QStringLiteral("http://LOCALHOST:8080/v1"))));
+    QVERIFY(Translator::isLocalEndpoint(QUrl(QStringLiteral("http://[::1]:8080/v1"))));
+    QVERIFY(!Translator::isLocalEndpoint(QUrl(QStringLiteral("https://api.openai.com/v1"))));
+    QVERIFY(!Translator::isLocalEndpoint(QUrl(QStringLiteral("https://192.168.1.5/v1"))));
+    QVERIFY(!Translator::isLocalEndpoint(QUrl()));
+}
+
+void TranslatorTest::testConnectionReportsTheAnswer()
+{
+    MockTranslationEndpoint server(MockTranslationEndpoint::Json);
+    QVERIFY(server.start());
+    Translator translator;
+
+    QString answer;
+    QString error;
+    qint64 elapsed = -1;
+    bool done = false;
+    translator.testConnectionTo(QUrl(server.base() + QStringLiteral("/chat/completions")),
+                                QStringLiteral("mock"), QStringLiteral("key"),
+                                QStringLiteral("Polish"), 5000,
+                                [&](const QString &text, const QString &failure, qint64 ms) {
+                                    done = true;
+                                    answer = text;
+                                    error = failure;
+                                    elapsed = ms;
+                                });
+    QTRY_VERIFY_WITH_TIMEOUT(done, 5000);
+    QCOMPARE(error, QString());
+    QCOMPARE(answer, QStringLiteral("Buffered answer"));
+    QVERIFY(elapsed >= 0);
+    QCOMPARE(server.bodies.size(), 1);
+    QVERIFY(server.bodies.first().contains("\"stream\":false"));
+    QVERIFY(server.bodies.first().contains("Polish"));
+}
+
+void TranslatorTest::testConnectionReturnsTheServiceErrorVerbatim()
+{
+    MockTranslationEndpoint server(MockTranslationEndpoint::Always500);
+    QVERIFY(server.start());
+    Translator translator;
+
+    QString answer = QStringLiteral("not empty");
+    QString error;
+    bool done = false;
+    translator.testConnectionTo(QUrl(server.base() + QStringLiteral("/chat/completions")),
+                                QStringLiteral("mock"), QString(), QStringLiteral("Polish"),
+                                5000,
+                                [&](const QString &text, const QString &failure, qint64) {
+                                    done = true;
+                                    answer = text;
+                                    error = failure;
+                                });
+    QTRY_VERIFY_WITH_TIMEOUT(done, 5000);
+    QVERIFY(answer.isEmpty());
+    // The service's message, exactly: no "Translation failed:" wrapper, so the
+    // Settings row can show what the endpoint said.
+    QCOMPARE(error, QStringLiteral("server is down"));
+}
+
+void TranslatorTest::testConnectionTimesOut()
+{
+    MockTranslationEndpoint server(MockTranslationEndpoint::Silent);
+    QVERIFY(server.start());
+    Translator translator;
+
+    QString answer = QStringLiteral("not empty");
+    QString error;
+    qint64 elapsed = -1;
+    bool done = false;
+    translator.testConnectionTo(QUrl(server.base() + QStringLiteral("/chat/completions")),
+                                QStringLiteral("mock"), QString(), QStringLiteral("Polish"),
+                                300,
+                                [&](const QString &text, const QString &failure, qint64 ms) {
+                                    done = true;
+                                    answer = text;
+                                    error = failure;
+                                    elapsed = ms;
+                                });
+    QTRY_VERIFY_WITH_TIMEOUT(done, 3000);
+    QVERIFY(answer.isEmpty());
+    QVERIFY2(error.contains(QStringLiteral("did not answer")), qPrintable(error));
+    QVERIFY2(elapsed >= 250, qPrintable(QString::number(elapsed)));
 }
 
 QTEST_GUILESS_MAIN(TranslatorTest)

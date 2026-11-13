@@ -5,6 +5,7 @@
 #include <QHttpMultiPart>
 #include <QBuffer>
 #include <QImage>
+#include <QHash>
 #include <QJsonDocument>
 #include <QJsonValue>
 #include <QRegularExpression>
@@ -603,6 +604,85 @@ void UploadManager::replaceAllDestinations(const QJsonArray &arr)
     moveActiveToTop();
     ensureBuiltins(); // guarantees the defaults survive a foreign import
     persistDestinations();
+}
+
+bool UploadManager::isCredentialArgument(const QString &key)
+{
+    const QString k = key.toLower().remove(QLatin1Char('_')).remove(QLatin1Char('-'));
+    return k.contains(QLatin1String("key")) || k.contains(QLatin1String("token"))
+           || k.contains(QLatin1String("secret")) || k.contains(QLatin1String("pass"))
+           || k.contains(QLatin1String("auth")) || k.contains(QLatin1String("clientid"))
+           || k.contains(QLatin1String("credential")) || k.contains(QLatin1String("cookie"));
+}
+
+QJsonArray UploadManager::redactSecrets(const QJsonArray &destinations)
+{
+    QJsonArray out;
+    for (const QJsonValue &value : destinations) {
+        QJsonObject dest = value.toObject();
+        // Whole fields that exist only to authenticate: the HTTP/curl header
+        // set (Authorization, API-key headers), the curl user:password pair,
+        // and the raw JSON body, which a service often expects to carry its
+        // token. Removing the header object is the safe reading of "upload
+        // credentials": a header value is the credential, not the header name.
+        dest.remove(QStringLiteral("headers"));
+        dest.remove(QStringLiteral("user"));
+        dest.remove(QStringLiteral("data"));
+        const QJsonObject args = dest.value(QStringLiteral("arguments")).toObject();
+        if (!args.isEmpty()) {
+            QJsonObject kept;
+            for (auto it = args.begin(); it != args.end(); ++it) {
+                if (!isCredentialArgument(it.key()))
+                    kept.insert(it.key(), it.value());
+            }
+            if (kept.isEmpty())
+                dest.remove(QStringLiteral("arguments"));
+            else
+                dest.insert(QStringLiteral("arguments"), kept);
+        }
+        out.append(dest);
+    }
+    return out;
+}
+
+QJsonArray UploadManager::mergeSecrets(const QJsonArray &incoming, const QJsonArray &existing)
+{
+    QHash<QString, QJsonObject> configured;
+    for (const QJsonValue &value : existing) {
+        const QJsonObject dest = value.toObject();
+        configured.insert(dest.value(QStringLiteral("name")).toString(), dest);
+    }
+    QJsonArray out;
+    for (const QJsonValue &value : incoming) {
+        QJsonObject dest = value.toObject();
+        const QJsonObject previous =
+            configured.value(dest.value(QStringLiteral("name")).toString());
+        if (!previous.isEmpty()) {
+            // A field the file does not carry was redacted on export, so the
+            // configured value is the one that still works.
+            for (const char *field : {"headers", "user", "data"}) {
+                const QString key = QLatin1String(field);
+                if (!dest.contains(key) && previous.contains(key))
+                    dest.insert(key, previous.value(key));
+            }
+            // Arguments survive as an object with the non-secret keys; restore
+            // only the credential-looking ones the export dropped.
+            QJsonObject args = dest.value(QStringLiteral("arguments")).toObject();
+            const QJsonObject previousArgs =
+                previous.value(QStringLiteral("arguments")).toObject();
+            bool restored = !dest.contains(QStringLiteral("arguments"));
+            for (auto it = previousArgs.begin(); it != previousArgs.end(); ++it) {
+                if (!args.contains(it.key()) && isCredentialArgument(it.key())) {
+                    args.insert(it.key(), it.value());
+                    restored = true;
+                }
+            }
+            if (restored)
+                dest.insert(QStringLiteral("arguments"), args);
+        }
+        out.append(dest);
+    }
+    return out;
 }
 
 // ShareX response tokens -> Unisic tokens. ShareX has used both the older

@@ -180,6 +180,10 @@ class Settings : public QObject
     Q_PROPERTY(QString translationApiKey READ translationApiKey WRITE setTranslationApiKey NOTIFY translationApiKeyChanged)
     Q_PROPERTY(QString translationModel READ translationModel WRITE setTranslationModel NOTIFY translationModelChanged)
     Q_PROPERTY(QString translationTarget READ translationTarget WRITE setTranslationTarget NOTIFY translationTargetChanged)
+    // The non-local host the user allowed the first-send privacy notice for.
+    // Empty (the default) asks before the first request to a host; changing the
+    // endpoint to a different host asks again. Local addresses never ask.
+    Q_PROPERTY(QString translationPrivacyHost READ translationPrivacyHost WRITE setTranslationPrivacyHost NOTIFY translationPrivacyHostChanged)
     Q_PROPERTY(QString editorIconStyle READ editorIconStyle WRITE setEditorIconStyle NOTIFY editorIconStyleChanged)
     Q_PROPERTY(QString editorToolIcons READ editorToolIcons WRITE setEditorToolIcons NOTIFY editorToolIconsChanged)
     Q_PROPERTY(QString uiLanguage READ uiLanguage WRITE setUiLanguage NOTIFY uiLanguageChanged)
@@ -697,6 +701,10 @@ public:
     U_SETTING(QString, translationApiKey, setTranslationApiKey, "translation/apiKey", QString())
     U_SETTING(QString, translationModel, setTranslationModel, "translation/model", QString())
     U_SETTING(QString, translationTarget, setTranslationTarget, "translation/target", QStringLiteral("English"))
+    // Which non-local endpoint host the user already said yes to. Not a secret:
+    // it makes the first-send notice appear once per host instead of on every
+    // Translate.
+    U_SETTING(QString, translationPrivacyHost, setTranslationPrivacyHost, "translation/privacyHost", QString())
     // Editor/overlay tool icons only (never the main app chrome): "custom" =
     // bundled monochrome glyphs, "system" = freedesktop QIcon::fromTheme.
     U_SETTING(QString, editorIconStyle, setEditorIconStyle, "ui/editorIconStyle", QStringLiteral("custom"))
@@ -812,6 +820,7 @@ public:
         emit ocrEngineChanged(); emit paddleTierChanged();
         emit translationEndpointChanged(); emit translationApiKeyChanged();
         emit translationModelChanged(); emit translationTargetChanged();
+        emit translationPrivacyHostChanged();
         emit editorIconStyleChanged(); emit editorToolIconsChanged();
         emit uiLanguageChanged();
         emit useSystemDecorationChanged(); emit trayIconPathChanged(); emit hiddenTrayItemsChanged();
@@ -956,6 +965,7 @@ signals:
     void translationApiKeyChanged();
     void translationModelChanged();
     void translationTargetChanged();
+    void translationPrivacyHostChanged();
     void editorIconStyleChanged();
     void editorToolIconsChanged();
     void uiLanguageChanged();

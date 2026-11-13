@@ -243,6 +243,97 @@ Item {
         confirmText: qsTr("Close")
     }
 
+    // Settings export. The file carries every setting and the upload
+    // destinations; credentials are opt-in because a backup is exactly the file
+    // people copy to another machine or attach to a bug report.
+    Popup {
+        id: exportSettingsPopup
+        property bool includeSecrets: false
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        margins: UFlyout.margin
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        width: Math.min(440, parent ? parent.width - 2 * Theme.spacingXL : 440)
+        padding: Theme.spacingXL
+        Overlay.modal: Rectangle { color: Theme.modalScrim }
+        onOpened: includeSecrets = false
+        background: Rectangle {
+            radius: Theme.radiusL
+            color: Theme.surface
+            border.width: 1
+            border.color: Theme.divider
+        }
+        contentItem: Column {
+            spacing: Theme.spacingM
+            Accessible.role: Accessible.Dialog
+            Accessible.name: qsTr("Export Unisic settings")
+            Accessible.description: qsTr("Choose whether the file includes your upload credentials and the translation API key.")
+            Text {
+                width: parent.width
+                text: qsTr("Export Unisic settings")
+                color: Theme.textPrimary
+                font.pixelSize: Theme.fontL
+                font.weight: Font.DemiBold
+                wrapMode: Text.WordWrap
+            }
+            Text {
+                width: parent.width
+                text: qsTr("The file keeps every setting and your upload destinations, so it can set up another computer. Upload credentials and the translation API key are left out by default, so the file is safe to share.")
+                color: Theme.textSecondary
+                font.pixelSize: Theme.fontM
+                wrapMode: Text.WordWrap
+            }
+            Row {
+                width: parent.width
+                spacing: Theme.spacingM
+                USwitch {
+                    id: includeSecretsSwitch
+                    checked: exportSettingsPopup.includeSecrets
+                    accessibleName: qsTr("Include upload credentials and the translation API key")
+                    onToggled: (c) => exportSettingsPopup.includeSecrets = c
+                }
+                Text {
+                    width: parent.width - includeSecretsSwitch.width - Theme.spacingM
+                    anchors.verticalCenter: includeSecretsSwitch.verticalCenter
+                    text: qsTr("Include upload credentials and the translation API key")
+                    color: Theme.textPrimary
+                    font.pixelSize: Theme.fontM
+                    wrapMode: Text.WordWrap
+                }
+            }
+            Text {
+                width: parent.width
+                visible: exportSettingsPopup.includeSecrets
+                text: qsTr("Only do this for a backup you keep private. Anyone with this file can use those keys.")
+                color: Theme.danger
+                font.pixelSize: Theme.fontS
+                wrapMode: Text.WordWrap
+            }
+            Row {
+                anchors.right: parent.right
+                spacing: Theme.spacingS
+                UButton {
+                    text: qsTr("Cancel")
+                    variant: "ghost"
+                    compact: true
+                    onClicked: exportSettingsPopup.close()
+                }
+                UButton {
+                    text: qsTr("Export")
+                    variant: "filled"
+                    compact: true
+                    onClicked: {
+                        const wanted = exportSettingsPopup.includeSecrets
+                        exportSettingsPopup.close()
+                        App.exportSettingsDialog(wanted)
+                    }
+                }
+            }
+        }
+    }
+
     function collectRows(obj, tabIdx, q, out) {
         // Skip invisible subtrees (rows/cards whose own gate is off, e.g.
         // "Notification position" with the capture popup disabled) — listing
@@ -902,7 +993,10 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             spacing: Theme.spacingS
             UButton { compact: true; variant: "tonal"; iconName: "folder-open"; text: qsTr("Import"); onClicked: App.importSettingsDialog() }
-            UButton { compact: true; variant: "tonal"; iconName: "document-save"; text: qsTr("Export"); onClicked: App.exportSettingsDialog() }
+            // The include-secrets switch is a separate themed dialog: a native
+            // file picker cannot carry a checkbox, and the export is the one
+            // place where the decision has to be visible before the file exists.
+            UButton { compact: true; variant: "tonal"; iconName: "document-save"; text: qsTr("Export"); onClicked: exportSettingsPopup.open() }
         }
     }
 
@@ -1378,6 +1472,32 @@ Item {
                             text: App.settings.translationTarget
                             placeholder: "English"
                             onEdited: (t) => App.settings.translationTarget = t
+                        }
+                    }
+                    SettingRow {
+                        label: qsTr("Test the connection")
+                        help: qsTr("Sends one small request with these settings.")
+                        helpDetail: qsTr("The same request path as Translate: the configured endpoint, key, model and target, with a 10 second timeout. A working service answers with the round-trip time and the model's reply; otherwise the service's own error is shown unchanged.")
+                        Column {
+                            spacing: Theme.spacingS
+                            UButton {
+                                compact: true
+                                variant: "tonal"
+                                text: App.translationTestRunning
+                                      ? qsTr("Testing…") : qsTr("Test connection")
+                                enabled: !App.translationTestRunning
+                                onClicked: App.testTranslationConnection()
+                            }
+                            Text {
+                                width: 300
+                                visible: App.translationTestStatus !== ""
+                                text: App.translationTestStatus
+                                color: App.translationTestOk ? Theme.textSecondary : Theme.danger
+                                font.pixelSize: Theme.fontS
+                                wrapMode: Text.WordWrap
+                                Accessible.role: Accessible.StaticText
+                                Accessible.name: text
+                            }
                         }
                     }
                     SectionTitle { text: qsTr("Tesseract") }
@@ -4371,6 +4491,7 @@ Item {
                         UButton { compact: true; variant: "tonal"; text: qsTr("Server test upload"); onClicked: App.devTestDestinationTest() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("S3 signing"); onClicked: App.devTestS3Signing() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("Settings round-trip"); onClicked: App.devTestSettingsRoundTrip() }
+                        UButton { compact: true; variant: "tonal"; text: qsTr("Settings secrets"); onClicked: App.devTestSettingsSecrets() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("Install channel"); onClicked: App.devTestInstallChannel() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("Record page mode"); onClicked: App.devTestRecordPageMode() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("Tray menu entries"); onClicked: App.devTestTrayMenu() }
@@ -4468,6 +4589,8 @@ Item {
                         UButton { compact: true; variant: "tonal"; text: qsTr("Translation"); onClicked: App.devTestTranslation() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("Translation overlay"); onClicked: App.devTestTranslationOverlay() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("Translation stream"); onClicked: App.devTestTranslationStream() }
+                        UButton { compact: true; variant: "tonal"; text: qsTr("Test connection"); onClicked: App.devTestTranslationConnection() }
+                        UButton { compact: true; variant: "tonal"; text: qsTr("Translation privacy"); onClicked: App.devTestTranslationPrivacy() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("OCR highlight + redact"); onClicked: App.devTestOcrHighlight() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("Auto-redact pattern"); onClicked: App.devTestOcrRedactPattern() }
                         UButton { compact: true; variant: "tonal"; text: qsTr("Style presets"); onClicked: App.devTestStylePresets() }

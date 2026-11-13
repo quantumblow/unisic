@@ -222,6 +222,18 @@ public:
     // Settings export/import support.
     QJsonArray destinationsJson() const { return m_destinations; }
     void replaceAllDestinations(const QJsonArray &arr);
+    // The copy that leaves this machine in a settings export that does not
+    // include secrets: headers, the curl user (user:password), a JSON-body
+    // "data" template (it can embed a token) and credential-looking arguments
+    // are removed. Non-secret arguments such as reqtype/time stay, so an
+    // imported built-in still uploads.
+    static QJsonArray redactSecrets(const QJsonArray &destinations);
+    // The reverse for an import whose file says it left secrets out: every
+    // credential field the file does not carry is taken from the destination
+    // with the same name that is already configured, so a backup without them
+    // can never wipe a working key.
+    static QJsonArray mergeSecrets(const QJsonArray &incoming, const QJsonArray &existing);
+    static bool isCredentialArgument(const QString &key);
 
     // Pure, server-free helpers - public so the F8 smoke run can check the two
     // pieces of destination handling that used to need a real upload to see:

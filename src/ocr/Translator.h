@@ -29,6 +29,10 @@ public:
     // One piece of an answer as it streams in. Called on the GUI thread, in
     // order, and never after Done.
     using Delta = std::function<void(const QString &partial)>;
+    // Test connection: the answer and the round trip, or the service's own
+    // error text (never wrapped in our own wording) and the time it took.
+    using TestDone = std::function<void(const QString &answer, const QString &error,
+                                        qint64 elapsedMs)>;
     explicit Translator(Settings *settings = nullptr, QObject *parent = nullptr);
     ~Translator() override;
 
@@ -36,6 +40,10 @@ public:
     // Base URLs are accepted in the shape people paste them: a bare host, a
     // /v1 base, or the full /chat/completions URL.
     static QUrl endpointUrl(const QString &base);
+    // True when an endpoint stays on this machine: 127.0.0.1, localhost or
+    // ::1 in any letter case. The first-send privacy notice never asks for
+    // these and asks once for every other host.
+    static bool isLocalEndpoint(const QUrl &url);
     static QString systemPrompt(const QString &target);
     // Content from a chat-completions body; `error` carries the service's own
     // message (or a shape error) when there is no text.
@@ -95,6 +103,14 @@ public:
     void translateStreamingTo(const QUrl &url, const QString &model, const QString &key,
                               const QString &system, const QString &text, Delta delta,
                               Done done);
+    // One small buffered request with the configured endpoint, key, model and
+    // target, for Settings' Test connection button. `timeoutMs` is a hard cap
+    // (the default is the plan's 10 s); the callback fires exactly once.
+    void testConnection(const QString &target, int timeoutMs, TestDone done);
+    // The same probe against an explicit endpoint, so the F8/Developer checks
+    // never read or write the user's translation settings.
+    void testConnectionTo(const QUrl &url, const QString &model, const QString &key,
+                          const QString &target, int timeoutMs, TestDone done);
     void cancel();
 
 private:

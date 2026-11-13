@@ -43,13 +43,20 @@ Working today:
   SSE streaming with a buffered fallback, a request token budget (and long lines
   split at sentence boundaries), tolerant parsing, whole-text fallback,
   unchanged-answer detection, one retry per chunk, partial results that keep the
-  finished chunks and name the failed lines, progress per chunk.
-- Verified: 28/28 `ctest` (M3 grew `TranslatorTest` to 19 cases and
-  `OcrResultTest` to 19). F8 baseline from M2: `ocr result` / `ocr result image` /
-  `translation` / `translation overlay` / `paddleocr` all PASS with models present;
-  M3 adds `translation stream`, wired but not yet run on a desktop. Tiers measured
-  (tiny 0.09-0.13 s and ~0.4 GB, small 0.20-0.27 s and ~0.6 GB, medium 0.52-0.68 s
-  and ~1.2 GB per 1600x1000 page), tier switch reloads without a restart.
+  finished chunks and name the failed lines, progress per chunk. Since M4:
+  Settings has a Test connection probe (10 s cap, round trip and the model's
+  answer or the service's error verbatim), the first Translate to a non-local
+  host asks once and remembers the answer per host, and settings export leaves
+  upload credentials and the translation key out unless explicitly included.
+- Verified: 28/28 `ctest` (M4 grew `TranslatorTest` to 23 cases, `OcrResultTest`
+  to 20, and `UploadUrlTest` with the export-secrets case). F8 baseline from M2:
+  `ocr result` / `ocr result image` / `translation` / `translation overlay` /
+  `paddleocr` all PASS with models present; M3 adds `translation stream`; M4 adds
+  `translation connection`, `translation privacy`, `settings secrets` and the
+  secrets half of `settings round-trip`. All of them PASS in an offscreen dev
+  build; none has been run on a desktop yet. Tiers measured (tiny 0.09-0.13 s and
+  ~0.4 GB, small 0.20-0.27 s and ~0.6 GB, medium 0.52-0.68 s and ~1.2 GB per
+  1600x1000 page), tier switch reloads without a restart.
 
 Environment, so a new session does not rebuild its own:
 
@@ -329,24 +336,83 @@ per-chunk state in the pane when streaming and chunks are combined.
   the new strings are in the binary, and it starts under Xvfb with an isolated
   profile.
 
-## M4. Settings, privacy, secrets (1-2 days)
+## M4. Settings, privacy, secrets (1-2 days) - DONE 2026-11-13
 
-**T4.1** Test connection in Settings > General > Translation: one small request
-with the configured endpoint, key, model and target, a 10 s timeout, then success
-with the round-trip time and the model's answer, or the endpoint's error verbatim.
+**T4.1 (done)** Test connection in Settings > General > Translation: one small
+request with the configured endpoint, key, model and target, a 10 s timeout, then
+success with the round-trip time and the model's answer, or the endpoint's error
+verbatim.
 
-**T4.2** Settings export: secrets (upload credentials and the translation key) are
-out by default, with an explicit include option in the export dialog; importing a
-file without them must not wipe the ones already configured.
+- `Translator::testConnectionTo()` sends one buffered chat request with a hard
+  QTimer cap (10 s for the button, overridable so the F8 check can use 300 ms) on
+  top of `setTransferTimeout`, measures the round trip with QElapsedTimer, and
+  reports `parseResponse`'s service message untouched (HTTP status plus body
+  only when the body carries no error object). `testConnection()` reads Settings;
+  AppContext owns a separate `Translator` probe, so the button can never cancel a
+  translation in the result window. The Settings row shows the answer or the
+  error under the button, and the running state disables it.
+- Acceptance met: `TranslatorTest::testConnectionReportsTheAnswer`,
+  `testConnectionReturnsTheServiceErrorVerbatim` and `testConnectionTimesOut`
+  (a `Silent` mock path) pin the three outcomes. F8 `translation connection` and
+  the Developer `Test connection` button run the same success/error/timeout
+  chain against a local mock.
 
-**T4.3** First-send privacy notice: the first time Translate would send text to a
-non-localhost endpoint, say once which host the text goes to and remember the
-answer. Local addresses (127.0.0.1, localhost, ::1) never ask.
+**T4.2 (done)** Settings export: secrets (upload credentials and the translation
+key) are out by default, with an explicit include option in the export dialog;
+importing a file without them must not wipe the ones already configured.
+
+- `exportSettings(file, includeSecrets = false)` skips `translationApiKey` and
+  writes the marker `"secrets": false`; `UploadManager::redactSecrets()` removes
+  destination `headers`, `user`, `data` and credential-looking `arguments`
+  entries (`isCredentialArgument`), keeping non-secret ones such as reqtype/time
+  so an imported built-in still uploads. The Settings header Export button opens
+  a themed dialog with an "Include upload credentials and the translation API
+  key" switch (off every time it opens); the CLI has `--include-secrets`.
+  `importSettings` merges with `UploadManager::mergeSecrets()` only when the file
+  says it left secrets out: every credential field the file lacks is restored
+  from the destination with the same name, while a full export stays
+  authoritative (a deliberately cleared key stays cleared). Old files without
+  the marker are treated as complete, so behaviour is unchanged.
+- Acceptance met: `UploadUrlTest::settingsExportRedactsSecrets` pins the
+  redaction, the preserved non-secret arguments, the merge and the
+  authoritative-file case; F8 `settings round-trip` now checks the marker, the
+  omitted key, the explicit include and that a secrets-free import keeps the
+  configured key; `settings secrets` and the Developer button cover the pure
+  helpers.
+
+**T4.3 (done)** First-send privacy notice: the first time Translate would send
+text to a non-localhost endpoint, say once which host the text goes to and
+remember the answer. Local addresses (127.0.0.1, localhost, ::1) never ask.
+
+- `Translator::isLocalEndpoint()` is the one definition of local (case-insensitive
+  127.0.0.1, localhost, ::1). `OcrResultController::startTranslation()` holds the
+  request before anything is sent when the host is not local and differs from
+  `Settings::translationPrivacyHost` ("translation/privacyHost"); it exposes
+  `privacyNoticeHost` and `confirmPrivacyNotice()`/`cancelPrivacyNotice()`. The
+  result window's modal notice names the host, says the screenshot itself is not
+  sent, and is asked once per host; a changed endpoint asks again. `Cancel`, Esc
+  and closing the window drop the held request.
+- Acceptance met: `TranslatorTest::localEndpointsStayOnThisMachine` and
+  `OcrResultTest::privacyNoticeAsksOncePerRemoteHost` (no request before the
+  answer, remembered host, a second host asks again, a local mock never asks).
+  F8 `translation privacy` and the Developer `Translation privacy` button check
+  the classification and the host the notice names.
 
 **T4.4, D2 settled (2026-11-13): no keychain.** The key stays in the owner-only
 config file, documented as such; T4.2 is what keeps it out of exports. A keychain
 would mean libsecret as a new mandatory dependency in six packaging recipes, which
 the no-optional-dependencies rule does not allow for one string.
+
+**Done in this round (2026-11-13):**
+
+- `ctest` 28/28 in `unisic-zh-build` (`TranslatorTest` 23 cases, `OcrResultTest`
+  20, `UploadUrlTest` one more case).
+- F8 in an offscreen dev build: `translation connection`, `translation privacy`,
+  `settings round-trip` and `settings secrets` all PASS; the run's four FAILs are
+  the known container gaps (no notification host, no webp encoder, no portal, no
+  screen), so the desktop row below stays open.
+- All 24 new strings are translated in the eight catalogs; CHANGELOG EN/PL has
+  the M4 entry.
 
 ## M4.5. Result window: multi-select and word translation (2-3 days, after M4)
 

@@ -69,6 +69,8 @@ static void printHelp(FILE *stream)
         "\n"
         "Other options:\n"
         "  --export-settings PATH       Export settings without starting the UI\n"
+        "  --include-secrets            Include upload credentials and the translation key\n"
+        "                               in an --export-settings file\n"
         "  --import-settings PATH       Import settings without starting the UI\n"
         "  --hotkey ID                  Run a configured hotkey action\n"
         "  --tray-only                  Start without showing the main window\n"
@@ -87,6 +89,7 @@ static bool isKnownOption(const char *argument)
            || option == "--output" || option.startsWith("--output=")
            || option == "--format" || option.startsWith("--format=")
            || option == "--export-settings" || option == "--import-settings"
+           || option == "--include-secrets"
            || option == "--hotkey" || option == "--tray-only" || option == "--help"
            || option == "--version";
 }
@@ -870,7 +873,8 @@ int main(int argc, char *argv[])
                 qWarning() << "--export-settings requires a file path";
                 return 2;
             }
-            err = batchContext.exportSettings(QUrl::fromLocalFile(args[i + 1]));
+            err = batchContext.exportSettings(QUrl::fromLocalFile(args[i + 1]),
+                                              args.contains(QLatin1String("--include-secrets")));
         } else if (j >= 0) {
             if (j + 1 >= args.size()) {
                 qWarning() << "--import-settings requires a file path";

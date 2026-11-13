@@ -2,6 +2,7 @@
 
 #include "Settings.h"
 
+#include <QElapsedTimer>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -10,6 +11,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QRegularExpression>
+#include <QTimer>
 
 #include <cmath>
 
@@ -29,6 +31,13 @@ QUrl Translator::endpointUrl(const QString &base)
     if (value.endsWith(QLatin1String("/v1")))
         return QUrl(value + QStringLiteral("/chat/completions"));
     return QUrl(value + QStringLiteral("/v1/chat/completions"));
+}
+
+bool Translator::isLocalEndpoint(const QUrl &url)
+{
+    const QString host = url.host().toLower();
+    return host == QLatin1String("localhost") || host == QLatin1String("127.0.0.1")
+           || host == QLatin1String("::1");
 }
 
 QString Translator::systemPrompt(const QString &target)
@@ -555,7 +564,8 @@ QJsonObject chatPayload(const QString &model, const QString &system, const QStri
                        {QStringLiteral("stream"), stream}};
 }
 
-QNetworkRequest chatRequest(const QUrl &url, const QString &key, bool stream)
+QNetworkRequest chatRequest(const QUrl &url, const QString &key, bool stream,
+                            int timeoutMs = 90000)
 {
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
@@ -565,8 +575,9 @@ QNetworkRequest chatRequest(const QUrl &url, const QString &key, bool stream)
     if (!key.isEmpty())
         request.setRawHeader("Authorization", "Bearer " + key.toUtf8());
     // A local model can be slow; a cloud service that has not answered or sent
-    // a byte in 90 seconds is more likely stuck than thinking.
-    request.setTransferTimeout(90000);
+    // a byte in 90 seconds is more likely stuck than thinking. The Test
+    // connection probe passes its own, shorter cap.
+    request.setTransferTimeout(timeoutMs);
     return request;
 }
 
@@ -638,6 +649,102 @@ void Translator::translateWithUrl(const QUrl &url, const QString &model, const Q
         }
         done(translation, {}, false);
     });
+}
+
+void Translator::testConnection(const QString &target, int timeoutMs, TestDone done)
+{
+    if (!m_settings || !configured()) {
+        done({}, Translator::tr("Set the translation endpoint and model in Settings > General"), 0);
+        return;
+    }
+    testConnectionTo(endpointUrl(m_settings->translationEndpoint()),
+                     m_settings->translationModel().trimmed(),
+                     m_settings->translationApiKey().trimmed(), target, timeoutMs,
+                     std::move(done));
+}
+
+void Translator::testConnectionTo(const QUrl &url, const QString &model, const QString &key,
+                                  const QString &target, int timeoutMs, TestDone done)
+{
+    if (!url.isValid()
+        || (url.scheme() != QLatin1String("http") && url.scheme() != QLatin1String("https"))) {
+        done({}, Translator::tr("Set the translation endpoint and model in Settings > General"), 0);
+        return;
+    }
+    if (timeoutMs <= 0)
+        timeoutMs = 10000;
+    cancel();
+    const quint64 seq = ++m_seq;
+
+    // A plain buffered request: the button is a connection check, not a
+    // translation, so there is nothing to stream and nothing to parse as SSE.
+    const QNetworkRequest request = chatRequest(url, key, false, timeoutMs);
+    const QByteArray payload =
+        QJsonDocument(chatPayload(model, systemPrompt(target), QStringLiteral("Hello"), false))
+            .toJson(QJsonDocument::Compact);
+    QElapsedTimer clock;
+    clock.start();
+    QNetworkReply *reply = nam()->post(request, payload);
+    m_reply = reply;
+
+    // setTransferTimeout only fires while nothing arrives; a server that
+    // trickles a byte every few seconds would still hold the button forever.
+    // The probe therefore gets a hard cap of its own.
+    auto timedOut = std::make_shared<bool>(false);
+    auto *timeout = new QTimer(reply);
+    timeout->setSingleShot(true);
+    timeout->setInterval(timeoutMs);
+    connect(timeout, &QTimer::timeout, reply, [reply, timedOut] {
+        *timedOut = true;
+        reply->abort();
+    });
+    timeout->start();
+
+    connect(reply, &QNetworkReply::finished, this,
+            [this, reply, done, seq, timedOut, clock, timeoutMs] {
+                if (seq != m_seq) {
+                    // cancel() already aborted this reply and owns its deletion.
+                    return;
+                }
+                m_reply = nullptr;
+                const qint64 elapsed = clock.elapsed();
+                const QByteArray body = reply->readAll();
+                const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+                const auto networkError = reply->error();
+                const QString errorString = reply->errorString();
+                reply->deleteLater();
+                if (*timedOut) {
+                    done({}, Translator::tr("The service did not answer within %1 seconds")
+                                 .arg(timeoutMs / 1000),
+                         elapsed);
+                    return;
+                }
+                QString serviceError;
+                const QString answer = parseResponse(body, &serviceError);
+                if (status >= 400) {
+                    if (serviceError.isEmpty()) {
+                        // No error object to quote: show the status and the
+                        // body's own text, not a paraphrase.
+                        QString text = QString::fromUtf8(body).trimmed();
+                        if (text.size() > 300)
+                            text = text.left(300) + QStringLiteral("...");
+                        serviceError = text.isEmpty()
+                                           ? QStringLiteral("HTTP %1").arg(status)
+                                           : QStringLiteral("HTTP %1: %2").arg(status).arg(text);
+                    }
+                    done({}, serviceError, elapsed);
+                    return;
+                }
+                if (networkError != QNetworkReply::NoError) {
+                    done({}, errorString, elapsed);
+                    return;
+                }
+                if (!serviceError.isEmpty()) {
+                    done({}, serviceError, elapsed);
+                    return;
+                }
+                done(answer, {}, elapsed);
+            });
 }
 
 void Translator::translateStreaming(const QString &system, const QString &text, Delta delta,

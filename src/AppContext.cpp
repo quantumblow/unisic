@@ -61,6 +61,7 @@
 #include "ocr/OcrEngine.h"
 #include "ocr/OcrResultController.h"
 #include "ocr/PaddleOcr.h"
+#include "ocr/Translator.h"
 // zxing-cpp 3 removed MultiFormatWriter/BitMatrix in favour of CreateBarcode.
 #if __has_include(<ZXing/MultiFormatWriter.h>)
 #include <ZXing/BitMatrix.h>
@@ -5516,7 +5517,7 @@ QSize AppContext::notifCardSize(const QString &style) const
 
 // --------------------------------------------------------- export / import
 
-void AppContext::exportSettingsDialog()
+void AppContext::exportSettingsDialog(bool includeSecrets)
 {
     // Native picker: QFileDialog with the platform theme (KDE plasma-integration
     // / the portal on other DEs) is the desktop's own file dialog - the QML
@@ -5527,7 +5528,7 @@ void AppContext::exportSettingsDialog()
         tr("Unisic settings (*.json)"));
     if (path.isEmpty())
         return; // cancelled
-    const QString err = exportSettings(QUrl::fromLocalFile(path));
+    const QString err = exportSettings(QUrl::fromLocalFile(path), includeSecrets);
     showToast(err.isEmpty() ? tr("Settings exported") : err, !err.isEmpty());
 }
 
@@ -5625,7 +5626,7 @@ void AppContext::exportFilesToZip(const QStringList &files, const QString &destP
     });
 }
 
-QString AppContext::exportSettings(const QUrl &file)
+QString AppContext::exportSettings(const QUrl &file, bool includeSecrets)
 {
     QString path = file.isLocalFile() ? file.toLocalFile() : file.toString();
     if (path.isEmpty())
@@ -5634,7 +5635,9 @@ QString AppContext::exportSettings(const QUrl &file)
         path += QLatin1String(".json");
 
     // Export the full *effective* configuration (defaults included) so the
-    // file reproduces this setup on any machine.
+    // file reproduces this setup on any machine. Secrets are the exception: a
+    // file meant to be shared or moved must not carry a working upload key or
+    // translation key unless the user explicitly asked for that (T4.2).
     QJsonObject s;
     const QMetaObject *mo = m_settings->metaObject();
     for (int i = mo->propertyOffset(); i < mo->propertyCount(); ++i) {
@@ -5644,7 +5647,10 @@ QString AppContext::exportSettings(const QUrl &file)
         // only puts keys in the file that cannot come back out of it.
         if (!p.isWritable())
             continue;
-        s.insert(QString::fromLatin1(p.name()), QJsonValue::fromVariant(p.read(m_settings)));
+        const QString name = QString::fromLatin1(p.name());
+        if (!includeSecrets && name == QLatin1String("translationApiKey"))
+            continue;
+        s.insert(name, QJsonValue::fromVariant(p.read(m_settings)));
     }
 
     // The selected UI theme lives in ThemeController (key ui/theme), not in
@@ -5655,15 +5661,23 @@ QString AppContext::exportSettings(const QUrl &file)
     const QJsonObject root{
         {QStringLiteral("app"), QStringLiteral("unisic")},
         {QStringLiteral("version"), 1},
+        // Import reads this to know whether an absent credential field means
+        // "left out on purpose" (restore the configured one) or "cleared"
+        // (write it as it is). Old files have no marker and are complete.
+        {QStringLiteral("secrets"), includeSecrets},
         {QStringLiteral("settings"), s},
-        {QStringLiteral("destinations"), m_uploads->destinationsJson()},
+        {QStringLiteral("destinations"), includeSecrets
+                                             ? m_uploads->destinationsJson()
+                                             : UploadManager::redactSecrets(
+                                                   m_uploads->destinationsJson())},
     };
     QFile f(path);
     if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
         return tr("Cannot write %1").arg(path);
-    // The export embeds destination secrets (SFTP passwords, API keys) - lock it
-    // to the owner before any bytes land (the CLI --export-settings path can
-    // target a world-readable /tmp).
+    // A full export embeds destination secrets (SFTP passwords, API keys) -
+    // lock it to the owner before any bytes land (the CLI --export-settings
+    // path can target a world-readable /tmp). A redacted export stays locked
+    // too: the same file may later be replaced by an explicit full export.
     f.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
     // Verify the write really landed: a silent partial write (disk full, quota,
     // an unplugged USB/fuse target) must not be reported as a successful backup.
@@ -5725,8 +5739,18 @@ QString AppContext::importSettings(const QUrl &file)
         actionDisarmed = true;
     }
 
-    if (root.value(QStringLiteral("destinations")).isArray())
-        m_uploads->replaceAllDestinations(root.value(QStringLiteral("destinations")).toArray());
+    if (root.value(QStringLiteral("destinations")).isArray()) {
+        QJsonArray incoming = root.value(QStringLiteral("destinations")).toArray();
+        // A file that says it left secrets out must not wipe the working keys
+        // already configured here; a full export (or a legacy file without the
+        // marker) is authoritative, so a key the user removed stays removed.
+        const bool fileHasSecrets = root.contains(QStringLiteral("secrets"))
+                                        ? root.value(QStringLiteral("secrets")).toBool()
+                                        : true;
+        if (!fileHasSecrets)
+            incoming = UploadManager::mergeSecrets(incoming, m_uploads->destinationsJson());
+        m_uploads->replaceAllDestinations(incoming);
+    }
 
     m_settings->notifyAll();
     applyHotkeys();
@@ -5734,6 +5758,42 @@ QString AppContext::importSettings(const QUrl &file)
                   ? tr("Settings imported. The external action is off: check its command, then switch it on")
                   : tr("Settings imported"));
     return {};
+}
+
+// ------------------------------------------------------ translation test
+
+void AppContext::testTranslationConnection()
+{
+    if (m_translationTestRunning)
+        return;
+    if (!m_translationProbe)
+        m_translationProbe = new Translator(m_settings, this);
+    if (!m_translationProbe->configured()) {
+        m_translationTestStatus = tr("Set the translation endpoint and model in Settings > General");
+        m_translationTestOk = false;
+        emit translationTestChanged();
+        return;
+    }
+    m_translationTestRunning = true;
+    m_translationTestOk = false;
+    m_translationTestStatus = tr("Testing the connection…");
+    emit translationTestChanged();
+    // D2 settles the timeout at 10 seconds; the probe sends one small buffered
+    // request, so the answer is either the model's reply or the service's own
+    // error text.
+    m_translationProbe->testConnection(m_settings->translationTarget(), 10000,
+                                       [this](const QString &answer, const QString &error,
+                                              qint64 elapsedMs) {
+                                           m_translationTestRunning = false;
+                                           m_translationTestOk = error.isEmpty();
+                                           m_translationTestStatus =
+                                               error.isEmpty()
+                                                   ? tr("Connected in %1 ms. The model answered: %2")
+                                                         .arg(elapsedMs)
+                                                         .arg(answer)
+                                                   : error;
+                                           emit translationTestChanged();
+                                       });
 }
 
 // ---------------------------------------------------------------- shell

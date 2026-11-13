@@ -45,6 +45,7 @@ class X11Hotkeys;
 class GifRecorder;
 class OcrEngine;
 class PaddleOcr;
+class Translator;
 class AnnotationCanvas;
 class CaptureNotification;
 class DesktopNotifier;
@@ -72,6 +73,14 @@ class AppContext : public QObject
     Q_PROPERTY(PaddleOcr *paddleOcr READ paddleOcr CONSTANT)
     // The last OCR result shown in the result window (image + selectable text).
     Q_PROPERTY(OcrResultController *ocrResult READ ocrResult CONSTANT)
+    // Settings > General > Translation's Test connection probe: one small
+    // request with the configured endpoint, key, model and target. `status` is
+    // the answer with its round trip, or the service's error verbatim.
+    Q_PROPERTY(QString translationTestStatus READ translationTestStatus
+                   NOTIFY translationTestChanged)
+    Q_PROPERTY(bool translationTestRunning READ translationTestRunning
+                   NOTIFY translationTestChanged)
+    Q_PROPERTY(bool translationTestOk READ translationTestOk NOTIFY translationTestChanged)
     Q_PROPERTY(bool recording READ recording NOTIFY recordingChanged)
     Q_PROPERTY(bool converting READ converting NOTIFY recordingChanged)
     Q_PROPERTY(bool instantReplayActive READ instantReplayActive NOTIFY recordingChanged)
@@ -217,6 +226,9 @@ public:
     BackgroundRemover *backgroundRemover() const { return m_bgRemover; }
     PaddleOcr *paddleOcr() const;
     OcrResultController *ocrResult() const { return m_ocrResult; }
+    QString translationTestStatus() const { return m_translationTestStatus; }
+    bool translationTestRunning() const { return m_translationTestRunning; }
+    bool translationTestOk() const { return m_translationTestOk; }
     CaptureManager *captureManager() const { return m_capture; }
     QQmlEngine *qmlEngine() const { return m_engine; }
 
@@ -417,6 +429,13 @@ public:
     Q_INVOKABLE void devTestTranslation();
     Q_INVOKABLE void devTestTranslationOverlay();
     Q_INVOKABLE void devTestTranslationStream();
+    // M4: Settings > General > Translation's Test connection button, the
+    // first-send privacy notice, and the export-secrets rule. Each has its own
+    // F8 step above as well.
+    Q_INVOKABLE void testTranslationConnection();
+    Q_INVOKABLE void devTestTranslationConnection();
+    Q_INVOKABLE void devTestTranslationPrivacy();
+    Q_INVOKABLE void devTestSettingsSecrets();
     Q_INVOKABLE void devTestPaddleOcr();
     Q_INVOKABLE void devTestClipboardPaste();
     Q_INVOKABLE void devTestCaptureDelay();
@@ -672,11 +691,13 @@ public:
     // Copy-paste guidance (the exact commands + where to add them) for desktops
     // we can't write automatically - and as a fallback everywhere.
     Q_INVOKABLE QString desktopShortcutManualText() const;
-    Q_INVOKABLE QString exportSettings(const QUrl &file);   // "" on success, else error
+    // `includeSecrets` false (the default) keeps upload credentials and the
+    // translation API key out of the file; the export dialog asks explicitly.
+    Q_INVOKABLE QString exportSettings(const QUrl &file, bool includeSecrets = false);
     Q_INVOKABLE QString importSettings(const QUrl &file);
     // Native (DE) file picker + export/import in one call - the QML FileDialog
     // fell back to an ugly non-native dialog under the forced Basic style.
-    Q_INVOKABLE void exportSettingsDialog();
+    Q_INVOKABLE void exportSettingsDialog(bool includeSecrets = false);
     Q_INVOKABLE void importSettingsDialog();
     // Export the selected history entries (by id) to a ZIP: resolve to on-disk
     // files, open a native save dialog, then archive. Linux shells out to
@@ -834,6 +855,8 @@ signals:
     void toastChanged();
     // A fresh OCR result is in `ocrResult`; Main.qml shows the result window.
     void ocrResultReady();
+    // Settings' Test connection probe started, finished or changed its answer.
+    void translationTestChanged();
     void showMainWindowRequested();
     // A native-package update was discovered and can be installed via the
     // install.sh-in-a-terminal path - QML opens the "Install now?" prompt.
@@ -1264,6 +1287,12 @@ private:
     ScrollCaptureController *m_scrollCapture = nullptr;
     OcrEngine *m_ocr = nullptr;
     OcrResultController *m_ocrResult = nullptr;
+    // A Translator of its own for Settings' Test connection, so the probe can
+    // never cancel a translation the result window has in flight.
+    Translator *m_translationProbe = nullptr;
+    QString m_translationTestStatus;
+    bool m_translationTestRunning = false;
+    bool m_translationTestOk = false;
     QTranslator *m_appTranslator = nullptr; // bundled unisic_<lang>.qm
     QTranslator *m_qtTranslator = nullptr;  // Qt's own strings for the locale
     QSystemTrayIcon *m_tray = nullptr;

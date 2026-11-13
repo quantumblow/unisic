@@ -213,6 +213,22 @@ void OcrResultController::startTranslation(int start, int length)
     if (m_translating)
         return;
 
+    // T4.3: the text is about to leave this machine. A local endpoint never
+    // asks; any other host asks once, and the answer is remembered per host so
+    // only a changed endpoint asks again. Nothing is sent while it waits.
+    if (m_settings) {
+        const QUrl endpoint = Translator::endpointUrl(m_settings->translationEndpoint());
+        if (!Translator::isLocalEndpoint(endpoint)
+            && endpoint.host() != m_settings->translationPrivacyHost()) {
+            m_privacyNoticeHost = endpoint.host();
+            m_privacyStart = start;
+            m_privacyLength = length;
+            emit privacyNoticeChanged();
+            emit privacyNoticeRequested();
+            return;
+        }
+    }
+
     // A selection becomes the recognized lines it touches. The pane translates
     // whole lines because that is the unit the numbered prompt and the covers
     // work in; a selection of one word still sends its whole line. A selection
@@ -302,6 +318,34 @@ void OcrResultController::startTranslation(int start, int length)
         }
     }
     requestWholeText(seq);
+}
+
+void OcrResultController::clearPrivacyNotice()
+{
+    if (m_privacyNoticeHost.isEmpty())
+        return;
+    m_privacyNoticeHost.clear();
+    m_privacyStart = -1;
+    m_privacyLength = 0;
+    emit privacyNoticeChanged();
+}
+
+void OcrResultController::confirmPrivacyNotice()
+{
+    const QString host = m_privacyNoticeHost;
+    if (host.isEmpty())
+        return;
+    if (m_settings)
+        m_settings->setTranslationPrivacyHost(host);
+    const int start = m_privacyStart;
+    const int length = m_privacyLength;
+    clearPrivacyNotice();
+    startTranslation(start, length);
+}
+
+void OcrResultController::cancelPrivacyNotice()
+{
+    clearPrivacyNotice();
 }
 
 void OcrResultController::requestNextLineChunk(quint64 seq)
@@ -596,6 +640,9 @@ void OcrResultController::failTranslation(quint64 seq, const QString &error)
 
 void OcrResultController::cancelTranslation()
 {
+    // A held first-send notice belongs to a request that never started: Cancel
+    // and closing the window both drop it.
+    clearPrivacyNotice();
     // Bump the generation first: a reply that lands after this must not touch
     // the new state.
     ++m_translationSeq;
@@ -617,6 +664,7 @@ void OcrResultController::setTranslationForPreview(const QStringList &translated
 {
     if (m_lines.isEmpty() || translated.isEmpty())
         return;
+    clearPrivacyNotice();
     ++m_translationSeq;
     if (m_translator)
         m_translator->cancel();
@@ -676,6 +724,7 @@ void OcrResultController::setResult(const QImage &image, const QVector<OcrWord> 
     m_streamTimer.stop();
     m_translationError.clear();
     m_translating = false;
+    clearPrivacyNotice();
     m_image = image;
     m_lines.clear();
     m_lineRects.clear();

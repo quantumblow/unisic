@@ -216,6 +216,11 @@ Window {
             if (App.ocrResult.translation.length === 0 && !App.ocrResult.translating)
                 resultWindow.showTranslation = false
         }
+        // T4.3: the first request to a non-local host waits for this answer.
+        // Nothing has been sent yet; local endpoints never get here.
+        function onPrivacyNoticeRequested() {
+            privacyNotice.open()
+        }
     }
 
     // ---------- custom title bar (frameless decoration) ----------
@@ -1156,6 +1161,80 @@ Window {
                             Accessible.role: Accessible.StaticText
                             Accessible.name: text
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    // First-send privacy notice. It is the only moment the user is told, in
+    // words, that the page's text leaves this machine, so it names the host
+    // instead of saying "the translation service". The answer is remembered per
+    // host by the controller; a different endpoint asks again.
+    Popup {
+        id: privacyNotice
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        margins: UFlyout.margin
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape
+        width: Math.min(460, parent ? parent.width - 2 * Theme.spacingXL : 460)
+        padding: Theme.spacingXL
+        Overlay.modal: Rectangle { color: Theme.modalScrim }
+        onClosed: App.ocrResult.cancelPrivacyNotice()
+        background: Rectangle {
+            radius: Theme.radiusL
+            color: Theme.surface
+            border.width: 1
+            border.color: Theme.divider
+        }
+        contentItem: Column {
+            spacing: Theme.spacingM
+            Accessible.role: Accessible.Dialog
+            Accessible.name: qsTr("Send this text to %1?").arg(App.ocrResult.privacyNoticeHost)
+            Accessible.description: qsTr("The text of this screenshot will be sent to a translation service on another computer.")
+            Text {
+                width: parent.width
+                text: qsTr("Send this text to %1?").arg(App.ocrResult.privacyNoticeHost)
+                color: Theme.textPrimary
+                font.pixelSize: Theme.fontL
+                font.weight: Font.DemiBold
+                wrapMode: Text.WordWrap
+            }
+            Text {
+                width: parent.width
+                text: qsTr("Unisic will send the recognized text from this screenshot to %1, a translation service on another computer, so it leaves this machine. The screenshot itself is not sent.").arg(App.ocrResult.privacyNoticeHost)
+                color: Theme.textSecondary
+                font.pixelSize: Theme.fontM
+                wrapMode: Text.WordWrap
+            }
+            Text {
+                width: parent.width
+                text: qsTr("This is asked once for this host. Another endpoint asks again.")
+                color: Theme.textSecondary
+                font.pixelSize: Theme.fontS
+                wrapMode: Text.WordWrap
+            }
+            Row {
+                anchors.right: parent.right
+                spacing: Theme.spacingS
+                UButton {
+                    text: qsTr("Don't send")
+                    variant: "ghost"
+                    compact: true
+                    onClicked: {
+                        App.ocrResult.cancelPrivacyNotice()
+                        privacyNotice.close()
+                    }
+                }
+                UButton {
+                    text: qsTr("Translate")
+                    variant: "filled"
+                    compact: true
+                    onClicked: {
+                        App.ocrResult.confirmPrivacyNotice()
+                        privacyNotice.close()
                     }
                 }
             }

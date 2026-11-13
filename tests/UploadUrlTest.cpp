@@ -1,6 +1,8 @@
 #include <QtTest>
 #include <QTemporaryDir>
+#include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include "Settings.h"
 #include "upload/UploadManager.h"
 
@@ -16,6 +18,7 @@ private slots:
     // GitHub Pages (parked, docs/dev/architecture.md):
     // void gitHubPagesSupport();
     void uploadChain();
+    void settingsExportRedactsSecrets();
     void liveBuzzheavierUpload();
     void liveVgyMeUpload();
 };
@@ -333,6 +336,44 @@ void UploadUrlTest::uploadChain()
     QTRY_COMPARE_WITH_TIMEOUT(calls, 4, 10000);
     QVERIFY2(err.startsWith("local: ") && err.contains("; second: "), qPrintable(err));
     QVERIFY(!uploads.busy());
+}
+
+// Settings export leaves credentials out unless asked, and an import of such a
+// file restores the configured ones instead of wiping them (M4 T4.2).
+void UploadUrlTest::settingsExportRedactsSecrets()
+{
+    const QJsonObject destination{
+        {"name", "custom"},
+        {"requestUrl", "https://host/upload"},
+        {"headers", QJsonObject{{"Authorization", "Bearer secret"}}},
+        {"arguments", QJsonObject{{"reqtype", "fileupload"}, {"userkey", "abc123"}}},
+        {"user", "me:password"},
+        {"data", "token=abc123"},
+    };
+    const QJsonArray configured{destination};
+
+    const QJsonArray redacted = UploadManager::redactSecrets(configured);
+    QCOMPARE(redacted.size(), 1);
+    const QJsonObject plain = redacted.first().toObject();
+    QVERIFY(!plain.contains("headers"));
+    QVERIFY(!plain.contains("user"));
+    QVERIFY(!plain.contains("data"));
+    const QJsonObject args = plain.value("arguments").toObject();
+    QVERIFY(args.contains("reqtype"));   // still uploads after a fresh import
+    QVERIFY(!args.contains("userkey"));  // the credential is gone
+
+    // The import side: a secrets-free file must not wipe a working key.
+    QCOMPARE(UploadManager::mergeSecrets(redacted, configured).first().toObject(),
+             destination);
+    // A destination the file does not name is untouched by the merge (it is
+    // added by replaceAllDestinations from the file).
+    QCOMPARE(UploadManager::mergeSecrets({}, configured).size(), 0);
+    // A file that carries its own credential value is authoritative.
+    const QJsonArray own{QJsonObject{{"name", "custom"},
+                                     {"headers", QJsonObject{{"Authorization", "Bearer new"}}}}};
+    const QJsonObject merged = UploadManager::mergeSecrets(own, configured).first().toObject();
+    QCOMPARE(merged.value("headers").toObject().value("Authorization").toString(),
+             QStringLiteral("Bearer new"));
 }
 
 // The whole curl path against the real host it was built for: the %file% token

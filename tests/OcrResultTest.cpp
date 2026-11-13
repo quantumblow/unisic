@@ -112,6 +112,7 @@ private slots:
     void payloadWithoutGeometry();
     void selectionMapsToWholeLines();
     void streamingFillsThePaneAndCancelStopsIt();
+    void privacyNoticeAsksOncePerRemoteHost();
     void longLineIsSplitAndRejoined();
     void retriesAChunkOnceThenSucceeds();
     void partialTranslationNamesFailedLines();
@@ -279,6 +280,77 @@ void OcrResultTest::streamingFillsThePaneAndCancelStopsIt()
     QTest::qWait(300);
     QVERIFY(result.translation().isEmpty());
     QVERIFY(!result.translating());
+}
+
+// T4.3: the first request to a non-local host waits for a yes and is held back
+// until then; local endpoints never ask; the yes is remembered per host, so a
+// different endpoint asks again.
+void OcrResultTest::privacyNoticeAsksOncePerRemoteHost()
+{
+    Settings settings;
+    settings.setTranslationEndpoint(QStringLiteral("https://api.example.test/v1"));
+    settings.setTranslationModel(QStringLiteral("mock"));
+
+    OcrResultController result(&settings);
+    OcrWord word;
+    word.line = 0;
+    word.text = QStringLiteral("Hello");
+    word.rect = QRect(10, 10, 80, 20);
+    result.setResult(QImage(120, 60, QImage::Format_RGB32), {word}, QString());
+
+    QSignalSpy requested(&result, &OcrResultController::privacyNoticeRequested);
+    QSignalSpy changed(&result, &OcrResultController::privacyNoticeChanged);
+
+    result.translate();
+    QCOMPARE(requested.count(), 1);
+    QCOMPARE(result.privacyNoticeHost(), QStringLiteral("api.example.test"));
+    QVERIFY(!result.translating());
+    QVERIFY(result.translation().isEmpty());
+    QVERIFY(settings.translationPrivacyHost().isEmpty());
+
+    // A no sends nothing either.
+    result.cancelPrivacyNotice();
+    QVERIFY(result.privacyNoticeHost().isEmpty());
+    QCOMPARE(changed.count(), 2); // set, cleared
+    result.translate();
+    QCOMPARE(requested.count(), 2);
+
+    // A yes remembers the host and starts the request the notice held back.
+    result.confirmPrivacyNotice();
+    QCOMPARE(settings.translationPrivacyHost(), QStringLiteral("api.example.test"));
+    QVERIFY(result.privacyNoticeHost().isEmpty());
+    QVERIFY(result.translating());
+    result.cancelTranslation();
+
+    // The same host never asks again...
+    result.translate();
+    QCOMPARE(requested.count(), 2);
+    QVERIFY(result.translating());
+    result.cancelTranslation();
+
+    // ...but another endpoint does, because the text would go elsewhere.
+    settings.setTranslationEndpoint(QStringLiteral("https://other.example.test/v1"));
+    result.translate();
+    QCOMPARE(requested.count(), 3);
+    QCOMPARE(result.privacyNoticeHost(), QStringLiteral("other.example.test"));
+    result.cancelPrivacyNotice();
+
+    // A local service never asks: that is the plan's 127.0.0.1/localhost/::1
+    // exemption, checked end to end through the controller.
+    MockTranslationEndpoint server(MockTranslationEndpoint::Sse);
+    QVERIFY(server.start());
+    Settings local;
+    local.setTranslationEndpoint(server.base());
+    local.setTranslationModel(QStringLiteral("mock"));
+    OcrResultController localResult(&local);
+    localResult.setResult(QImage(120, 60, QImage::Format_RGB32), {word}, QString());
+    QSignalSpy localRequested(&localResult, &OcrResultController::privacyNoticeRequested);
+    localResult.translate();
+    QVERIFY(localResult.translating());
+    QCOMPARE(localRequested.count(), 0);
+    QVERIFY(localResult.privacyNoticeHost().isEmpty());
+    QTRY_VERIFY_WITH_TIMEOUT(!localResult.translating(), 5000);
+    QCOMPARE(localResult.translation(), QStringLiteral("Hello world"));
 }
 
 // A line over the per-request budget is split at sentence boundaries and sent

@@ -3244,6 +3244,208 @@ void AppContext::devTestTranslationStream()
     });
 }
 
+// T4.1: Settings' Test connection. A local mock answers one path, returns the
+// service's own error object on another, and holds a third one open so the hard
+// timeout is real too. No configured endpoint, no network.
+static void translationConnectionCheck(AppContext *context,
+                                       std::function<void(const QString &)> done)
+{
+    Q_UNUSED(context);
+    auto *server = new QTcpServer();
+    if (!server->listen(QHostAddress::LocalHost)) {
+        delete server;
+        done(QStringLiteral("FAIL (cannot listen on a local port)"));
+        return;
+    }
+    auto finished = std::make_shared<bool>(false);
+    auto *translator = new Translator();
+    const auto finish = [server, translator, finished, done](const QString &verdict) {
+        if (*finished)
+            return;
+        *finished = true;
+        server->deleteLater();
+        translator->deleteLater();
+        done(verdict);
+    };
+
+    const auto writeJson = [](QTcpSocket *socket, int status, const QByteArray &body) {
+        socket->write("HTTP/1.1 " + QByteArray::number(status)
+                      + (status == 200 ? QByteArray(" OK") : QByteArray(" Error"))
+                      + "\r\nContent-Type: application/json\r\nContent-Length: "
+                      + QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n");
+        socket->write(body);
+        socket->disconnectFromHost();
+    };
+
+    QObject::connect(server, &QTcpServer::newConnection, server, [server, writeJson] {
+        QTcpSocket *socket = server->nextPendingConnection();
+        auto request = std::make_shared<QByteArray>();
+        auto handled = std::make_shared<bool>(false);
+        QObject::connect(socket, &QTcpSocket::readyRead, socket,
+                         [socket, request, handled, writeJson] {
+                             *request += socket->readAll();
+                             const qsizetype headEnd = request->indexOf("\r\n\r\n");
+                             if (headEnd < 0)
+                                 return;
+                             static const QRegularExpression lengthRe(
+                                 QStringLiteral("(?im)^content-length:\\s*(\\d+)"));
+                             const qsizetype bodyLength =
+                                 lengthRe.match(QString::fromLatin1(request->left(headEnd)))
+                                     .captured(1)
+                                     .toLongLong();
+                             if (request->size() < headEnd + 4 + bodyLength || *handled)
+                                 return;
+                             *handled = true;
+                             // The slow path never answers: the probe's own hard
+                             // timeout has to end it, not the socket.
+                             if (request->contains(" /slow/"))
+                                 return;
+                             if (request->contains(" /bad/")) {
+                                 writeJson(socket, 401,
+                                           R"({"error":{"message":"invalid api key"}})");
+                                 return;
+                             }
+                             writeJson(socket, 200,
+                                       R"({"choices":[{"message":{"content":"Connection OK"}}]})");
+                         });
+        QObject::connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+    });
+
+    const QUrl okUrl(QStringLiteral("http://127.0.0.1:%1/ok/chat/completions")
+                         .arg(server->serverPort()));
+    const QUrl badUrl(QStringLiteral("http://127.0.0.1:%1/bad/chat/completions")
+                          .arg(server->serverPort()));
+    const QUrl slowUrl(QStringLiteral("http://127.0.0.1:%1/slow/chat/completions")
+                           .arg(server->serverPort()));
+
+    translator->testConnectionTo(
+        okUrl, QStringLiteral("mock"), QStringLiteral("test-key"), QStringLiteral("Polish"),
+        5000,
+        [finish, translator, badUrl, slowUrl](const QString &answer, const QString &error,
+                                              qint64 elapsed) {
+            if (!error.isEmpty() || answer != QLatin1String("Connection OK") || elapsed < 0) {
+                finish(QStringLiteral("FAIL (success: %1)")
+                           .arg(error.isEmpty() ? QStringLiteral("wrong answer") : error));
+                return;
+            }
+            translator->testConnectionTo(
+                badUrl, QStringLiteral("mock"), QString(), QStringLiteral("Polish"), 5000,
+                [finish, translator, slowUrl](const QString &, const QString &failure, qint64) {
+                    // Verbatim: the service's own message, with no wrapper of ours.
+                    if (failure != QLatin1String("invalid api key")) {
+                        finish(QStringLiteral("FAIL (service error was not verbatim: %1)")
+                                   .arg(failure));
+                        return;
+                    }
+                    translator->testConnectionTo(
+                        slowUrl, QStringLiteral("mock"), QString(), QStringLiteral("Polish"),
+                        300,
+                        [finish](const QString &, const QString &timeout, qint64 elapsed) {
+                            if (!timeout.contains(QLatin1String("did not answer"))
+                                || elapsed < 250) {
+                                finish(QStringLiteral("FAIL (timeout: %1 after %2 ms)")
+                                           .arg(timeout)
+                                           .arg(elapsed));
+                                return;
+                            }
+                            finish(QStringLiteral(
+                                "PASS (answer and round trip, verbatim service error, hard "
+                                "timeout)"));
+                        });
+                });
+        });
+    QTimer::singleShot(20000, server,
+                       [finish] { finish(QStringLiteral("FAIL (no answer in 20 s)")); });
+}
+
+void AppContext::devTestTranslationConnection()
+{
+    if (!devBuild())
+        return;
+    translationConnectionCheck(this, [this](const QString &result) {
+        showToast(tr("Dev: translation connection: %1").arg(result),
+                  !result.startsWith(QLatin1String("PASS")));
+    });
+}
+
+// T4.3: which endpoints stay on this machine. Pure, so the check never touches
+// the configured endpoint or the network.
+static QString translationPrivacyCheck()
+{
+    if (!Translator::isLocalEndpoint(QUrl(QStringLiteral("http://127.0.0.1:11434/v1"))))
+        return QStringLiteral("FAIL (127.0.0.1 is not local)");
+    if (!Translator::isLocalEndpoint(
+            Translator::endpointUrl(QStringLiteral("http://localhost:11434"))))
+        return QStringLiteral("FAIL (localhost is not local)");
+    if (!Translator::isLocalEndpoint(QUrl(QStringLiteral("http://[::1]:8080/v1"))))
+        return QStringLiteral("FAIL (::1 is not local)");
+    if (Translator::isLocalEndpoint(QUrl(QStringLiteral("https://api.openai.com/v1"))))
+        return QStringLiteral("FAIL (a remote host was treated as local)");
+    if (Translator::isLocalEndpoint(QUrl(QStringLiteral("https://192.168.1.5/v1"))))
+        return QStringLiteral("FAIL (a LAN address was treated as local)");
+    // The notice names this host; it must be the one the request goes to.
+    if (Translator::endpointUrl(QStringLiteral("https://api.example.test/v1")).host()
+        != QLatin1String("api.example.test"))
+        return QStringLiteral("FAIL (notice host)");
+    return QStringLiteral("PASS (local endpoints, notice names the remote host)");
+}
+
+void AppContext::devTestTranslationPrivacy()
+{
+    if (!devBuild())
+        return;
+    const QString result = translationPrivacyCheck();
+    showToast(tr("Dev: translation privacy: %1").arg(result),
+              !result.startsWith(QLatin1String("PASS")));
+}
+
+// T4.2: the export/import rule for destination credentials, without writing
+// the user's config: strip, then put back exactly what the file left out.
+static QString settingsSecretsCheck()
+{
+    const QJsonArray configured{
+        QJsonObject{{QStringLiteral("name"), QStringLiteral("custom")},
+                    {QStringLiteral("headers"),
+                     QJsonObject{{QStringLiteral("Authorization"),
+                                  QStringLiteral("Bearer secret")}}},
+                    {QStringLiteral("arguments"),
+                     QJsonObject{{QStringLiteral("reqtype"), QStringLiteral("fileupload")},
+                                 {QStringLiteral("userkey"), QStringLiteral("abc123")}}},
+                    {QStringLiteral("user"), QStringLiteral("me:password")},
+                    {QStringLiteral("data"), QStringLiteral("token=abc123")}},
+    };
+    const QJsonArray redacted = UploadManager::redactSecrets(configured);
+    const QJsonObject plain = redacted.first().toObject();
+    if (plain.contains(QStringLiteral("headers")) || plain.contains(QStringLiteral("user"))
+        || plain.contains(QStringLiteral("data")))
+        return QStringLiteral("FAIL (a credential field survived the export)");
+    const QJsonObject args = plain.value(QStringLiteral("arguments")).toObject();
+    if (!args.contains(QStringLiteral("reqtype")))
+        return QStringLiteral("FAIL (a non-secret argument was dropped)");
+    if (args.contains(QStringLiteral("userkey")))
+        return QStringLiteral("FAIL (the user key survived the export)");
+
+    const QJsonArray merged = UploadManager::mergeSecrets(redacted, configured);
+    if (merged.first().toObject() != configured.first().toObject())
+        return QStringLiteral("FAIL (the import did not restore the configured keys)");
+
+    // A file that does include secrets is authoritative: a cleared key stays
+    // cleared instead of being resurrected by the merge.
+    if (UploadManager::redactSecrets(configured) == configured)
+        return QStringLiteral("FAIL (the redacted copy is identical)");
+
+    return QStringLiteral("PASS (redacted, non-secret arguments kept, import restored)");
+}
+
+void AppContext::devTestSettingsSecrets()
+{
+    if (!devBuild())
+        return;
+    const QString result = settingsSecretsCheck();
+    showToast(tr("Dev: settings secrets: %1").arg(result),
+              !result.startsWith(QLatin1String("PASS")));
+}
+
 // ---- the result window's picture (composite, fitted text, hit test) --------
 //
 // Its own synthetic capture, not ocrBoxTestImage(): these checks are about the
@@ -4374,13 +4576,14 @@ QString AppContext::settingsRoundTripCheck()
     // Export -> parse -> verify every writable Settings property serialized ->
     // import the file back. Importing the just-exported effective config is a
     // no-op for values while exercising the whole read path.
-    // QTemporaryFile: unique name + 0600 — the export embeds destination
+    // QTemporaryFile: unique name + 0600 — a full export embeds destination
     // secrets (API keys), which must not sit world-readable in shared /tmp.
     QTemporaryFile tmp(QDir::tempPath() + QStringLiteral("/unisic-smoketest-XXXXXX.json"));
     if (!tmp.open())
         return QStringLiteral("FAIL (cannot create a temp file)");
     const QString path = tmp.fileName();
     tmp.close(); // exportSettings rewrites it in place; 0600 perms survive
+    const QString keyBefore = m_settings->translationApiKey();
     const QString exportErr = exportSettings(QUrl::fromLocalFile(path));
     if (!exportErr.isEmpty())
         return QStringLiteral("FAIL (export: %1)").arg(exportErr);
@@ -4390,12 +4593,19 @@ QString AppContext::settingsRoundTripCheck()
         return QStringLiteral("FAIL (cannot re-read %1)").arg(path);
     const QJsonObject root = QJsonDocument::fromJson(f.readAll()).object();
     f.close();
+    // T4.2: the default export says so and leaves the translation key out;
+    // every other writable property still round-trips.
+    if (root.value(QStringLiteral("secrets")).toBool(true))
+        return QStringLiteral("FAIL (default export claims to include secrets)");
     const QJsonObject s = root.value(QStringLiteral("settings")).toObject();
+    if (s.contains(QStringLiteral("translationApiKey")))
+        return QStringLiteral("FAIL (the translation key left the machine by default)");
     QStringList missing;
     const QMetaObject *mo = m_settings->metaObject();
     for (int i = mo->propertyOffset(); i < mo->propertyCount(); ++i) {
         const QMetaProperty p = mo->property(i);
-        if (p.isWritable() && !s.contains(QString::fromLatin1(p.name())))
+        if (p.isWritable() && QString::fromLatin1(p.name()) != QLatin1String("translationApiKey")
+            && !s.contains(QString::fromLatin1(p.name())))
             missing << QString::fromLatin1(p.name());
     }
     if (!missing.isEmpty())
@@ -4404,7 +4614,32 @@ QString AppContext::settingsRoundTripCheck()
     const QString importErr = importSettings(QUrl::fromLocalFile(path));
     if (!importErr.isEmpty())
         return QStringLiteral("FAIL (import: %1)").arg(importErr);
-    return QStringLiteral("PASS (%1 settings + %2 destinations)")
+    // A secrets-free file must not wipe the key already configured.
+    if (m_settings->translationApiKey() != keyBefore)
+        return QStringLiteral("FAIL (a secrets-free import wiped the translation key)");
+
+    // The explicit include option is the other half: the key and the secrets
+    // marker are both there.
+    QTemporaryFile full(QDir::tempPath() + QStringLiteral("/unisic-smoketest-full-XXXXXX.json"));
+    if (!full.open())
+        return QStringLiteral("FAIL (cannot create a second temp file)");
+    const QString fullPath = full.fileName();
+    full.close();
+    const QString fullErr = exportSettings(QUrl::fromLocalFile(fullPath), true);
+    if (!fullErr.isEmpty())
+        return QStringLiteral("FAIL (include-secrets export: %1)").arg(fullErr);
+    QFile fullFile(fullPath);
+    if (!fullFile.open(QIODevice::ReadOnly))
+        return QStringLiteral("FAIL (cannot re-read %1)").arg(fullPath);
+    const QJsonObject fullRoot = QJsonDocument::fromJson(fullFile.readAll()).object();
+    fullFile.close();
+    if (!fullRoot.value(QStringLiteral("secrets")).toBool())
+        return QStringLiteral("FAIL (include-secrets export does not say so)");
+    if (!fullRoot.value(QStringLiteral("settings")).toObject().contains(
+            QStringLiteral("translationApiKey")))
+        return QStringLiteral("FAIL (include-secrets export dropped the translation key)");
+
+    return QStringLiteral("PASS (%1 settings + %2 destinations, secrets opt-in)")
         .arg(s.size())
         .arg(root.value(QStringLiteral("destinations")).toArray().size());
 }
@@ -6906,6 +7141,23 @@ void AppContext::runSmokeTest()
         });
     });
 
+    // 3f3e1a) Test connection (M4 T4.1): one small request with the configured
+    // shape, the service's error verbatim, and the hard timeout. A local mock
+    // answers, rejects and stalls, so no configured endpoint is touched.
+    m_smokeSteps.append([this] {
+        translationConnectionCheck(this, [this](const QString &verdict) {
+            smokeLog(QStringLiteral("translation connection: ") + verdict);
+            smokeNext();
+        });
+    });
+
+    // 3f3e1b) First-send privacy (M4 T4.3): local addresses never ask, every
+    // other host is asked for and named in the notice.
+    m_smokeSteps.append([this] {
+        smokeLog(QStringLiteral("translation privacy: ") + translationPrivacyCheck());
+        smokeNext();
+    });
+
     // 3f3e2) The result window's picture: the composite Save, Copy image and
     // Edit in editor hand over is the capture's own resolution, the cover text
     // uses the one fitted size, a click still finds its line, the overshoot
@@ -7065,6 +7317,7 @@ void AppContext::runSmokeTest()
     // regression history — the [%General] key folding).
     m_smokeSteps.append([this] {
         smokeLog(QStringLiteral("settings round-trip: ") + settingsRoundTripCheck());
+        smokeLog(QStringLiteral("settings secrets: ") + settingsSecretsCheck());
         smokeLog(QStringLiteral("record page mode: ") + recordPageModeCheck());
         smokeLog(QStringLiteral("tray menu entries: ") + trayMenuCheck());
         smokeNext();
