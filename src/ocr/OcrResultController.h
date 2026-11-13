@@ -268,7 +268,8 @@ public:
     // picture selects exactly its translation in the pane.
     static QVariantList translatedLineMap(const QVariantList &lines, const QStringList &translated,
                                           const QImage &image, QString *text,
-                                          bool padCover = true);
+                                          bool padCover = true,
+                                          const QVector<Glyph> &glyphs = {});
     // Comparing with whitespace squashed: a service that echoes the input often
     // re-wraps or re-spaces it, and that is still "unchanged" to the reader.
     static bool translationLooksUnchanged(const QString &source, const QString &translation);

@@ -184,6 +184,43 @@ QRect paddedCoverRect(const QRect &rect, const QVector<QRect> &boxes, int skipIn
     return rect.adjusted(-leftPad, -padY, rightPad, padY);
 }
 
+// Line boxes are not the only thing a cover must not paint over. On one line,
+// a word cover's 30% overshoot can reach into the word before it; a line cover
+// next to a label that the OCR kept in another box can do the same. Stop the
+// left/right pad halfway into the gutter to the nearest glyph OUTSIDE the
+// covered [start, start+length) range, on the same visual row. Glyphs inside
+// the range are the ones being replaced, so they are not limits.
+void capCoverAtGlyphs(const QVector<OcrResultController::Glyph> &glyphs, int start, int length,
+                      const QRect &box, QRect *cover)
+{
+    if (!cover || length <= 0 || glyphs.isEmpty())
+        return;
+    const int end = start + length;
+    int leftGap = -1;
+    int rightGap = -1;
+    for (const OcrResultController::Glyph &glyph : glyphs) {
+        if (glyph.rect.top() > box.bottom() || glyph.rect.bottom() < box.top())
+            continue;
+        if (glyph.start + glyph.length <= start) {
+            const int gap = box.left() - glyph.rect.right() - 1;
+            if (leftGap < 0 || gap < leftGap)
+                leftGap = gap;
+        } else if (glyph.start >= end) {
+            const int gap = glyph.rect.left() - box.right() - 1;
+            if (rightGap < 0 || gap < rightGap)
+                rightGap = gap;
+        }
+    }
+    if (leftGap >= 0) {
+        const int pad = std::min(box.left() - cover->left(), std::max(0, leftGap / 2));
+        cover->setLeft(box.left() - pad);
+    }
+    if (rightGap >= 0) {
+        const int pad = std::min(cover->right() - box.right(), std::max(0, rightGap / 2));
+        cover->setRight(box.right() + pad);
+    }
+}
+
 } // namespace
 
 OcrResultController::OcrResultController(Settings *settings, QObject *parent)
@@ -641,7 +678,11 @@ void OcrResultController::rebuildPartialFragments()
         }
         if (glyphRect.isNull())
             continue;
-        const QRect cover = paddedCoverRect(glyphRect, m_lineRects, lineIndex);
+        QRect cover = paddedCoverRect(glyphRect, m_lineRects, lineIndex);
+        // The line boxes are not enough for a word: its own line has words on
+        // both sides, and the 30% sideways overshoot would otherwise reach
+        // into the glyph before it. Stop at the glyphs outside this range.
+        capCoverAtGlyphs(m_glyphs, start, end - start, glyphRect, &cover);
         QVariantMap fragment;
         fragment.insert(QStringLiteral("start"), start);
         fragment.insert(QStringLiteral("length"), end - start);
@@ -904,7 +945,8 @@ void OcrResultController::finishLineTranslation()
     QString text;
     setTranslatedLines(mapLines.isEmpty()
                            ? QVariantList{}
-                           : translatedLineMap(mapLines, translated, m_image, &text));
+                           : translatedLineMap(mapLines, translated, m_image, &text, true,
+                                               m_glyphs));
     m_translation = text;
     if (!m_failedLines.isEmpty())
         m_translationError = failedLinesSummary();
@@ -1007,7 +1049,8 @@ void OcrResultController::requestWholeText(quint64 seq)
                 if (rows.size() == m_translateLines.size()) {
                     QString joined;
                     const QVariantList map =
-                        translatedLineMap(m_translateLines, rows, m_image, &joined);
+                        translatedLineMap(m_translateLines, rows, m_image, &joined, true,
+                                          m_glyphs);
                     m_translation = joined;
                     setTranslatedLines(map);
                 }
@@ -1018,7 +1061,8 @@ void OcrResultController::requestWholeText(quint64 seq)
                 // so the overlay works without a numbered round trip.
                 QString joined;
                 const QVariantList map =
-                    translatedLineMap(m_translateLines, QStringList{text}, m_image, &joined);
+                    translatedLineMap(m_translateLines, QStringList{text}, m_image, &joined,
+                                      true, m_glyphs);
                 if (joined == text)
                     setTranslatedLines(map);
             }
@@ -1161,7 +1205,8 @@ void OcrResultController::setTranslationForPreview(const QStringList &translated
     m_translationLineCount = m_translateLines.size();
     m_translationSplitLines = 0;
     QString joined;
-    setTranslatedLines(translatedLineMap(m_translateLines, translated, m_image, &joined));
+    setTranslatedLines(
+        translatedLineMap(m_translateLines, translated, m_image, &joined, true, m_glyphs));
     m_translation = joined;
     m_translationUnchanged = translationLooksUnchanged(m_sourceText, m_translation);
     emit translationChanged();
@@ -1391,7 +1436,8 @@ QVector<QStringList> OcrResultController::chunkLines(const QStringList &lines, i
 QVariantList OcrResultController::translatedLineMap(const QVariantList &lines,
                                                     const QStringList &translated,
                                                     const QImage &image, QString *text,
-                                                    bool padCover)
+                                                    bool padCover,
+                                                    const QVector<Glyph> &glyphs)
 {
     // Convert once: sampleLineColors() would otherwise deep-copy a 4K capture
     // for every line box.
@@ -1424,8 +1470,12 @@ QVariantList OcrResultController::translatedLineMap(const QVariantList &lines,
         if (i)
             joined += QLatin1Char('\n');
         // A partial fragment already carries its padded rect (it had to cap at
-        // the page's neighbours), so it must not be grown a second time.
-        const QRect cover = padCover ? paddedCoverRect(rect, boxes, i) : rect;
+        // the page's neighbours), so it must not be grown a second time. A
+        // whole line is capped again at the glyphs just outside it, so a label
+        // in another box on the same row is not painted over either.
+        QRect cover = padCover ? paddedCoverRect(rect, boxes, i) : rect;
+        if (padCover && !glyphs.isEmpty())
+            capCoverAtGlyphs(glyphs, sourceStarts.at(i), sourceLengths.at(i), rect, &cover);
         const LineColors colors = sampleLineColors(source, cover);
         // The ONE font decision for this cover, in image pixels: the window
         // scales it and the composite draws at it, so the saved picture cannot

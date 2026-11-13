@@ -164,6 +164,8 @@ private slots:
     void spotsAnUnchangedAnswer();
     void overlayFontSizeFitsTheBox();
     void cjkCoverSetsItselfSlightlySmaller();
+    void partialCoverStopsAtThePreviousWord();
+    void lineCoverStopsAtALabelGlyph();
     void compositeKeepsSourceResolution();
     void compositeDrawsOnlyInsideCovers();
     void clickFindsTheLineAtEveryScale();
@@ -1174,6 +1176,79 @@ void OcrResultTest::cjkCoverSetsItselfSlightlySmaller()
                            int(std::lround(latinSize * 0.9))));
     QVERIFY(textFits(QStringLiteral("你好世界"), entryRect(cjk).size(), cjkSize, false));
     QVERIFY(latinSize <= qMax(8, entryRect(latin).height()));
+}
+
+// The sideways overshoot must stop at the glyph just outside the covered
+// range, not only at the next line box. A word cover otherwise reaches back
+// into the word before it, and a line cover into a label kept in another box.
+void OcrResultTest::partialCoverStopsAtThePreviousWord()
+{
+    QImage image(140, 70, QImage::Format_RGB32);
+    image.fill(QColor(250, 250, 245));
+    QVector<OcrWord> words;
+    const auto add = [&words](const QString &text, const QRect &rect, bool space) {
+        OcrWord word;
+        word.line = 0;
+        word.text = text;
+        word.rect = rect;
+        word.spaceBefore = space;
+        words.append(word);
+    };
+    add(QStringLiteral("o"), QRect(10, 10, 10, 20), false);
+    add(QStringLiteral("n"), QRect(20, 10, 10, 20), false);
+    add(QStringLiteral("e"), QRect(30, 10, 16, 20), false);
+    add(QStringLiteral("t"), QRect(50, 10, 10, 20), true);
+    add(QStringLiteral("w"), QRect(60, 10, 10, 20), false);
+    add(QStringLiteral("o"), QRect(70, 10, 10, 20), false);
+
+    OcrResultController result;
+    result.setResult(image, words, QString());
+    QCOMPARE(result.text(), QStringLiteral("one two"));
+    const int start = result.text().indexOf(QStringLiteral("two"));
+    QCOMPARE(start, 4);
+    result.setPartialTranslationForPreview(start, 3, QStringLiteral("dwa"));
+    QCOMPARE(result.partialFragments().size(), 1);
+    const QRect cover = entryRect(result.partialFragments().first().toMap());
+    // The previous glyph ends at 45; the 6 px overshoot would start at 44 and
+    // touch it. Half of the 4 px gutter stops the cover at 48.
+    QCOMPARE(cover.left(), 48);
+    QVERIFY(cover.left() > 45);
+    QVERIFY(cover.left() < 50);
+    const QVariantList covers = result.translatedLines();
+    QCOMPARE(covers.size(), 1);
+    QCOMPARE(entryRect(covers.first().toMap()), cover);
+}
+
+void OcrResultTest::lineCoverStopsAtALabelGlyph()
+{
+    QImage image(140, 70, QImage::Format_RGB32);
+    image.fill(QColor(250, 250, 245));
+    QVector<OcrWord> words;
+    OcrWord label;
+    label.line = 0;
+    label.text = QStringLiteral("A");
+    label.rect = QRect(10, 10, 45, 20);
+    words.append(label);
+    OcrWord value;
+    value.line = 1;
+    value.text = QStringLiteral("B");
+    value.rect = QRect(60, 10, 40, 20);
+    words.append(value);
+
+    OcrResultController result;
+    result.setResult(image, words, QString());
+    QCOMPARE(result.lines().size(), 2);
+    // Translate only the value line: the label is not in the map's line list,
+    // so the line-box gutter cap cannot see it. The glyph cap must.
+    QString joined;
+    const QVariantList map = OcrResultController::translatedLineMap(
+        {result.lines().at(1)}, {QStringLiteral("BB")}, image, &joined, true, result.glyphs());
+    QCOMPARE(map.size(), 1);
+    const QRect cover = entryRect(map.first().toMap());
+    // The label glyph ends at 54 and the 6 px overshoot would start exactly
+    // there; half of the 5 px gutter stops the cover at 58.
+    QCOMPARE(cover.left(), 58);
+    QVERIFY(cover.left() > 54);
 }
 
 // The window scales a capture down when it does not fit, but the picture handed
