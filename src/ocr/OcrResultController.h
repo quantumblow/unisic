@@ -242,7 +242,6 @@ private:
     // A chunk gets one automatic retry on a transport error or a 5xx; a chunk
     // that still fails is recorded instead of dropping the whole translation.
     QVector<bool> m_chunkRetried;
-    QVector<bool> m_itemFailed;
     QVector<int> m_failedLines;
     QString m_lastChunkError;
     bool m_wholeTextRetried = false;

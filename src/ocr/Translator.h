@@ -89,10 +89,18 @@ public:
     // endpoint rejects streaming or ignores it (a 200 JSON body with no SSE
     // frames). `delta` sees the answer arrive; `done` fires exactly once.
     void translateStreaming(const QString &system, const QString &text, Delta delta, Done done);
+    // The same streaming request to an explicit endpoint/model/key, bypassing
+    // Settings. The F8 and Developer checks use it so they never read or write
+    // the user's translation configuration.
+    void translateStreamingTo(const QUrl &url, const QString &model, const QString &key,
+                              const QString &system, const QString &text, Delta delta,
+                              Done done);
     void cancel();
 
 private:
     QNetworkAccessManager *nam();
+    void translateWithUrl(const QUrl &url, const QString &model, const QString &key,
+                          const QString &system, const QString &text, Done done);
     Settings *m_settings = nullptr;
     QNetworkAccessManager *m_nam = nullptr;
     QPointer<QNetworkReply> m_reply;

@@ -251,7 +251,6 @@ void OcrResultController::startTranslation(int start, int length)
     m_itemTranslations.clear();
     m_chunkIndex = 0;
     m_chunkRetried.clear();
-    m_itemFailed.clear();
     m_failedLines.clear();
     m_lastChunkError.clear();
     m_wholeTextRetried = false;
@@ -288,7 +287,9 @@ void OcrResultController::startTranslation(int start, int length)
         }
         m_itemTranslations = QVector<QString>(m_items.size());
         m_chunkRetried = QVector<bool>(m_chunks.size(), false);
-        m_itemFailed = QVector<bool>(m_items.size(), false);
+        // The initial translationChanged was emitted before the chunks
+        // existed; tell the window the progress count now.
+        emit translationChanged();
         if (!m_chunks.isEmpty()) {
             requestNextLineChunk(seq);
             return;
@@ -339,8 +340,6 @@ void OcrResultController::requestNextLineChunk(quint64 seq)
                 }
                 m_lastChunkError = error;
                 for (const int index : chunk) {
-                    if (index >= 0 && index < m_itemFailed.size())
-                        m_itemFailed[index] = true;
                     const int line = m_items.at(index).line;
                     if (!m_failedLines.contains(line))
                         m_failedLines.append(line);
@@ -348,6 +347,7 @@ void OcrResultController::requestNextLineChunk(quint64 seq)
                 std::sort(m_failedLines.begin(), m_failedLines.end());
                 ++m_chunkIndex;
                 refreshStreamingPane();
+                emit translationChanged();
                 requestNextLineChunk(seq);
                 return;
             }
@@ -369,6 +369,7 @@ void OcrResultController::requestNextLineChunk(quint64 seq)
                 m_itemTranslations[chunk.at(i)] = parsed.at(i);
             ++m_chunkIndex;
             refreshStreamingPane();
+            emit translationChanged();
             requestNextLineChunk(seq);
         });
 }
@@ -389,7 +390,12 @@ void OcrResultController::finishLineTranslation()
                            ? QVariantList{}
                            : translatedLineMap(mapLines, translated, m_image, &text));
     m_translation = text;
-    m_translationError = m_failedLines.isEmpty() ? QString() : failedLinesSummary();
+    if (!m_failedLines.isEmpty())
+        m_translationError = failedLinesSummary();
+    else if (m_translation.isEmpty())
+        m_translationError = tr("The translation service returned an empty result");
+    else
+        m_translationError.clear();
     m_translationUnchanged = translationLooksUnchanged(m_sourceText, m_translation);
     m_translating = false;
     m_streamText.clear();
@@ -434,7 +440,6 @@ QString OcrResultController::failedLinesSummary() const
                ? tr("Selected lines %1 did not translate: %2").arg(which, detail)
                : tr("Lines %1 did not translate: %2").arg(which, detail);
 }
-
 
 void OcrResultController::requestWholeText(quint64 seq)
 {
@@ -615,7 +620,6 @@ void OcrResultController::setTranslationForPreview(const QStringList &translated
     m_chunks.clear();
     m_chunkIndex = 0;
     m_chunkRetried.clear();
-    m_itemFailed.clear();
     m_failedLines.clear();
     m_lastChunkError.clear();
     m_wholeTextRetried = false;
@@ -652,7 +656,6 @@ void OcrResultController::setResult(const QImage &image, const QVector<OcrWord> 
     m_itemTranslations.clear();
     m_chunkIndex = 0;
     m_chunkRetried.clear();
-    m_itemFailed.clear();
     m_failedLines.clear();
     m_lastChunkError.clear();
     m_wholeTextRetried = false;

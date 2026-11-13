@@ -132,7 +132,9 @@ Window {
     // every translated cover carries the source range it came from, so a
     // selection made there can still re-translate exactly those source lines.
     function selectedSourceRange() {
-        if (textEdit.selectedText.length === 0)
+        // The binding can be evaluated before the pane exists (the Translate
+        // button's label); no pane means no selection.
+        if (!textEdit || textEdit.selectedText.length === 0)
             return { start: -1, length: 0 }
         if (!resultWindow.showTranslation)
             return { start: textEdit.selectionStart, length: textEdit.selectedText.length }
@@ -172,7 +174,12 @@ Window {
     }
 
     function translateFromPane() {
+        // Resolve the selection against the layer the user is looking at,
+        // before switching to Translation: the offsets belong to that text.
         const range = resultWindow.selectedSourceRange()
+        // Switch to the Translation layer before the first row arrives, or a
+        // streaming answer would keep showing the source text until the end.
+        resultWindow.showTranslation = true
         if (range.length > 0)
             App.ocrResult.translateRange(range.start, range.length)
         else

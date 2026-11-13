@@ -416,6 +416,7 @@ public:
     Q_INVOKABLE void devTestOcrResultWindow();
     Q_INVOKABLE void devTestTranslation();
     Q_INVOKABLE void devTestTranslationOverlay();
+    Q_INVOKABLE void devTestTranslationStream();
     Q_INVOKABLE void devTestPaddleOcr();
     Q_INVOKABLE void devTestClipboardPaste();
     Q_INVOKABLE void devTestCaptureDelay();

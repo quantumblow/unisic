@@ -29,13 +29,21 @@ Working today:
   Edit in editor on the shown layer at the capture's own resolution, zoom
   (buttons, Ctrl+wheel, fit, 100%) and drag-to-pan with exact hit testing, a
   remembered split divider, Ctrl+wheel text size, an in-window status line, and
-  overflow/RTL handling on the covers.
+  overflow/RTL handling on the covers. Since M3: a pane selection translates only
+  the lines it touches and the button says which it will do, answers stream in line
+  by line with Cancel mid-stream, a line too long for one request is split at a
+  sentence boundary and rejoined into its one cover, a failed chunk gets one retry
+  and then leaves the finished lines with the failed range named, and the button
+  plus one dot per chunk show "Translating… 2/3".
 - Translation: any OpenAI-compatible `/chat/completions`, numbered-line prompts,
-  one request per 40 lines, tolerant parsing, whole-text fallback, unchanged-answer
-  detection, per-tier `MemAvailable` guard.
-- Verified: 28/28 `ctest` (M2 added five `OcrResultTest` cases), F8 steps
-  `ocr result` / `ocr result image` / `translation` / `translation overlay` /
-  `paddleocr` all PASS with models present, tiers measured
+  SSE streaming with a buffered fallback, a request token budget (and long lines
+  split at sentence boundaries), tolerant parsing, whole-text fallback,
+  unchanged-answer detection, one retry per chunk, partial results that keep the
+  finished chunks and name the failed lines, progress per chunk.
+- Verified: 28/28 `ctest` (M3 grew `TranslatorTest` to 19 cases and
+  `OcrResultTest` to 19). F8 baseline from M2: `ocr result` / `ocr result image` /
+  `translation` / `translation overlay` / `paddleocr` all PASS with models present;
+  M3 adds `translation stream`, wired but not yet run on a desktop. Tiers measured
   (tiny 0.09-0.13 s and ~0.4 GB, small 0.20-0.27 s and ~0.6 GB, medium 0.52-0.68 s
   and ~1.2 GB per 1600x1000 page), tier switch reloads without a restart.
 
@@ -227,30 +235,90 @@ buttons (the second opens a synthetic result AND translation, so every new path 
 no model and no endpoint), `OcrResultTest` grew five cases, and the window's chrome got its own
 row for the picture actions and the zoom controls.
 
-## M3. Translation: selection, streaming, protection, retries (3-5 days)
+## M3. Translation: selection, streaming, protection, retries (3-5 days) - DONE 2026-11-13
 
-**T3.1** Translate only the selection: when the text pane has a selection,
+**T3.1 (done)** Translate only the selection: when the text pane has a selection,
 Translate works on those lines and the overlay covers exactly those lines; with no
 selection it keeps translating the whole text. The button label says which one it
 will do.
 
-**T3.2** Streaming: `stream: true` against OpenAI-compatible endpoints, parse the
-SSE `data:` frames, append into the pane as they arrive, keep Cancel working
-mid-stream, and fall back to the buffered request when an endpoint ignores or
-rejects streaming. Extend the mock endpoint with an SSE mode for the tests.
+- `OcrResultController::translateRange(start, length)` widens the character
+  selection to every line box it touches (`selectedLineIndexes()`, pure and
+  pinned), sends only those lines, and maps covers only onto them. A selection
+  made on the Translation layer maps back through `sourceStart`/`sourceLength`
+  on each cover. The window shows "Translate selection" or "Translate all" and a
+  line saying only the selected lines were translated.
+- Acceptance met: `OcrResultTest::selectionMapsToWholeLines` pins the widening,
+  the newline-only selection (no lines) and the reverse map.
 
-**T3.3** Context protection: estimate tokens (about 4 characters per token for
-Latin, about 1 per Han character), cap a request at a safe budget, split a very
+**T3.2 (done)** Streaming: `stream: true` against OpenAI-compatible endpoints,
+parse the SSE `data:` frames, append into the pane as they arrive, keep Cancel
+working mid-stream, and fall back to the buffered request when an endpoint ignores
+or rejects streaming. Extend the mock endpoint with an SSE mode for the tests.
+
+- `Translator::translateStreaming()`/`takeSseDeltas()`/`parseStreamDelta()` parse
+  OpenAI `data:` frames (NDJSON tolerated). A 400/404/405/415/422 to
+  `stream: true` is retried buffered with nothing shown; a 200 JSON body from an
+  endpoint that ignored `stream` is parsed as one answer. `translateStreamingTo()`
+  is the explicit-endpoint seam the F8 and Developer checks use, so they never
+  read or write the user's translation settings. The controller shows the
+  arrived part through `parseNumberedLinesPartial()`, throttled to 60 ms, and
+  builds covers only when a chunk finishes so a cover cannot point at a stale
+  range. Cancel aborts the reply and drops the partial answer.
+- Acceptance met: `tests/MockTranslationEndpoint.h` serves SSE, a JSON body, a
+  stream-rejecting path and a slow stream; `TranslatorTest` covers the parser,
+  the fallback, a JSON answer and Cancel mid-stream; `OcrResultTest` covers the
+  live pane and Cancel through the controller.
+
+**T3.3 (done)** Context protection: estimate tokens (about 4 characters per token
+for Latin, about 1 per Han character), cap a request at a safe budget, split a very
 long line at sentence boundaries, and tell the user when a line was split instead
 of silently truncating.
 
-**T3.4** Chunk retry and partial results: one retry with a short backoff per chunk
-on a transport error or 5xx; when a chunk still fails, keep the finished chunks,
-show what did translate, and name the part that did not, instead of dropping the
-whole translation.
+- `Translator::estimateTokens()`, `splitLongLine()` (sentence, then word, then
+  character) and `chunkTexts()`; `kRequestTokenBudget = 2000` and
+  `kItemTokenBudget = 700`. A split line's parts are separate numbered items that
+  are joined back into the one cover they belong to; `translationSplitLines`
+  drives a window note.
+- Acceptance met: `TranslatorTest` pins the estimate, the split without text
+  loss, and the budget; `OcrResultTest::longLineIsSplitAndRejoined` proves a
+  160-sentence line is split and one cover carries both translated parts.
 
-**T3.5** Progress: "Translating… 2/3" while chunks are in flight, and per-chunk
-state in the pane when streaming and chunks are combined.
+**T3.4 (done)** Chunk retry and partial results: one retry with a short backoff per
+chunk on a transport error or 5xx; when a chunk still fails, keep the finished
+chunks, show what did translate, and name the part that did not, instead of
+dropping the whole translation.
+
+- `Done` carries `retryable` (transport, 5xx, 408/429); the controller retries a
+  chunk once after 700 ms, then records its items as failed and continues.
+  Finished chunks keep their covers and `translationError` names the failed
+  1-based line ranges ("Lines 41-45 did not translate: ...", or "Selected lines
+  ..." for a selection). The whole-text fallback retries once the same way.
+- Acceptance met: `OcrResultTest::retriesAChunkOnceThenSucceeds` (first request
+  500, second succeeds) and `partialTranslationNamesFailedLines` (40 lines shown,
+  lines 41-45 named, three requests).
+
+**T3.5 (done)** Progress: "Translating… 2/3" while chunks are in flight, and
+per-chunk state in the pane when streaming and chunks are combined.
+
+- `translationChunkCount`/`translationChunkIndex`/`translationChunksDone` drive
+  the button label and one dot per chunk in the text pane (done, in flight,
+  pending). A retry keeps the dot on the chunk being retried.
+
+**Done in this round (2026-11-13):**
+
+- `ctest` 28/28 in `unisic-zh-build`: `TranslatorTest` 19 cases, `OcrResultTest`
+  19 cases.
+- F8 `translation stream` step and the Settings Developer `Translation stream`
+  button: selection widening, sentence split, token budget, SSE frames, the
+  buffered fallback and a 5xx flagged retryable against a local `QTcpServer`, with
+  no configured endpoint and no network. The step itself was run first in an
+  offscreen dev build and reports `PASS (selection, sentence split, token budget,
+  SSE frames, buffered fallback, retryable 5xx)`; the full F8 pass was not run
+  because its fullscreen capture step needs a compositor and hangs on the Xvfb
+  fallback, so the desktop row below stays open.
+- All 14 new strings are translated in the eight catalogs; CHANGELOG EN/PL has
+  the M3 entry.
 
 ## M4. Settings, privacy, secrets (1-2 days)
 
@@ -322,8 +390,10 @@ translation, streaming, retry, test connection). The routing half is done
 `tests/PaddleOcrTest.cpp`); `runMiB`/`availableMiB` are still file-statics, and the
 "selected tier installed" branch of the effective-tier rule needs a fixture model. M2
 wired its own paths: F8 `ocr result image`, `devTestOcrResultImage` and
-`devTestOcrResultWindow`, plus five `OcrResultTest` cases; selection translation,
-streaming, retry and test connection still belong to M3/M4.
+`devTestOcrResultWindow`, plus five `OcrResultTest` cases. M3 wired selection
+translation, streaming, retry and partial results: F8 `translation stream`,
+`devTestTranslationStream`, and the new `TranslatorTest`/`OcrResultTest` cases; the
+Settings Test connection path still belongs to M4.
 
 **T6.7** i18n and website: native review of the Chinese and Polish strings added in
 this feature, and the `unisic-website` sync. The site repo is cloned beside this tree and
@@ -421,8 +491,11 @@ the compositor or OS named next to it: "verified in a container" is not a tick h
       resolution while the window shows it scaled), Edit in editor, zoom to 200% on a 4K capture
       with a click hitting the right line, Ctrl+wheel zoom/text size, drag to pan, the split
       ratio surviving a restart, and an RTL target rendering right to left in its covers.
-- [ ] M3 once landed: selection-only translate, streaming with Cancel mid-stream, a
-      failing chunk with the partial result, the progress line.
+- [ ] M3 (landed): select lines in the pane and Translate selection translates only
+      them (the button says so), the answer streams in line by line and Cancel stops
+      it mid-stream, a long line split at a sentence boundary still lands in its one
+      cover, a failing chunk leaves the finished lines with the failed range named,
+      and "Translating… 2/3" with one dot per chunk is visible while it runs.
 - [ ] M4 once landed: Test connection against a real endpoint, an export without secrets,
       the first-send host notice.
 

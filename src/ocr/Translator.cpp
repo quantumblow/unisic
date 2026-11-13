@@ -580,9 +580,19 @@ void Translator::translateWith(const QString &system, const QString &text, Done 
         done({}, Translator::tr("Set the translation endpoint and model in Settings > General"), false);
         return;
     }
-    const QUrl url = endpointUrl(m_settings->translationEndpoint());
-    const QString model = m_settings->translationModel().trimmed();
-    const QString key = m_settings->translationApiKey().trimmed();
+    translateWithUrl(endpointUrl(m_settings->translationEndpoint()),
+                     m_settings->translationModel().trimmed(),
+                     m_settings->translationApiKey().trimmed(), system, text, std::move(done));
+}
+
+void Translator::translateWithUrl(const QUrl &url, const QString &model, const QString &key,
+                                  const QString &system, const QString &text, Done done)
+{
+    if (!url.isValid()
+        || (url.scheme() != QLatin1String("http") && url.scheme() != QLatin1String("https"))) {
+        done({}, Translator::tr("Set the translation endpoint and model in Settings > General"), false);
+        return;
+    }
     cancel();
     const quint64 seq = ++m_seq;
 
@@ -629,9 +639,21 @@ void Translator::translateStreaming(const QString &system, const QString &text, 
         done({}, Translator::tr("Set the translation endpoint and model in Settings > General"), false);
         return;
     }
-    const QUrl url = endpointUrl(m_settings->translationEndpoint());
-    const QString model = m_settings->translationModel().trimmed();
-    const QString key = m_settings->translationApiKey().trimmed();
+    translateStreamingTo(endpointUrl(m_settings->translationEndpoint()),
+                         m_settings->translationModel().trimmed(),
+                         m_settings->translationApiKey().trimmed(), system, text,
+                         std::move(delta), std::move(done));
+}
+
+void Translator::translateStreamingTo(const QUrl &url, const QString &model, const QString &key,
+                                      const QString &system, const QString &text, Delta delta,
+                                      Done done)
+{
+    if (!url.isValid()
+        || (url.scheme() != QLatin1String("http") && url.scheme() != QLatin1String("https"))) {
+        done({}, Translator::tr("Set the translation endpoint and model in Settings > General"), false);
+        return;
+    }
     cancel();
     const quint64 seq = ++m_seq;
 
@@ -657,7 +679,13 @@ void Translator::translateStreaming(const QString &system, const QString &text, 
         const QByteArray data = reply->readAll();
         state->raw += data;
         state->buffer += data;
-        const QString deltas = Translator::takeSseDeltas(state->buffer, nullptr, &state->error);
+        // A frame error has to survive the next read: takeSseDeltas clears its
+        // error argument, so it gets a local one and the state keeps the last
+        // non-empty message.
+        QString frameError;
+        const QString deltas = Translator::takeSseDeltas(state->buffer, nullptr, &frameError);
+        if (!frameError.isEmpty())
+            state->error = frameError;
         if (deltas.isEmpty())
             return;
         state->text += deltas;
@@ -665,16 +693,18 @@ void Translator::translateStreaming(const QString &system, const QString &text, 
             delta(deltas);
     });
     connect(reply, &QNetworkReply::finished, this,
-            [this, reply, done, delta, state, seq, system, text] {
+            [this, reply, done, delta, state, seq, system, text, url, model, key] {
         if (seq != m_seq)
             return;
         m_reply = nullptr;
         if (!state->buffer.isEmpty()) {
             // A final frame without a trailing newline still counts.
             state->buffer += '\n';
-            const QString deltas =
-                Translator::takeSseDeltas(state->buffer, nullptr, &state->error);
-                if (!deltas.isEmpty()) {
+            QString frameError;
+            const QString deltas = Translator::takeSseDeltas(state->buffer, nullptr, &frameError);
+            if (!frameError.isEmpty())
+                state->error = frameError;
+            if (!deltas.isEmpty()) {
                 state->text += deltas;
                 if (delta)
                     delta(deltas);
@@ -695,7 +725,7 @@ void Translator::translateStreaming(const QString &system, const QString &text, 
                                         && (status == 400 || status == 404 || status == 405
                                             || status == 415 || status == 422);
             if (streamRejected) {
-                translateWith(system, text, done);
+                translateWithUrl(url, model, key, system, text, done);
                 return;
             }
             QString serviceError;

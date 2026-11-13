@@ -3037,6 +3037,213 @@ void AppContext::devTestTranslationOverlay()
               !result.startsWith(QLatin1String("PASS")));
 }
 
+// Selection, token budget and SSE parsing, with no endpoint: the part of the
+// M3 paths that can be checked without a service.
+static QString translationStreamPureCheck()
+{
+    const QVariantList lines{
+        QVariantMap{{QStringLiteral("text"), QStringLiteral("One")},
+                    {QStringLiteral("start"), 0}, {QStringLiteral("length"), 3}},
+        QVariantMap{{QStringLiteral("text"), QStringLiteral("Two")},
+                    {QStringLiteral("start"), 4}, {QStringLiteral("length"), 3}},
+        QVariantMap{{QStringLiteral("text"), QStringLiteral("Three")},
+                    {QStringLiteral("start"), 8}, {QStringLiteral("length"), 5}},
+    };
+    if (OcrResultController::selectedLineIndexes(lines, 2, 3) != QVector<int>{0, 1})
+        return QStringLiteral("FAIL (selection maps to the wrong lines)");
+    if (!OcrResultController::selectedLineIndexes(lines, 3, 1).isEmpty())
+        return QStringLiteral("FAIL (a newline selected a line)");
+
+    QString longLine;
+    for (int i = 0; i < 160; ++i)
+        longLine += QStringLiteral("Sentence number %1 is here. ").arg(i);
+    const QStringList parts =
+        Translator::splitLongLine(longLine.trimmed(), Translator::kItemTokenBudget);
+    if (parts.size() < 2)
+        return QStringLiteral("FAIL (long line not split)");
+    for (const QString &part : parts) {
+        if (Translator::estimateTokens(part) > Translator::kItemTokenBudget)
+            return QStringLiteral("FAIL (split part over budget)");
+    }
+
+    QStringList texts;
+    for (int i = 0; i < 45; ++i)
+        texts.append(QStringLiteral("line %1").arg(i));
+    const QVector<QStringList> chunks = Translator::chunkTexts(texts, 500, 40);
+    if (chunks.size() < 2)
+        return QStringLiteral("FAIL (budget did not split the page)");
+    QStringList rejoined;
+    for (const QStringList &chunk : chunks)
+        rejoined += chunk;
+    if (rejoined != texts)
+        return QStringLiteral("FAIL (chunk order)");
+
+    bool finished = false;
+    QString error;
+    QByteArray frame =
+        "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n";
+    if (Translator::takeSseDeltas(frame, &finished, &error) != QLatin1String("ok")
+        || !finished || !error.isEmpty())
+        return QStringLiteral("FAIL (SSE frames)");
+    return {};
+}
+
+// The transport half of the same check: a local QTcpServer answers one SSE
+// request and then refuses `stream: true` on another path, so the buffered
+// fallback is exercised too. No real service and no configured endpoint.
+static void translationStreamCheck(AppContext *context,
+                                   std::function<void(const QString &)> done)
+{
+    const QString pure = translationStreamPureCheck();
+    if (!pure.isEmpty()) {
+        done(pure);
+        return;
+    }
+    auto *server = new QTcpServer(context);
+    if (!server->listen(QHostAddress::LocalHost)) {
+        delete server;
+        done(QStringLiteral("FAIL (no local port)"));
+        return;
+    }
+    auto *translator = new Translator(nullptr, context);
+    auto finished = std::make_shared<bool>(false);
+    auto requests = std::make_shared<int>(0);
+    struct StreamState {
+        QStringList deltas;
+    };
+    auto state = std::make_shared<StreamState>();
+    const auto finish = [server, translator, finished, done](const QString &verdict) {
+        if (*finished)
+            return;
+        *finished = true;
+        server->deleteLater();
+        translator->deleteLater();
+        done(verdict);
+    };
+
+    const auto writeJson = [](QTcpSocket *socket, int status, const QByteArray &body) {
+        socket->write("HTTP/1.1 " + QByteArray::number(status)
+                      + (status == 200 ? QByteArray(" OK") : QByteArray(" Error"))
+                      + "\r\nContent-Type: application/json\r\nContent-Length: "
+                      + QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n");
+        socket->write(body);
+        socket->disconnectFromHost();
+    };
+
+    QObject::connect(server, &QTcpServer::newConnection, server, [server, requests, writeJson] {
+        QTcpSocket *socket = server->nextPendingConnection();
+        auto request = std::make_shared<QByteArray>();
+        auto handled = std::make_shared<bool>(false);
+        QObject::connect(socket, &QTcpSocket::readyRead, socket, [socket, request, handled, requests, writeJson] {
+            *request += socket->readAll();
+            const qsizetype headEnd = request->indexOf("\r\n\r\n");
+            if (headEnd < 0)
+                return;
+            static const QRegularExpression lengthRe(
+                QStringLiteral("(?im)^content-length:\\s*(\\d+)"));
+            const qsizetype bodyLength = lengthRe
+                                             .match(QString::fromLatin1(request->left(headEnd)))
+                                             .captured(1)
+                                             .toLongLong();
+            if (request->size() < headEnd + 4 + bodyLength || *handled)
+                return;
+            *handled = true;
+            ++*requests;
+            const bool wantsStream = request->contains("\"stream\":true");
+            const bool reject = request->contains(" /reject/");
+            const bool fail = request->contains(" /fail/");
+            if (fail) {
+                writeJson(socket, 500, R"({"error":{"message":"server is down"}})");
+                return;
+            }
+            if (reject && wantsStream) {
+                writeJson(socket, 400, R"({"error":{"message":"stream is not supported"}})");
+                return;
+            }
+            if (reject) {
+                writeJson(socket, 200,
+                          R"({"choices":[{"message":{"content":"Buffered answer"}}]})");
+                return;
+            }
+            socket->write("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n"
+                          "Cache-Control: no-cache\r\nConnection: close\r\n\r\n");
+            socket->write("data: {\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}\n\n");
+            socket->write("data: {\"choices\":[{\"delta\":{\"content\":\" world\"}}]}\n\n");
+            socket->write("data: [DONE]\n\n");
+            socket->disconnectFromHost();
+        });
+        QObject::connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+    });
+
+    const QUrl sseUrl(QStringLiteral("http://127.0.0.1:%1/sse/chat/completions")
+                          .arg(server->serverPort()));
+    const QUrl rejectUrl(QStringLiteral("http://127.0.0.1:%1/reject/chat/completions")
+                             .arg(server->serverPort()));
+    const QUrl failUrl(QStringLiteral("http://127.0.0.1:%1/fail/chat/completions")
+                           .arg(server->serverPort()));
+    // Phase 1: SSE. Phase 2 starts from its callback: an endpoint that refuses
+    // streaming and must be retried with the buffered request.
+    translator->translateStreamingTo(
+        sseUrl, QStringLiteral("mock"), QString(), QStringLiteral("Translate."),
+        QStringLiteral("Hello"),
+        [state](const QString &partial) { state->deltas.append(partial); },
+        [translator, rejectUrl, failUrl, state, requests, finish](const QString &text,
+                                                         const QString &error, bool) {
+            if (!error.isEmpty() || text != QLatin1String("Hello world")
+                || state->deltas.join(QString()) != QLatin1String("Hello world")) {
+                finish(QStringLiteral("FAIL (SSE: %1)")
+                           .arg(error.isEmpty() ? QStringLiteral("wrong text") : error));
+                return;
+            }
+            translator->translateStreamingTo(
+                rejectUrl, QStringLiteral("mock"), QString(), QStringLiteral("Translate."),
+                QStringLiteral("Hello"), {},
+                [translator, failUrl, requests, finish](const QString &buffered,
+                                                        const QString &failure, bool) {
+                    if (!failure.isEmpty() || buffered != QLatin1String("Buffered answer")) {
+                        finish(QStringLiteral("FAIL (fallback: %1)")
+                                   .arg(failure.isEmpty() ? QStringLiteral("wrong text") : failure));
+                        return;
+                    }
+                    if (*requests != 3) {
+                        finish(QStringLiteral("FAIL (fallback took %1 requests)").arg(*requests));
+                        return;
+                    }
+                    // Phase 3: a 5xx must come back flagged retryable, which is
+                    // what the controller turns into its one retry per chunk.
+                    translator->translateStreamingTo(
+                        failUrl, QStringLiteral("mock"), QString(), QStringLiteral("Translate."),
+                        QStringLiteral("Hello"), {},
+                        [requests, finish](const QString &, const QString &failure, bool retryable) {
+                            if (failure.isEmpty() || !retryable) {
+                                finish(QStringLiteral("FAIL (a 5xx was not flagged retryable)"));
+                                return;
+                            }
+                            if (*requests != 4) {
+                                finish(QStringLiteral("FAIL (retry check took %1 requests)")
+                                           .arg(*requests));
+                                return;
+                            }
+                            finish(QStringLiteral(
+                                "PASS (selection, sentence split, token budget, SSE frames, "
+                                "buffered fallback, retryable 5xx)"));
+                        });
+                });
+        });
+    QTimer::singleShot(20000, server,
+                       [finish] { finish(QStringLiteral("FAIL (no answer in 20 s)")); });
+}
+
+void AppContext::devTestTranslationStream()
+{
+    if (!devBuild())
+        return;
+    translationStreamCheck(this, [this](const QString &result) {
+        showToast(tr("Dev: translation stream: %1").arg(result),
+                  !result.startsWith(QLatin1String("PASS")));
+    });
+}
+
 // ---- the result window's picture (composite, fitted text, hit test) --------
 //
 // Its own synthetic capture, not ocrBoxTestImage(): these checks are about the
@@ -6687,6 +6894,16 @@ void AppContext::runSmokeTest()
     m_smokeSteps.append([this] {
         smokeLog(QStringLiteral("translation overlay: ") + translationOverlayCheck());
         smokeNext();
+    });
+
+    // 3f3e1) Selection, token budget and streaming: the M3 paths. The local
+    // mock endpoint makes the SSE and buffered-fallback half real without
+    // touching a configured service or the network.
+    m_smokeSteps.append([this] {
+        translationStreamCheck(this, [this](const QString &verdict) {
+            smokeLog(QStringLiteral("translation stream: ") + verdict);
+            smokeNext();
+        });
     });
 
     // 3f3e2) The result window's picture: the composite Save, Copy image and
