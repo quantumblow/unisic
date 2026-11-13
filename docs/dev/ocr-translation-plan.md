@@ -674,22 +674,66 @@ Branch `feat/ocr-m4.6` from local `dev` at the design commit. Read
 `m_glyphs` plus a test that every glyph range indexes `m_text`; then the fragment
 map and the fit decision, then the QML callout.
 
-### Next session (before T6.x): OCR and translation entry points
+### OCR and translation entry points (settled 2026-11-13)
 
-The user accepted the current feature set on 2026-11-13 and asked to discuss
-where OCR and Translate live before starting the T6.x release chores:
+The user accepted the current feature set on 2026-11-13 and settled where OCR
+and Translate live in the session that followed. The decisions, in one place:
 
-- the editor's labelled OCR split button (whole-picture OCR vs Select text…)
-  and whether the result window's Translate needs a second entry;
-- the tray and quick actions: is an OCR/Translate entry expected there;
-- the Settings > General > Text recognition / Translation split: what is
-  discoverable, what sends text, and where the endpoint and target are found;
-- the result window's own entry points (Translate selection, target picker,
-  Original/Translation) and how a first-time user reaches them.
+- **Capture overlay, the first interface after the selection.** The tool row ends
+  with two one-shot action chips, OCR and Translate, at the same 40 px size as
+  the tools. Both are `kind: "action"` entries in `ToolCatalog` (`tool: -1`), so
+  they join the `hiddenTools` hide list and the per-tool icon override list like
+  every tool, but carry no canvas enum, no props, no group and no shortcut
+  letter. They render at the end of the overlay's tool row, after undo/redo and
+  before the divider, and are never tab stops there (same rule as every chip on
+  the capture surface).
+- **What a click does.** It confirms the capture, runs OCR on the annotated
+  image and closes the overlay; the editor does not open, nothing is saved or
+  uploaded. OCR copies the recognized text and opens the result window.
+  Translate recognizes, starts the whole-text translation and opens the result
+  window in the Translation view (streaming, Cancel, target picker and the
+  existing post-OCR Translate all are untouched). The result window's Save
+  image / Copy image / Edit in editor are the way back, so a mis-click costs one
+  Esc and no capture.
+- **Translate is disabled until a translation endpoint is configured**, with a
+  tip naming Settings > General. The result window stays clickable and reports
+  the same setting in its error line, because there the text is already in hand
+  and the click costs nothing.
+- **Where they show.** The Shot and Measure pills show both; the OCR-purpose
+  pill (OCR hotkey, tray) shows Translate only, because its confirm button
+  already is Read text. Capture-on-release hides the toolbar, so those users
+  keep the hotkey.
+- **Editor.** The OCR split button stays as it is (main button = whole-image OCR
+  into the result window, dropdown = the in-canvas select-text mode with copy,
+  highlight and redact). A labelled Translate button joins the action row right
+  after OCR, on the same OCR + translate path, disabled until configured.
+- **Result window.** No second Translate entry: the one button already follows
+  the selection, the picture boxes and the pane feed it, and it carries the
+  streaming, Cancel and privacy states. Add a standing line above it when
+  translation is not set up, and Ctrl+Enter as the keyboard entry. Copy all
+  stays the filled button and Translate stays tonal: the window's product is
+  the text.
+- **Tray and quick actions.** The tray keeps one text entry, renamed "OCR
+  region…"; no separate Translate region entry, because the pill it opens is
+  the chooser and a second menu row would save one click at the cost of a
+  second purpose, a label set and a hotkey. The capture card gains no Translate
+  action: its OCR action opens the same window, where Translate is one click.
+- **No new global hotkey** in 0.8.10; keyboard users go OCR hotkey then the
+  Translate chip.
+- **Settings.** No new category. Tesseract moves under Text recognition (OCR) so
+  the OCR sections are contiguous and Translation follows. "Editor tools"
+  becomes "Tools", with copy that says these hide from the toolbar that shows
+  them plus a pointer to General for the engine and the service. The default
+  target follows the UI language instead of a hardcoded English.
+- **Naming.** Chips: "Copy text (OCR)" and "Translate". Overlay badge and
+  confirm: "Read text". Editor buttons: "OCR" and "Translate". Tray: "OCR
+  region…". Result, history and notification: "Copy text (OCR)".
 
-No design is settled. Start the next session with this discussion; decide
-whether it is a small UI round of its own or folds into T6.6/T6.7 before
-touching code.
+Work: the two chips plus the toolbar model and the Settings rows, the editor
+Translate button, the three result-window fixes, the tray rename, the Settings
+tidy-up, the target-language default, eight catalogs, CHANGELOG EN/PL, F8 +
+Developer for the new paths, the manual acceptance lines, and one kit commit
+for `translate.svg` (submodule bump).
 
 ## M5. The other scripts' recognizers (5-8 days, D5 settled: own round)
 
@@ -727,22 +771,33 @@ exactly that on every PR now, and it passed on #5 (7m35s) and #6 (7m47s).
 **T6.3** Windows: one real-machine pass (Tesseract path, translation window,
 `PaddleOcr::available()` false). CI compiles it; nobody has run it.
 
-**T6.4** Download resume: HTTP Range plus a `.part` file, so an interrupted small
-or medium download does not start over.
+**T6.4 (done 2026-11-13)** Download resume: HTTP Range plus a `.part` file, so an
+interrupted small or medium download does not start over. Downloads are written to
+`<name>.part`, a resumed request sends `Range: bytes=<size>-`, a server that answers
+200 instead of 206 restarts from byte 0, and the file is renamed into place only
+after the size and SHA-256 verify. A network error, the 60 s stall guard and a
+user cancel keep the part for the next attempt; a size or hash mismatch deletes
+it. `hasDownloads()` counts a part (so Delete appears and removes it) and
+`deleteDownloads()` already removes the tier directory. The interrupted-transfer
+line in the manual pass is the only check left (no desktop here).
 
-**T6.5** Mirror: a second pinned base (or a documented mirror procedure) so a
-ModelScope outage does not disable downloads; base URL, sizes and hashes change
-together.
+**T6.5 (done 2026-11-13)** Mirror: no second hardcoded base (two pinned bases
+would drift), a documented mirror procedure instead. `modelsBase()` honours
+`UNISIC_PADDLE_MODEL_BASE` (trailing slash added if missing); the mirror holds the
+six Small and Medium files and every one is still checked against the pinned size
+and SHA-256, so a mirror cannot change the bytes. The procedure, and the rule that
+a base URL, sizes and hashes change together, is in `docs/dev/packaging.md`
+"Mirroring the OCR model download".
 
-**T6.6 (partly done)** Tests: pull the tier memory table, the effective-tier rule and
-`MemAvailable` parsing into pure functions and cover them in QtTest; extend F8 and
-the Developer pane for every new path (save image, edit in editor, zoom, selection
-translation, streaming, retry, test connection). The routing half is done
-(`tierSupportsLanguages()`/`tierReadsJapanese()` are pure and pinned by
-`tests/PaddleOcrTest.cpp`); `runMiB`/`availableMiB` are still file-statics, and the
-"selected tier installed" branch of the effective-tier rule needs a fixture model. M2
-wired its own paths: F8 `ocr result image`, `devTestOcrResultImage` and
-`devTestOcrResultWindow`, plus five `OcrResultTest` cases. M3 wired selection
+**T6.6 (done 2026-11-13)** Tests: `tierRunMiB()` and `parseMemAvailableMiB()` are now
+public pure statics (`PaddleOcr.h`, `tests/PaddleOcrTest.cpp` pins the 700/1000/1800
+table, the unknown-id fallback and the `/proc/meminfo` parse including the
+-1-on-unreadable rule), and `selectedTierInstalledWinsOverBundledTiny()` creates a
+fixture model of pinned sizes, so the "selected tier installed" branch of
+`effectiveTier()` is covered end to end. The F8 and Developer half was wired as
+each milestone landed. M2 wired its own paths: F8 `ocr result image`,
+`devTestOcrResultImage` and `devTestOcrResultWindow`, plus five `OcrResultTest`
+cases. M3 wired selection
 translation, streaming, retry and partial results: F8 `translation stream`,
 `devTestTranslationStream`, and the new `TranslatorTest`/`OcrResultTest` cases. M4
 wired Test connection, the first-send privacy notice and the export-secrets rule:
@@ -783,12 +838,11 @@ ships WITH 0.8.10 as one edit, version bump included. The files that need it the
    above. It built on the same result-window/controller boundary; the AppImage
    is rebuilt, so only the desktop F8 pass and the accepted manual lines are
    still open.
-7. Next session: discuss the OCR and translation entry points (the editor split
-   button, the result-window Translate, the tray and Settings). The user asked
-   for this before T6.x; settle the shape, then decide whether it is its own
-   small UI round.
-8. T6.x release chores (T6.1, T6.3, T6.4, T6.5, T6.6, T6.7) after that discussion
-   and before 0.8.10; T6.2 is already done.
+7. Entry points settled 2026-11-13 (see "OCR and translation entry points"):
+   implement the two capture-toolbar chips, the editor Translate button and the
+   result-window fixes before the T6.x release chores.
+8. T6.x release chores before 0.8.10: T6.1 and T6.3 need a real machine, T6.7 waits
+   for every string to freeze. T6.2, T6.4, T6.5 and T6.6 are done (2026-11-13).
 9. M5 last, on its own.
 
 Every milestone ends with: build, `ctest` (28 + new tests), F8 on a desktop, a
@@ -850,6 +904,12 @@ the compositor or OS named next to it: "verified in a container" is not a tick h
 - [ ] Settings > General > Text recognition on the AppImage/Flatpak: `Tiny (6 MB):
       Included, in use` with no runtime download. Download Small, OCR a Japanese page
       (Small in use) and a Chinese page.
+- [ ] Resume a model download: start Small, cancel it (or drop the network) partway,
+      then Download again. The bar picks up where it stopped instead of at 0, the
+      verified file replaces the `.part`, and Delete downloaded files removes a
+      leftover `.part` after another cancel. With `UNISIC_PADDLE_MODEL_BASE` pointed at
+      a mirror copy, Small still verifies; pointed at a directory with a wrong file,
+      it fails with "does not match the expected file" instead of installing it.
 - [ ] Remove background in the editor: the runtime comes from the bundle on
       AppImage/Flatpak and from the 11 MB download on deb/rpm/Arch; one run, one undo.
 - [ ] 100%, 125% and 150% display scale, plus a 1060x700 window: nothing clipped in the

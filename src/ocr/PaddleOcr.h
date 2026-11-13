@@ -114,6 +114,14 @@ public:
     // cannot (its dictionary has no kana) - public and static so the routing
     // rule is pinned by a test that needs no model file.
     static bool tierReadsJapanese(const QString &tier);
+    // The tier memory table (D4): MiB a run needs free before it starts. An
+    // unknown id reads as the default tier, like the model table itself. Public
+    // and static so the numbers are pinned by a test with no model or runtime.
+    static qint64 tierRunMiB(const QString &tier);
+    // MemAvailable in MiB parsed from the text of /proc/meminfo. -1 when the
+    // line is absent (not Linux) or unreadable, which skips the memory guard
+    // rather than refusing to run. Pure, so the parse is pinned by a test.
+    static qint64 parseMemAvailableMiB(const QByteArray &meminfo);
 
     // Recognizes the picture; `text` is the reading-order text with one line
     // per detected text line. Skips a picture whose only content is a QR/bar

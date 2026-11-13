@@ -1,5 +1,6 @@
 #include <QtTest>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QStandardPaths>
 
@@ -24,6 +25,9 @@ private slots:
     void tierStatesListAllThree();
     void tinyRoutesJapaneseToTesseract();
     void smallAndMediumReadJapanese();
+    void tierMemoryTableIsPinned();
+    void memAvailableParsesProcText();
+    void selectedTierInstalledWinsOverBundledTiny();
 
 private:
     static void clearDownloads();
@@ -140,6 +144,71 @@ void PaddleOcrTest::smallAndMediumReadJapanese()
     }
     // No tier means no PP-OCRv6 at all, so every spec says no.
     QVERIFY(!PaddleOcr::tierSupportsLanguages(QString(), QStringLiteral("eng"), false));
+}
+
+void PaddleOcrTest::tierMemoryTableIsPinned()
+{
+    // D4's numbers, now a pure function instead of a file-static. They are what
+    // refuses a Medium run on a small machine before ORT gets to fail opaquely.
+    QCOMPARE(PaddleOcr::tierRunMiB(QStringLiteral("tiny")), qint64(700));
+    QCOMPARE(PaddleOcr::tierRunMiB(QStringLiteral("small")), qint64(1000));
+    QCOMPARE(PaddleOcr::tierRunMiB(QStringLiteral("medium")), qint64(1800));
+    // Unknown or corrupt settings run the default tier, exactly like tierPin().
+    QCOMPARE(PaddleOcr::tierRunMiB(QString()), qint64(1000));
+    QCOMPARE(PaddleOcr::tierRunMiB(QStringLiteral("large")), qint64(1000));
+}
+
+void PaddleOcrTest::memAvailableParsesProcText()
+{
+    const QByteArray sample =
+        "MemTotal:       32768000 kB\n"
+        "MemFree:         1234567 kB\n"
+        "MemAvailable:   16384000 kB\n"
+        "Buffers:           12345 kB\n";
+    QCOMPARE(PaddleOcr::parseMemAvailableMiB(sample), qint64(16000));
+    // No line at all: -1 skips the guard instead of reading as zero memory.
+    QCOMPARE(PaddleOcr::parseMemAvailableMiB("MemTotal: 1024 kB\n"), qint64(-1));
+    QCOMPARE(PaddleOcr::parseMemAvailableMiB(QByteArray()), qint64(-1));
+    // Unreadable values are "unknown", never "nothing free".
+    QCOMPARE(PaddleOcr::parseMemAvailableMiB("MemAvailable: plenty\n"), qint64(-1));
+    QCOMPARE(PaddleOcr::parseMemAvailableMiB("MemAvailable: 0 kB\n"), qint64(-1));
+    // The field may follow the colon with no space at all.
+    QCOMPARE(PaddleOcr::parseMemAvailableMiB("MemAvailable:4096 kB\n"), qint64(4));
+}
+
+void PaddleOcrTest::selectedTierInstalledWinsOverBundledTiny()
+{
+    // downloadedComplete() asks for the pinned size on disk, so a sparse file of
+    // exactly that size stands in for the 31 MB download. The sizes must stay in
+    // step with the kTiers table in src/ocr/PaddleOcr.cpp.
+    struct Fixture { const char *name; qint64 bytes; };
+    const Fixture files[] = {
+        {"PP-OCRv6_det_small.onnx", 9929594},
+        {"PP-OCRv6_rec_small.onnx", 21234383},
+        {"ppocrv6_dict.txt", 74947},
+    };
+    const QString dir = PaddleOcr::modelDir(QStringLiteral("small"));
+    QVERIFY(QDir().mkpath(dir));
+    for (const Fixture &f : files) {
+        QFile file(dir + QLatin1Char('/') + QLatin1String(f.name));
+        QVERIFY2(file.open(QIODevice::WriteOnly), qPrintable(file.fileName()));
+        QVERIFY2(file.resize(f.bytes), qPrintable(file.fileName()));
+        file.close();
+    }
+
+    PaddleOcr paddle;
+    QCOMPARE(paddle.tier(), QStringLiteral("small"));
+    QVERIFY(paddle.tierDownloaded());
+    QVERIFY(paddle.modelInstalled());
+    // The branch under test: an installed selected tier beats the bundled tiny.
+    QCOMPARE(paddle.effectiveTier(), QStringLiteral("small"));
+    // Routing follows that tier with no runtime loaded, so Japanese is PP-OCRv6's.
+    QVERIFY(paddle.supportsLanguages(QStringLiteral("jpn"), false));
+
+    clearDownloads();
+    PaddleOcr fresh;
+    QCOMPARE(fresh.effectiveTier(), QStringLiteral("tiny"));
+    QVERIFY(!fresh.tierDownloaded());
 }
 
 QTEST_MAIN(PaddleOcrTest)

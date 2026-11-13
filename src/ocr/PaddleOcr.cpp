@@ -19,7 +19,6 @@
 #include <QNetworkRequest>
 #include <QPainter>
 #include <QProcess>
-#include <QSaveFile>
 #include <QSet>
 #include <QScopeGuard>
 #include <QStandardPaths>
@@ -89,31 +88,15 @@ QString tierId(const TierPin *pin)
     return QString::fromLatin1(pin->id);
 }
 
-// What a run needs free before it starts: the loaded pair, measured at ~0.4 /
-// 0.6 / 1.2 GB resident with ORT 1.31.1, plus the detection tensor (a 2000 px
-// side is 48 MB of floats) and the scaled copies of the screenshot. Without the
-// check a 4 GB machine picks medium and gets an opaque ORT allocation failure
-// or the OOM killer instead of a sentence it can act on.
-qint64 runMiB(const QString &tier)
-{
-    if (tier == QLatin1String("tiny"))
-        return 700;
-    if (tier == QLatin1String("medium"))
-        return 1800;
-    return 1000; // small, the default
-}
-
 // MemAvailable from /proc/meminfo in MiB, -1 where there is no such file (not
-// Linux), which skips the check rather than refusing to run.
+// Linux), which skips the check rather than refusing to run. The text parse is
+// PaddleOcr::parseMemAvailableMiB(), pure so a test can pin it.
 qint64 availableMiB()
 {
     QFile file(QStringLiteral("/proc/meminfo"));
     if (!file.open(QIODevice::ReadOnly))
         return -1;
-    for (const QByteArray &line : file.readAll().split('\n'))
-        if (line.startsWith("MemAvailable:"))
-            return line.mid(13).trimmed().split(' ').value(0).toLongLong() / 1024;
-    return -1;
+    return PaddleOcr::parseMemAvailableMiB(file.readAll());
 }
 
 QString memoryError(const QString &tier)
@@ -121,7 +104,7 @@ QString memoryError(const QString &tier)
     const qint64 free = availableMiB();
     if (free < 0)
         return {};
-    const qint64 need = runMiB(tier);
+    const qint64 need = PaddleOcr::tierRunMiB(tier);
     if (free >= need)
         return {};
     const QLocale loc;
@@ -134,6 +117,15 @@ QString memoryError(const QString &tier)
 // the hashes together - never one of them.
 QString modelsBase()
 {
+    // T6.5: a mirror is a supported, documented procedure instead of a second
+    // hardcoded base (the tiers only exist on ModelScope). The override is an
+    // operator escape hatch for an outage, never a UI setting; every file is
+    // still checked against the pinned size and SHA-256, so a mirror can serve
+    // the bytes but cannot change them. The trailing slash is required in the
+    // URL we build, so add it rather than trusting the caller.
+    const QString mirror = qEnvironmentVariable("UNISIC_PADDLE_MODEL_BASE");
+    if (!mirror.isEmpty())
+        return mirror.endsWith(QLatin1Char('/')) ? mirror : mirror + QLatin1Char('/');
     return QStringLiteral("https://www.modelscope.cn/models/mgchao/SnowShotOCR/resolve/master/PP-OCRv6/");
 }
 
@@ -959,10 +951,14 @@ QVariantList PaddleOcr::tierStates() const
 bool PaddleOcr::hasDownloads() const
 {
     // Disk only, so the bundled tier never reports files the user could delete.
+    // A ".part" counts: a cancelled or interrupted download leaves bytes the
+    // user can reclaim with Delete, even though the tier reads as missing.
     const QString dir = modelDir(tier());
-    for (const FilePin &f : tierPin(tier())->files)
-        if (QFile::exists(dir + QLatin1Char('/') + QLatin1String(f.name)))
+    for (const FilePin &f : tierPin(tier())->files) {
+        const QString path = dir + QLatin1Char('/') + QLatin1String(f.name);
+        if (QFile::exists(path) || QFile::exists(path + QStringLiteral(".part")))
             return true;
+    }
     return false;
 }
 
@@ -981,6 +977,36 @@ QString PaddleOcr::downloadSizeText()
         }
     }
     return QLocale().formattedDataSize(bytes, 0, QLocale::DataSizeTraditionalFormat);
+}
+
+qint64 PaddleOcr::tierRunMiB(const QString &tier)
+{
+    // What a run needs free before it starts: the loaded pair, measured at
+    // ~0.4 / 0.6 / 1.2 GB resident with ORT 1.31.1, plus the detection tensor
+    // (a 2000 px side is 48 MB of floats) and the scaled copies of the
+    // screenshot. Without the check a 4 GB machine picks medium and gets an
+    // opaque ORT allocation failure or the OOM killer instead of a sentence it
+    // can act on. Unknown/corrupt ids read as the default tier, like tierPin().
+    if (tier == QLatin1String("tiny"))
+        return 700;
+    if (tier == QLatin1String("medium"))
+        return 1800;
+    return 1000; // small, the default
+}
+
+qint64 PaddleOcr::parseMemAvailableMiB(const QByteArray &meminfo)
+{
+    // "MemAvailable:   16384000 kB" -> 16000. -1, not 0, when the line is
+    // missing or the number is unreadable: 0 would read as "no memory at all"
+    // and refuse to run on a kernel that simply does not report it.
+    for (const QByteArray &line : meminfo.split('\n')) {
+        if (!line.startsWith("MemAvailable:"))
+            continue;
+        bool ok = false;
+        const qint64 kb = line.mid(13).trimmed().split(' ').value(0).toLongLong(&ok);
+        return ok && kb > 0 ? kb / 1024 : -1;
+    }
+    return -1;
 }
 
 bool PaddleOcr::tierReadsJapanese(const QString &tier)
@@ -1170,27 +1196,88 @@ void PaddleOcr::fetchNext()
     const FilePin &fp = runtime ? FilePin{kRuntimeFile, kRuntimeBytes, kRuntimeSha} : pin->files[job];
     const QString dest = runtime ? runtimeDir() + QStringLiteral("/runtime.tgz")
                                  : modelDir(m_downloadTier) + QLatin1Char('/') + QLatin1String(fp.name);
-    const QUrl url(runtime ? QString::fromLatin1(kRuntimeUrl)
-                           : modelsBase() + m_downloadTier + QLatin1Char('/') + QLatin1String(fp.name));
-    auto file = std::make_shared<QSaveFile>(dest);
-    if (!QDir().mkpath(QFileInfo(dest).absolutePath()) || !file->open(QIODevice::WriteOnly)) {
-        fail(tr("Cannot write %1: %2").arg(dest, file->errorString()));
+    // Downloads are written to "<dest>.part" and only renamed into place after
+    // the size and SHA-256 verify, so an interrupted transfer is a head start
+    // instead of a restart (T6.4). A part at or past the pinned size is stale
+    // (a crash after the last byte, or a pin that moved); a re-download is
+    // cheaper than untangling it.
+    const QString partPath = dest + QStringLiteral(".part");
+    qint64 offset = 0;
+    if (QFileInfo::exists(partPath)) {
+        const qint64 have = QFileInfo(partPath).size();
+        if (have > 0 && have < fp.bytes)
+            offset = have;
+        else
+            QFile::remove(partPath);
+    }
+    auto file = std::make_shared<QFile>(partPath);
+    if (!QDir().mkpath(QFileInfo(dest).absolutePath())
+            || !file->open(QIODevice::ReadWrite)
+            || !file->seek(offset)) {
+        fail(tr("Cannot write %1: %2").arg(partPath, file->errorString()));
         return;
     }
-    QNetworkRequest req(url);
+    // The kept prefix has to enter the hash too, or the finished file would
+    // never verify. A part that cannot be read back is dropped and the request
+    // goes out as a plain one from byte 0.
+    auto hash = std::make_shared<QCryptographicHash>(QCryptographicHash::Sha256);
+    if (offset > 0) {
+        bool ok = file->seek(0);
+        qint64 left = ok ? offset : 0;
+        while (ok && left > 0) {
+            const QByteArray prefix = file->read(qMin<qint64>(left, 1 << 20));
+            if (prefix.isEmpty()) {
+                ok = false;
+                break;
+            }
+            hash->addData(prefix);
+            left -= prefix.size();
+        }
+        if (!ok || !file->seek(offset)) {
+            if (!file->resize(0) || !file->seek(0)) {
+                file->close();
+                fail(tr("Cannot write %1: %2").arg(partPath, file->errorString()));
+                return;
+            }
+            hash->reset();
+            offset = 0;
+        }
+    }
+    QNetworkRequest req(QUrl(runtime ? QString::fromLatin1(kRuntimeUrl)
+                                     : modelsBase() + m_downloadTier + QLatin1Char('/')
+                                           + QLatin1String(fp.name)));
     req.setHeader(QNetworkRequest::UserAgentHeader,
                   QStringLiteral("Unisic/" UNISIC_VERSION " (screenshot tool)"));
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
     req.setTransferTimeout(60000);
+    if (offset > 0)
+        req.setRawHeader("Range", "bytes=" + QByteArray::number(offset) + "-");
     QNetworkReply *reply = nam()->get(req);
     m_reply = reply;
     emit stateChanged();
 
-    auto hash = std::make_shared<QCryptographicHash>(QCryptographicHash::Sha256);
-    auto received = std::make_shared<qint64>(0);
+    auto received = std::make_shared<qint64>(offset);
+    auto resumed = std::make_shared<bool>(offset > 0);
     auto problem = std::make_shared<QString>();
-    auto take = [reply, file, hash, received, problem, bytes = fp.bytes] {
+    auto take = [reply, file, hash, received, resumed, problem, bytes = fp.bytes] {
+        if (*resumed) {
+            // Look at the answer once. 206 means the server honoured the Range;
+            // anything else (200, a proxy that dropped it, no HTTP at all) means
+            // the body starts at byte 0, so the kept prefix is thrown away.
+            *resumed = false;
+            const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+            if (status != 206) {
+                if (!file->resize(0) || !file->seek(0)) {
+                    *problem = tr("Cannot write %1: %2").arg(file->fileName(), file->errorString());
+                    return false;
+                }
+                hash->reset();
+                *received = 0;
+            }
+        }
         const QByteArray chunk = reply->readAll();
+        if (chunk.isEmpty())
+            return true;
         *received += chunk.size();
         if (*received > bytes)
             *problem = tr("The download is larger than expected, so it was not kept");
@@ -1204,37 +1291,57 @@ void PaddleOcr::fetchNext()
         if (!take())
             reply->abort();
     });
-    connect(reply, &QNetworkReply::downloadProgress, this, [this](qint64 got, qint64) {
-        m_progress = m_totalBytes > 0 ? qreal(m_doneBytes + got) / m_totalBytes : 0;
+    connect(reply, &QNetworkReply::downloadProgress, this, [this, received](qint64, qint64) {
+        // received counts the kept prefix, so a resumed file starts where it
+        // stopped instead of at 0. A server that ignores the Range resets it.
+        m_progress = m_totalBytes > 0
+                         ? qMin<qreal>(1.0, qreal(m_doneBytes + *received) / m_totalBytes) : 0;
         emit progressChanged();
     });
     connect(reply, &QNetworkReply::finished, this,
-            [this, reply, file, hash, received, problem, take, runtime, dest, bytes = fp.bytes,
-             sha = QByteArray(fp.sha256)] {
+            [this, reply, file, hash, received, problem, take, runtime, dest, partPath,
+             bytes = fp.bytes, sha = QByteArray(fp.sha256)] {
                 reply->deleteLater();
                 m_reply = nullptr;
                 const QNetworkReply::NetworkError error = reply->error();
                 if (error == QNetworkReply::NoError)
                     take();
                 if (error != QNetworkReply::NoError || !problem->isEmpty()) {
-                    file->cancelWriting();
-                    if (!problem->isEmpty())
+                    file->close();
+                    if (!problem->isEmpty()) {
+                        // A rejected answer (too large, unwritable) is not a head
+                        // start: drop the part so the next attempt starts clean.
+                        QFile::remove(partPath);
                         fail(*problem);
-                    else if (error != QNetworkReply::OperationCanceledError)
+                    } else if (error != QNetworkReply::OperationCanceledError) {
+                        // Network error or the 60 s stall guard: keep the part,
+                        // the next Download continues from it.
                         fail(tr("Download failed: %1").arg(reply->errorString()));
-                    else if (!m_cancelled)
+                    } else if (!m_cancelled) {
                         fail(tr("Download stopped: nothing arrived for a minute"));
-                    else
+                    } else {
+                        // User cancel: keep the part for the next attempt.
                         emit stateChanged();
+                    }
                     return;
                 }
                 if (*received != bytes || hash->result().toHex() != sha) {
-                    file->cancelWriting();
+                    file->close();
+                    QFile::remove(partPath);
                     fail(tr("The download does not match the expected file, so it was not kept"));
                     return;
                 }
-                if (!file->commit()) {
-                    fail(tr("Cannot write %1: %2").arg(dest, file->errorString()));
+                file->close();
+                if (QFileInfo(partPath).size() != bytes) {
+                    QFile::remove(partPath);
+                    fail(tr("The download does not match the expected file, so it was not kept"));
+                    return;
+                }
+                if (QFileInfo::exists(dest))
+                    QFile::remove(dest);
+                QFile part(partPath);
+                if (!part.rename(dest)) {
+                    fail(tr("Cannot write %1: %2").arg(dest, part.errorString()));
                     return;
                 }
                 m_doneBytes += bytes;
