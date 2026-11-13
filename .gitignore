@@ -25,3 +25,6 @@ release-win/
 
 # Editor extension bundles that wander in from the desktop
 *.vsix
+
+# MemSearch local index/cache
+.memsearch/
